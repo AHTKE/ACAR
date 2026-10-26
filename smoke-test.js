@@ -676,7 +676,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   ok('login فيه client_id', loc.indexOf('client_id=cid-test') > -1);
   ok('login فيه redirect_uri متوقّع',
      loc.indexOf(encodeURIComponent('https://site.test/api/google/callback')) > -1, loc);
-  ok('login فيه drive.file scope', loc.indexOf('drive.file') > -1);
+  ok('login فيه drive scope', loc.indexOf('auth%2Fdrive') > -1 || loc.indexOf('auth/drive') > -1);
   ok('login فيه gmail.send scope عشان تنبيهات البريد', loc.indexOf('gmail.send') > -1, loc.slice(0, 400));
   ok('login فيه access_type=offline', loc.indexOf('access_type=offline') > -1);
   ok('login فيه prompt=consent', loc.indexOf('prompt=consent') > -1);

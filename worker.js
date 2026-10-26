@@ -14,7 +14,7 @@ const JSON_HEADERS = {
   'Cache-Control': 'no-store'
 };
 
-const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/gmail.send openid email';
+const SCOPES = 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/gmail.send openid email';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GMAIL_SEND_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
@@ -629,8 +629,27 @@ async function handleApi(request, env, pathname) {
     catch (e) { return json({ ok: false, error: e.message }, 502); }
 
     let info;
-    try { info = await pushSyncFile(at, folderId, jsonText); }
-    catch (e) { return json({ ok: false, error: e.message }, 502); }
+    try {
+      info = await pushSyncFile(at, folderId, jsonText);
+    } catch (e) {
+      /* لو الفولدر المخصص فشل بسبب الصلاحيات — نرجّع للفولدر التلقائي */
+      const custom = await settingGet(env.DB, 'sync_custom_folder');
+      if (custom && folderId === custom) {
+        try {
+          const autoFolder = await settingGet(env.DB, 'sync_folder_id');
+          if (autoFolder) {
+            info = await pushSyncFile(at, autoFolder, jsonText);
+            folderId = autoFolder;
+          } else {
+            throw e;
+          }
+        } catch (e2) {
+          return json({ ok: false, error: e2.message }, 502);
+        }
+      } else {
+        return json({ ok: false, error: e.message }, 502);
+      }
+    }
 
     /* تنبيه بالبريد — اختياري، وإخفاقه ما يفشلش الرفع */
     let emailed = false, emailedTo = '';
