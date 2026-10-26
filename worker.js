@@ -27,6 +27,12 @@ const SYNC_FILE_NAME = 'sync-latest.json';
 /* حد أقصى لحجم النسخة المُصرّح به (٨ ميجا تكفي آلاف السجلات) */
 const MAX_SYNC_BYTES = 8 * 1024 * 1024;
 
+/* فولدر تصدير Excel/PDF — يتخلق مرة واحدة عند الحاجة */
+const EXPORT_FOLDER_NAME = 'ملفات ال PDF و EXCEL تابع تطبيق نظام الاداره';
+
+/* حد أقصى لعدد الملفات في فولدر المزامنة: الملف الحالي + نسخ مؤرشفة */
+const MAX_SYNC_FILES = 50;
+
 /* حد رسالة Gmail هو 25 ميجابايت — نتحقق قبل الإرسال عشان الخطأ يكون مفهوماً */
 const MAX_MAIL_BYTES = 24 * 1024 * 1024;
 
@@ -201,6 +207,112 @@ async function findSyncFile(at, folderId) {
     '&fields=files(id,name,modifiedTime,size)&pageSize=1', { headers: { Authorization: 'Bearer ' + at } });
   const j = await r.json().catch(() => ({}));
   return (j.files && j.files[0]) || null;
+}
+
+/* فولدر تصدير Excel/PDF — يتكوّن مرة واحدة ويُحفظ معرّفه */
+async function getOrCreateExportFolder(env, at) {
+  const cached = await settingGet(env.DB, 'export_folder_id');
+  if (cached) return cached;
+
+  const q = "mimeType='application/vnd.google-apps.folder' and name='" +
+    escQuery(EXPORT_FOLDER_NAME) + "' and trashed=false";
+  const lr = await fetch(DRIVE_FILES + '?q=' + encodeURIComponent(q) +
+    '&fields=files(id,name)&pageSize=1', { headers: { Authorization: 'Bearer ' + at } });
+  const lj = await lr.json().catch(() => ({}));
+  if (lj.files && lj.files[0] && lj.files[0].id) {
+    await settingSet(env.DB, 'export_folder_id', lj.files[0].id);
+    return lj.files[0].id;
+  }
+
+  const cr = await fetch(DRIVE_FILES + '?fields=id', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + at, 'Content-Type': 'application/json; charset=UTF-8' },
+    body: JSON.stringify({ name: EXPORT_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' })
+  });
+  const cj = await cr.json().catch(() => ({}));
+  if (!cj.id) throw new Error((cj.error && cj.error.message) || 'تعذّر إنشاء فولدر التصدير');
+  await settingSet(env.DB, 'export_folder_id', cj.id);
+  return cj.id;
+}
+
+/* ---------- الأرشفة: نسخ مؤرشفة بحد أقصى ٥٠ ملف ---------- */
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+/* اسم النسخة المؤرشفة يحمل تاريخها بالكامل — يُفرز منها لاحقاً */
+function versionName(d) {
+  return 'نسخة ' + d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
+    ' ' + pad2(d.getHours()) + '.' + pad2(d.getMinutes()) + '.' + pad2(d.getSeconds()) + '.json';
+}
+
+/* كل الملفات داخل فولدر المزامنة */
+async function listSyncFiles(at, folderId) {
+  const q = "'" + folderId + "' in parents and trashed=false";
+  const r = await fetch(DRIVE_FILES + '?q=' + encodeURIComponent(q) +
+    '&fields=files(id,name,modifiedTime,size)&pageSize=1000',
+    { headers: { Authorization: 'Bearer ' + at } });
+  const j = await r.json().catch(() => ({}));
+  return (j.files && Array.isArray(j.files)) ? j.files : [];
+}
+
+/* ينشئ نسخة مؤرشفة بعد كل رفع ثم ينظّف الفولدر */
+async function archiveVersion(at, folderId, jsonText) {
+  const name = versionName(new Date());
+  const boundary = '-------garch' + crypto.randomUUID().replace(/-/g, '');
+  const meta = JSON.stringify({ name: name, parents: [folderId], mimeType: 'application/json; charset=UTF-8' });
+  const head = '--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' +
+    meta + '\r\n--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n';
+  const tail = '\r\n--' + boundary + '--';
+  const payload = new Blob([head, jsonText, tail], { type: 'multipart/related; boundary=' + boundary });
+  const r = await fetch(DRIVE_UPLOAD + '?uploadType=multipart&fields=id,name', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + at, 'Content-Type': 'multipart/related; boundary=' + boundary },
+    body: payload
+  });
+  await r.json().catch(() => ({}));
+  /* فشل الأرشفة ما يوقفش الرفع — الملف الحالي اترفع */
+  await pruneSyncFiles(at, folderId);
+}
+
+/* التنظيف: كل يوم ماضٍ يبقى بنسخة نهائية واحدة، والحد الكلي ٥٠ ملف */
+async function pruneSyncFiles(at, folderId) {
+  try {
+    const files = await listSyncFiles(at, folderId);
+    const now = new Date();
+    const today = now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate());
+    const versions = files.filter(function (f) { return f.name !== SYNC_FILE_NAME; });
+    const toDelete = [];
+
+    /* ١) الأيام الماضية: نُبقي آخر نسخة لكل يوم فقط (النسخة النهائية) */
+    const byDay = {};
+    versions.forEach(function (f) {
+      const m = String(f.name).match(/(\d{4}-\d{2}-\d{2})/);
+      const day = m ? m[1] : String(f.modifiedTime || '').slice(0, 10);
+      if (!byDay[day]) byDay[day] = [];
+      byDay[day].push(f);
+    });
+    Object.keys(byDay).forEach(function (day) {
+      if (day >= today) return;   /* يوم اليوم: تبقى كل نسخه */
+      const list = byDay[day].sort(function (a, b) {
+        return String(b.modifiedTime || '').localeCompare(String(a.modifiedTime || ''));
+      });
+      list.slice(1).forEach(function (f) { toDelete.push(f); });
+    });
+
+    /* ٢) الحد الكلي: الملف الحالي + ٤٩ نسخة كحد أقصى */
+    const left = versions.filter(function (f) { return toDelete.indexOf(f) === -1; })
+      .sort(function (a, b) {
+        return String(b.modifiedTime || '').localeCompare(String(a.modifiedTime || ''));
+      });
+    left.slice(MAX_SYNC_FILES - 1).forEach(function (f) { toDelete.push(f); });
+
+    for (const f of toDelete) {
+      try {
+        await fetch(DRIVE_FILES + '/' + f.id, {
+          method: 'DELETE', headers: { Authorization: 'Bearer ' + at }
+        });
+      } catch (e) { /* حذف فاشل لا يوقف المنطق */ }
+    }
+  } catch (e) { /* التنظيف تكمّلي */ }
 }
 
 /** يرفع النسخة — يعدّل الملف القديم إن وُجد (درفايف بيسجّل مراجعة لكل تعديل) */
@@ -448,6 +560,15 @@ async function handleApi(request, env, pathname) {
     try { at = await accessToken(env, conn); }
     catch (e) { return json({ ok: false, error: 'انتهت صلاحية الربط: ' + e.message }, 401); }
 
+    /* وجهة الرفع: مجلد التصدير المخصص أو بدون مجلد */
+    let parentId = '';
+    if (String((body && body.dest) || '') === 'folder') {
+      try { parentId = await getOrCreateExportFolder(env, at); }
+      catch (e) {
+        return json({ ok: false, error: 'تعذّر تجهيز فولدر التصدير: ' + e.message }, 502);
+      }
+    }
+
     let bytes;
     try {
       const bin = atob(b64);
@@ -458,7 +579,9 @@ async function handleApi(request, env, pathname) {
     }
 
     const boundary = '-------gdrive' + crypto.randomUUID().replace(/-/g, '');
-    const meta = JSON.stringify({ name: String(name), mimeType: mime });
+    const meta = JSON.stringify(parentId
+      ? { name: String(name), mimeType: mime, parents: [parentId] }
+      : { name: String(name), mimeType: mime });
     const head = '--' + boundary + '\r\n' +
       'Content-Type: application/json; charset=UTF-8\r\n\r\n' + meta + '\r\n' +
       '--' + boundary + '\r\n' +
@@ -651,6 +774,11 @@ async function handleApi(request, env, pathname) {
       }
     }
 
+    /* أرشفة نسخة مؤرشفة بملف تاريخي — فشلها ما يفشلش الرفع */
+    let archived = false;
+    try { await archiveVersion(at, folderId, jsonText); archived = true; }
+    catch (e) { /* الأرشفة تكمّلي */ }
+
     /* تنبيه بالبريد — اختياري، وإخفاقه ما يفشلش الرفع */
     let emailed = false, emailedTo = '';
     if (body.sendEmail) {
@@ -682,7 +810,7 @@ async function handleApi(request, env, pathname) {
     return json({
       ok: true, folderId: folderId, id: info.id || '',
       modifiedTime: info.modifiedTime || '', size: Number(info.size || 0),
-      emailed: emailed, emailedTo: emailedTo
+      archived: archived, emailed: emailed, emailedTo: emailedTo
     });
   }
 
@@ -708,6 +836,92 @@ async function handleApi(request, env, pathname) {
       return json({ ok: true, folderId: folderId });
     }
     return json({ ok: false, error: 'طريقة غير مسموحة' }, 405);
+  }
+
+  /* ---- المزامنة: لائحة النسخ المحفوظة ---- */
+  if (pathname === '/api/sync/versions' && request.method === 'GET') {
+    let conn;
+    try { conn = await requireConnection(request, env); }
+    catch (e) { return json({ ok: false, error: e.message }, e.status || 500); }
+
+    let at;
+    try { at = await accessToken(env, conn); }
+    catch (e) { return json({ ok: false, error: 'انتهت صلاحية الربط: ' + e.message }, 401); }
+
+    let folderId;
+    try { folderId = await getOrCreateSyncFolder(env, at); }
+    catch (e) { return json({ ok: false, error: e.message }, 502); }
+
+    let files;
+    try { files = await listSyncFiles(at, folderId); }
+    catch (e) { return json({ ok: false, error: 'تعذّر قراءة فولدر المزامنة' }, 502); }
+
+    const latest = files.find(function (f) { return f.name === SYNC_FILE_NAME; }) || null;
+    const versions = files.filter(function (f) { return f.name !== SYNC_FILE_NAME; })
+      .sort(function (a, b) {
+        return String(b.modifiedTime || '').localeCompare(String(a.modifiedTime || ''));
+      })
+      .map(function (f) {
+        return {
+          id: f.id, name: f.name,
+          modifiedTime: f.modifiedTime || '',
+          size: Number(f.size || 0)
+        };
+      });
+
+    return json({
+      ok: true, folderId: folderId,
+      latest: latest ? {
+        id: latest.id, name: latest.name,
+        modifiedTime: latest.modifiedTime || '', size: Number(latest.size || 0)
+      } : null,
+      versions: versions, count: versions.length, max: MAX_SYNC_FILES
+    });
+  }
+
+  /* ---- المزامنة: قراءة محتوى نسخة مؤرشفة ---- */
+  if (pathname === '/api/sync/version' && request.method === 'GET') {
+    const id = new URL(request.url).searchParams.get('id');
+    if (!id || !/^[a-zA-Z0-9_-]+$/.test(id)) {
+      return json({ ok: false, error: 'معرّف النسخة غير صالح' }, 400);
+    }
+
+    let conn;
+    try { conn = await requireConnection(request, env); }
+    catch (e) { return json({ ok: false, error: e.message }, e.status || 500); }
+
+    let at;
+    try { at = await accessToken(env, conn); }
+    catch (e) { return json({ ok: false, error: 'انتهت صلاحية الربط: ' + e.message }, 401); }
+
+    /* نتأكد إن الملف فعلاً داخل فولدر المزامنة واسمه من صيغتنا */
+    let meta;
+    try {
+      const mr = await fetch(DRIVE_FILES + '/' + id + '?fields=id,name,parents,trashed',
+        { headers: { Authorization: 'Bearer ' + at } });
+      meta = await mr.json().catch(() => ({}));
+    } catch (e) { meta = {}; }
+
+    const inSyncFolder = meta && !meta.trashed && meta.name &&
+      (meta.name === SYNC_FILE_NAME || meta.name.indexOf('نسخة ') === 0);
+    if (!inSyncFolder) return json({ ok: false, error: 'النسخة غير موجودة أو حُذفت' }, 404);
+
+    let snapshot = null;
+    try {
+      const rr = await fetch(DRIVE_FILES + '/' + id + '?alt=media',
+        { headers: { Authorization: 'Bearer ' + at } });
+      if (rr.ok) snapshot = await rr.json().catch(() => null);
+    } catch (e) { snapshot = null; }
+
+    if (!snapshot || typeof snapshot !== 'object' || !snapshot.sections) {
+      return json({ ok: false, error: 'محتوى النسخة غير صالح' }, 422);
+    }
+
+    return json({
+      ok: true, id: id, name: meta.name || '',
+      updatedAt: snapshot.updatedAt || '', device: snapshot.device || '',
+      counts: snapshot.counts || {}, snapshot: snapshot
+    });
   }
 
   /* فصل الربط */

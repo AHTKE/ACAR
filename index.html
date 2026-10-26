@@ -917,7 +917,16 @@
 
         <div class="panel" style="grid-column:1/-1">
           <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-exchange"/></svg> تصدير البيانات</h3>
-          <p class="panel__hint">كل خاصية بملف مستقل: <b>Excel (.xlsx)</b> أو <b>تقرير PDF</b> — الملف بينزل على جهّك فوراً، ولو حساب Google متصل بيترفع على Drive أوتوماتيك بعده.</p>
+          <p class="panel__hint">كل خاصية بملف مستقل: <b>Excel (.xlsx)</b> أو <b>تقرير PDF</b> — عند الضغط تختار بنفسك: تحميل على الجهاز أو رفع إلى Google Drive.</p>
+
+          <label class="field" id="exportDestField">
+            <span>عند الرفع إلى Google Drive — أين توضع الملفات؟</span>
+            <select id="exportFolderMode">
+              <option value="folder">في مجلد واحد مخصّص (يُنشأ تلقائياً: «ملفات ال PDF و EXCEL تابع تطبيق نظام الاداره»)</option>
+              <option value="root">مرفوعة على الدرايف بدون مجلد محدّد</option>
+            </select>
+          </label>
+
           <div class="export-grid" id="exportGrid"></div>
           <div class="form__actions" style="margin-top:16px">
             <button type="button" class="btn btn--primary" id="exportAllXlsx"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-check"/></svg> التطبيق كاملاً (Excel)</button>
@@ -993,8 +1002,19 @@
             <button type="button" class="btn btn--primary" id="syncPush">رفع نسخة الآن</button>
             <button type="button" class="btn btn--ghost" id="syncCheck">فحص وتحميل</button>
             <button type="button" class="btn btn--ghost" id="syncRestore" hidden>تراجع عن آخر استبدال</button>
+            <button type="button" class="btn btn--ghost" id="syncPick">اختر النسخة القديمة</button>
           </div>
           <p class="panel__note" id="syncNote" hidden></p>
+
+          <div class="panel__note" id="syncVersions" hidden>
+            <b id="syncVersionsHead">النسخ المحفوظة على الدرايف</b>
+            <ul class="sync-diff" id="syncVersionsList"></ul>
+            <div class="form__actions">
+              <button type="button" class="btn btn--primary btn--sm" id="syncVersionsBack">العودة للنسخة الحالية</button>
+              <button type="button" class="btn btn--ghost btn--sm" id="syncVersionsRefresh">تحديث اللائحة</button>
+              <button type="button" class="btn btn--ghost btn--sm" id="syncVersionsClose">إغلاق</button>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -1038,6 +1058,22 @@
       <button type="button" data-key="ok" class="keypad__go"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-check"/></svg></button>
     </div>
 
+    <button class="btn btn--ghost btn--block" data-close>إلغاء</button>
+  </div>
+</div>
+
+<!-- ===== نافذة اختيار وجهة التصدير ===== -->
+<div class="modal" id="exportModal" aria-hidden="true">
+  <div class="modal__backdrop" data-close></div>
+  <div class="modal__box" role="dialog" aria-modal="true" aria-labelledby="exportModalTitle">
+    <div class="modal__icon"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-exchange"/></svg></div>
+    <h3 id="exportModalTitle">وجهة الملف</h3>
+    <p class="modal__sub" id="exportFileName">—</p>
+    <div class="form__actions" style="flex-direction:column;gap:10px">
+      <button type="button" class="btn btn--primary btn--block" id="exportToDevice">📥 تحميل على الجهاز</button>
+      <button type="button" class="btn btn--ghost btn--block" id="exportToDrive">☁️ رفع إلى Google Drive</button>
+    </div>
+    <p class="panel__note" id="exportDriveHint" hidden></p>
     <button class="btn btn--ghost btn--block" data-close>إلغاء</button>
   </div>
 </div>

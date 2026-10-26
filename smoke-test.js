@@ -512,6 +512,17 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   capturedBlob = null;
   click($('[data-export="customers"][data-kind="xlsx"]'));
   await wait(30);
+  ok('نافذة اختيار الوجهة انفتحت', $('#exportModal').classList.contains('is-open'));
+  ok('اسم الملف ظاهر في النافذة', $('#exportFileName').textContent.indexOf('nizam-customers') > -1,
+     $('#exportFileName').textContent);
+  ok('زر التحميل على الجهاز موجود', !!$('#exportToDevice'));
+  ok('زر الرفع موجود', !!$('#exportToDrive'));
+  ok('زر الرفع معطّل بدون ربط', $('#exportToDrive').disabled === true);
+  ok('ملاحظة توضح شرط الرفع', $('#exportDriveHint').textContent.indexOf('اربط حساب') > -1,
+     $('#exportDriveHint').textContent);
+  click($('#exportToDevice'));
+  await wait(30);
+  ok('النافذة اتقفلت بعد الاختيار', !$('#exportModal').classList.contains('is-open'));
   ok('التوست بيقول تم التجهيز', $('#toast').textContent.indexOf('تم تجهيز') > -1, $('#toast').textContent);
   ok('اتمسك ملف Blob', !!capturedBlob);
   const xlsxBuf = capBytes();
@@ -524,6 +535,8 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   capturedBlob = null;
   click($('#exportAllXlsx'));
   await wait(40);
+  click($('#exportToDevice'));
+  await wait(40);
   const allBuf = capBytes();
   ok('ملف التطبيق كاملاً أكبر من ملف القسم', allBuf.length > xlsxBuf.length,
      'all=' + allBuf.length + ' vs ' + xlsxBuf.length);
@@ -532,11 +545,15 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   capturedBlob = null;
   click($('[data-export="ledger"][data-kind="xlsx"]'));
   await wait(30);
+  click($('#exportToDevice'));
+  await wait(30);
   fs.writeFileSync('/tmp/ui-export-ledger.xlsx', capBytes());
   ok('تصدير قسم الدواخل والخوارج نجح', $('#toast').textContent.indexOf('تم تجهيز') > -1, $('#toast').textContent);
 
   capturedBlob = null;
   click($('[data-export="customers"][data-kind="pdf"]'));
+  await wait(80);
+  if ($('#exportModal').classList.contains('is-open')) click($('#exportToDevice'));
   await wait(80);
   if (capturedBlob) {
     ok('تصدير PDF اشتغل مباشرة', $('#toast').textContent.indexOf('تم تجهيز') > -1, $('#toast').textContent);
@@ -552,6 +569,8 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     capturedBlob = null;
     click($('[data-export="customers"][data-kind="pdf"]'));
     await wait(150);
+    if ($('#exportModal').classList.contains('is-open')) click($('#exportToDevice'));
+    await wait(150);
     ok('اتمسك ملف PDF من التصدير', !!capturedBlob);
     const pdfBuf = capBytes();
     ok('الملف يبدأ بـ %PDF', pdfBuf.slice(0, 5).toString() === '%PDF-', pdfBuf.slice(0, 8).toString());
@@ -562,6 +581,8 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
     capturedBlob = null;
     click($('#exportAllPdf'));
+    await wait(150);
+    if ($('#exportModal').classList.contains('is-open')) click($('#exportToDevice'));
     await wait(150);
     fs.writeFileSync('/tmp/ui-export-summary.pdf', capBytes());
     ok('ملف ملخّص التطبيق PDF اتبنى', capBytes().slice(0, 5).toString() === '%PDF-', 'n=' + capBytes().length);
@@ -785,6 +806,27 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   ok('sync/push بكوكي بدون قاعدة بيانات → 503', r.status === 503, 'status=' + r.status);
   ok('الرسالة توضح أن القاعدة غير جاهزة', String(j.error).indexOf('قاعدة البيانات') > -1, JSON.stringify(j));
 
+  /* ---- لائحة النسخ وقراءة نسخة ---- */
+  r = await worker.fetch(new Request('https://site.test/api/sync/versions'), mkEnv(SEC));
+  j = await r.json();
+  ok('sync/versions بدون ربط → 401', r.status === 401, 'status=' + r.status);
+
+  r = await worker.fetch(new Request('https://site.test/api/sync/version?id=abc123'), mkEnv(SEC));
+  j = await r.json();
+  ok('sync/version بدون ربط → 401', r.status === 401, 'status=' + r.status);
+
+  r = await worker.fetch(new Request('https://site.test/api/sync/version', {
+    method: 'GET', headers: { Cookie: 'gconn=tok-1' }
+  }), mkEnv(Object.assign({ DB: emptyDb }, SEC)));
+  j = await r.json();
+  ok('sync/version بدون id → 400', r.status === 400, 'status=' + r.status);
+
+  r = await worker.fetch(new Request('https://site.test/api/sync/version?id=%3Cscript%3E', {
+    method: 'GET', headers: { Cookie: 'gconn=tok-1' }
+  }), mkEnv(Object.assign({ DB: emptyDb }, SEC)));
+  j = await r.json();
+  ok('sync/version بمعرّف غير صالح → 400', r.status === 400, 'status=' + r.status);
+
   r = await worker.fetch(new Request('https://site.test/api/google/whatever'), mkEnv(SEC));
   ok('مسار google غير معروف → 404', r.status === 404, 'status=' + r.status);
 
@@ -817,6 +859,106 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   ok('زرار التراجع موجود', !!restoreBtn);
   ok('لا أخطاء في لوحة المزامنة', errors.length === 0, errors.join(' | '));
   window.localStorage.setItem('app_ledger', beforeLedger);
+
+  console.log('\n[29] اختيار الوجهة + إعداد مجلد التصدير');
+  ok('نافذة اختيار الوجهة موجودة في HTML', !!$('#exportModal'));
+  ok('إعداد وجهة الرفع موجود', !!$('#exportFolderMode'));
+  ok('الوضع الافتراضي مجلد مخصص', $('#exportFolderMode').value === 'folder', $('#exportFolderMode').value);
+  $('#exportFolderMode').value = 'root';
+  $('#exportFolderMode').dispatchEvent(new window.Event('change'));
+  ok('الوضع اتغيّر واتحفظ', window.localStorage.getItem('app_export_dest') === 'root',
+     window.localStorage.getItem('app_export_dest'));
+  $('#exportFolderMode').value = 'folder';
+  $('#exportFolderMode').dispatchEvent(new window.Event('change'));
+
+  /* الرفع من النافذة يرسل dest صحيحة */
+  let uploadBody = null;
+  window.fetch = (url, init) => {
+    const u = String(url);
+    if (u.indexOf('/api/google/upload') > -1) {
+      uploadBody = JSON.parse(init.body);
+      return jsonResponse({ ok: true, id: 'x1', name: 'n', link: '' });
+    }
+    if (u.indexOf('/api/google/notify') > -1) return jsonResponse({ ok: true, to: 'x@y.z' });
+    return jsonResponse({ configured: true, connected: true, email: 'owner@example.com' });
+  };
+  click($('[data-go="settings"]'));   /* يعيد قراءة حالة الربط فيتفعّل الاتصال */
+  await wait(60);
+  click($('[data-export="customers"][data-kind="xlsx"]'));
+  await wait(30);
+  ok('النافذة انفتحت قبل الرفع', $('#exportModal').classList.contains('is-open'));
+  ok('زر الرفع مفعّل وهو متصل', $('#exportToDrive').disabled === false,
+     'disabled=' + $('#exportToDrive').disabled);
+  ok('الملاحظة توضّح وجهة المجلد', $('#exportDriveHint').textContent.indexOf('ملفات ال PDF و EXCEL') > -1,
+     $('#exportDriveHint').textContent);
+  click($('#exportToDrive'));
+  await wait(80);
+  ok('الرفع اتصل بـ /api/google/upload', !!uploadBody, JSON.stringify(uploadBody && uploadBody.name));
+  ok('الوجهة اتبعتت (folder)', uploadBody && uploadBody.dest === 'folder',
+     uploadBody && String(uploadBody.dest));
+  delete window.fetch;
+
+  console.log('\n[30] لائحة النسخ + اختيار نسخة قديمة');
+  ok('زرار «اختر النسخة القديمة» موجود', !!$('#syncPick'));
+  ok('صندوق اللائحة موجود', !!$('#syncVersions'));
+  ok('زرار العودة للنسخة الحالية موجود', !!$('#syncVersionsBack'));
+
+  /* لائحة نسخ وهمية */
+  const fakeVersions = {
+    ok: true, max: 50, count: 2,
+    latest: { id: 'lat1', name: 'sync-latest.json', modifiedTime: '2026-10-26T10:00:00Z', size: 500 },
+    versions: [
+      { id: 'v2', name: 'نسخة 2026-10-26 15.30.00.json', modifiedTime: '2026-10-26T15:30:00Z', size: 900 },
+      { id: 'v1', name: 'نسخة 2026-10-25 20.00.00.json', modifiedTime: '2026-10-25T20:00:00Z', size: 800 }
+    ]
+  };
+  window.fetch = () => jsonResponse(fakeVersions);
+  click($('#syncPick'));
+  await wait(60);
+  ok('الصندوق انفتح', $('#syncVersions').hidden === false);
+  ok('العنوان يذكر العدد والحد', $('#syncVersionsHead').textContent.indexOf('2 من 50') > -1,
+     $('#syncVersionsHead').textContent);
+  ok('نسختين في اللائحة', $$('#syncVersionsList [data-ver-idx]').length === 2,
+     'n=' + $$('#syncVersionsList [data-ver-idx]').length);
+  ok('التاريخ ظاهر في العنوان', $('#syncVersionsList').textContent.indexOf('2026-10-26') > -1);
+
+  /* تطبيق نسخة قديمة */
+  const custBefore = window.localStorage.getItem('app_customers');
+  const remoteSnap = {
+    schema: 1, updatedAt: '2026-10-25T20:00:00Z', device: 'نسخة قديمة',
+    counts: { app_customers: 1 },
+    sections: { app_customers: JSON.stringify([{ name: 'عميل من نسخة قديمة', phone: '0770000000', balance: 5 }]) }
+  };
+  window.fetch = (url) => {
+    if (String(url).indexOf('/api/sync/version?id=v1') > -1) {
+      return jsonResponse({ ok: true, snapshot: remoteSnap });
+    }
+    return jsonResponse(fakeVersions);
+  };
+  click($$('#syncVersionsList [data-ver-idx]')[1]);
+  await wait(80);
+  ok('النسخة القديمة اتطبّقت',
+     JSON.parse(window.localStorage.getItem('app_customers'))[0].name === 'عميل من نسخة قديمة',
+     JSON.parse(window.localStorage.getItem('app_customers'))[0].name);
+  ok('نسخة احتياطية اتسجّلت قبل الاستبدال', !!window.localStorage.getItem('app_sync_backup'));
+  ok('ملاحظة توضح إنها نسخة قديمة', $('#syncNote').textContent.indexOf('نسخة قديمة') > -1 ||
+     $('#syncNote').textContent.indexOf('النسخة القديمة') > -1, $('#syncNote').textContent);
+
+  /* العودة للنسخة الحالية */
+  const latestSnap = {
+    schema: 1, updatedAt: '2026-10-26T10:00:00Z', device: 'جهاز حالي',
+    counts: { app_customers: custN },
+    sections: { app_customers: custBefore }
+  };
+  window.fetch = (url) => jsonResponse({
+    ok: true, exists: true, snapshot: latestSnap,
+    updatedAt: latestSnap.updatedAt, modifiedTime: '2026-10-26T10:00:00Z'
+  });
+  click($('#syncVersionsBack'));
+  await wait(80);
+  ok('رجع للنسخة الحالية', window.localStorage.getItem('app_customers') === custBefore);
+  delete window.fetch;
+  ok('لا أخطاء في لائحة النسخ', errors.length === 0, errors.join(' | '));
 
   console.log('\n==================================================');
   console.log('  PASS: ' + pass + '   FAIL: ' + fail);

@@ -2652,6 +2652,64 @@
   }
 
   /* ---------- تنفيذ التصدير ---------- */
+  var exportPending = null;   /* الملف المجهّز بانتظار اختيار الوجهة */
+
+  function exportFolderMode() {
+    try { return localStorage.getItem('app_export_dest') || 'folder'; } catch (e) { return 'folder'; }
+  }
+
+  function closeExportModal() {
+    var m = $('#exportModal');
+    if (!m) return;
+    m.classList.remove('is-open');
+    m.setAttribute('aria-hidden', 'true');
+  }
+
+  function openExportModal(fname, mime, bytes) {
+    var m = $('#exportModal');
+    if (!m) { /* بدون نافذة: ننزّل مباشرة كما كان */
+      ExportKit.downloadBytes(bytes, fname, mime);
+      return;
+    }
+    exportPending = { fname: fname, mime: mime, bytes: bytes };
+    var el = $('#exportFileName');
+    if (el) el.textContent = fname;
+    var dBtn = $('#exportToDrive');
+    var hint = $('#exportDriveHint');
+    if (dBtn) {
+      dBtn.disabled = !driveState.connected;
+      dBtn.textContent = driveState.connected ? '☁️ رفع إلى Google Drive' : '☁️ الرفع يحتاج ربط حساب Google';
+    }
+    if (hint) {
+      hint.hidden = false;
+      hint.textContent = driveState.connected
+        ? 'الوجهة على الدرايف: ' + (exportFolderMode() === 'folder'
+          ? 'مجلد «ملفات ال PDF و EXCEL تابع تطبيق نظام الاداره»'
+          : 'بدون مجلد محدّد') + ' — تغيّرها من إعدادات التصدير.'
+        : 'اربط حساب Google من قسم «ربط Google Drive» عشان يظهر خيار الرفع.';
+    }
+    m.classList.add('is-open');
+    m.setAttribute('aria-hidden', 'false');
+  }
+
+  function runExportDownload() {
+    if (!exportPending) return;
+    var p = exportPending;
+    if (!ExportKit.downloadBytes(p.bytes, p.fname, p.mime)) {
+      toast('تعذّر بدء التحميل في هذه البيئة', true);
+      return;
+    }
+    toast('تم تجهيز ' + p.fname + ' للتحميل ✓');
+    exportPending = null;
+  }
+
+  function runExportUpload() {
+    if (!exportPending) return;
+    var p = exportPending;
+    exportPending = null;
+    autoUpload(p.fname, p.mime, p.bytes);
+  }
+
   function doExport(key, kind) {
     if (typeof ExportKit === 'undefined') { toast('محرك التصدير غير محمّل', true); return; }
     try {
@@ -2659,12 +2717,7 @@
         var sheets = key === 'all' ? allSheets() : [reportToSheet(buildReport(key))];
         var bytes = ExportKit.buildXlsx(sheets);
         var fname = 'nizam-' + (key === 'all' ? 'full' : key) + '-' + exportStamp() + '.xlsx';
-        if (!ExportKit.downloadBytes(bytes, fname, MIME_XLSX)) {
-          toast('تعذّر بدء التحميل في هذه البيئة', true);
-          return;
-        }
-        toast('تم تجهيز ' + fname);
-        autoUpload(fname, MIME_XLSX, bytes);
+        openExportModal(fname, MIME_XLSX, bytes);
       } else {
         if (!ExportKit.hasCanvas()) {
           toast('تصدير PDF يحتاج متصفحاً حقيقياً', true);
@@ -2673,12 +2726,7 @@
         var pdf = ExportKit.reportToPdf(buildReport(key));
         if (!pdf) { toast('تعذّر إنشاء ملف PDF', true); return; }
         var pf = 'nizam-' + (key === 'all' ? 'summary' : key) + '-' + exportStamp() + '.pdf';
-        if (!ExportKit.downloadBytes(pdf, pf, MIME_PDF)) {
-          toast('تعذّر بدء التحميل', true);
-          return;
-        }
-        toast('تم تجهيز ' + pf);
-        autoUpload(pf, MIME_PDF, pdf);
+        openExportModal(pf, MIME_PDF, pdf);
       }
     } catch (e) {
       toast('خطأ في التصدير: ' + (e && e.message ? e.message : e), true);
@@ -2784,7 +2832,7 @@
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name, mime: mime, b64: b64 })
+      body: JSON.stringify({ name: name, mime: mime, b64: b64, dest: exportFolderMode() })
     }).then(function (r) {
       return r.json().then(function (j) {
         if (!r.ok || !j.ok) throw new Error((j && j.error) || 'فشل الرفع');
@@ -2813,17 +2861,57 @@
   }
 
   function autoUpload(name, mime, bytes) {
-    if (!driveState.connected || typeof ExportKit === 'undefined') return;
+    if (!driveState.connected || typeof ExportKit === 'undefined') {
+      /* بدون اتصال: ننزّل الملف على الجهاز بدل الرفع */
+      if (typeof ExportKit !== 'undefined') ExportKit.downloadBytes(bytes, name, mime);
+      toast('الحساب غير مربوط — اتحمّل الملف على الجهاز', true);
+      return;
+    }
     var b64 = ExportKit.bytesToBase64(bytes);
     uploadToDrive(name, mime, b64)
       .then(function (r) {
-        toast('تم الرفع إلى Google Drive ✓');
+        toast('تم الرفع إلى Google Drive ✓' + (exportFolderMode() === 'folder' ? ' (مجلد التصدير)' : ''));
         return notifyUploaded(name, mime, b64, r && r.link);
       })
       .then(function (r) { if (r) toast('وصل تنبيه البريد إلى ' + (r.to || 'بريدك') + ' ✓'); })
       .catch(function (e) {
-        toast('اتحمّل الملف، بس صار خطأ: ' + (e && e.message ? e.message : e), true);
+        toast('فشل الرفع: ' + (e && e.message ? e.message : e), true);
       });
+  }
+
+  /* أزرار نافذة اختيار وجهة التصدير */
+  var expToDeviceBtn = $('#exportToDevice');
+  if (expToDeviceBtn) expToDeviceBtn.addEventListener('click', function () {
+    closeExportModal();
+    runExportDownload();
+  });
+
+  var expToDriveBtn = $('#exportToDrive');
+  if (expToDriveBtn) expToDriveBtn.addEventListener('click', function () {
+    closeExportModal();
+    runExportUpload();
+  });
+
+  var expModal = $('#exportModal');
+  if (expModal) {
+    expModal.addEventListener('click', function (e) {
+      if (e.target && e.target.hasAttribute && e.target.hasAttribute('data-close')) {
+        closeExportModal();
+        exportPending = null;
+      }
+    });
+  }
+
+  /* إعداد وجهة الرفع على الدرايف */
+  var expFolderSel = $('#exportFolderMode');
+  if (expFolderSel) {
+    expFolderSel.value = exportFolderMode();
+    expFolderSel.addEventListener('change', function () {
+      try { localStorage.setItem('app_export_dest', this.value); } catch (e) {}
+      toast(this.value === 'folder'
+        ? 'الملفات هترفع في مجلد «ملفات ال PDF و EXCEL تابع تطبيق نظام الاداره»'
+        : 'الملفات هترفع على الدرايف بدون مجلد محدّد');
+    });
   }
 
   var driveConnectBtn = $('#driveConnect');
@@ -3236,6 +3324,120 @@
       toast('اتحفظت سياسة المزامنة');
     });
   }
+
+  /* ---------- اختيار النسخة القديمة ---------- */
+  var syncVersionsBox = $('#syncVersions');
+  var syncVersionsList = $('#syncVersionsList');
+  var syncVersionsHead = $('#syncVersionsHead');
+  var currentVersions = [];   /* آخر لائحة نسخ تم جلبها */
+
+  function versionLabel(name, modifiedTime) {
+    var d = modifiedTime ? new Date(modifiedTime) : null;
+    var when = d && !isNaN(d) ? d.toLocaleString('ar-EG') : '';
+    var m = String(name).match(/نسخة (\d{4}-\d{2}-\d{2}) (\d{2}\.\d{2}\.\d{2})/);
+    var pretty = m ? (m[1] + ' — ' + m[2].replace(/\./g, ':')) : name;
+    return pretty + (when ? ' (' + when + ')' : '');
+  }
+
+  function renderVersionsList(j) {
+    if (!syncVersionsList) return;
+    currentVersions = j.versions || [];
+    if (syncVersionsHead) {
+      syncVersionsHead.textContent = 'النسخ المحفوظة على الدرايف — ' +
+        currentVersions.length + ' من ' + (j.max || 50) + ' (الأقدم يُحذف تلقائياً)';
+    }
+    if (!currentVersions.length) {
+      syncVersionsList.innerHTML = '<li>لا توجد نسخ مؤرشفة بعد — اضغط «رفع نسخة الآن».</li>';
+    } else {
+      syncVersionsList.innerHTML = currentVersions.map(function (v, i) {
+        return '<li style="display:flex;justify-content:space-between;align-items:center;gap:8px">' +
+          '<span>' + escapeHtml(versionLabel(v.name, v.modifiedTime)) +
+          (v.size ? ' — ' + Math.max(1, Math.round(v.size / 1024)) + ' KB' : '') + '</span>' +
+          '<button type="button" class="btn btn--ghost btn--sm" data-ver-idx="' + i + '">عرض وتطبيق</button>' +
+          '</li>';
+      }).join('');
+    }
+    syncVersionsBox.hidden = false;
+  }
+
+  function loadVersions() {
+    if (typeof fetch !== 'function') return Promise.resolve(null);
+    if (syncVersionsHead) syncVersionsHead.textContent = 'جارٍ تحميل لائحة النسخ…';
+    if (syncVersionsBox) syncVersionsBox.hidden = false;
+    return fetch('/api/sync/versions', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) throw new Error(j.error || 'تعذّر جلب النسخ');
+        renderVersionsList(j);
+        return j;
+      })
+      .catch(function (e) {
+        if (syncVersionsList) {
+          syncVersionsList.innerHTML = '<li>' + escapeHtml('فشل التحميل: ' +
+            (e && e.message ? e.message : e)) + '</li>';
+        }
+        return null;
+      });
+  }
+
+  var syncPickBtn = $('#syncPick');
+  if (syncPickBtn) syncPickBtn.addEventListener('click', loadVersions);
+
+  var syncVersionsRefresh = $('#syncVersionsRefresh');
+  if (syncVersionsRefresh) syncVersionsRefresh.addEventListener('click', loadVersions);
+
+  var syncVersionsClose = $('#syncVersionsClose');
+  if (syncVersionsClose) syncVersionsClose.addEventListener('click', function () {
+    if (syncVersionsBox) syncVersionsBox.hidden = true;
+  });
+
+  /* الضغط على «عرض وتطبيق» لنسخة قديمة */
+  if (syncVersionsList) {
+    syncVersionsList.addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('button[data-ver-idx]') : null;
+      if (!b) return;
+      var v = currentVersions[Number(b.getAttribute('data-ver-idx'))];
+      if (!v) return;
+      b.disabled = true;
+      b.textContent = 'جارٍ التحميل…';
+      fetch('/api/sync/version?id=' + encodeURIComponent(v.id), { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          b.disabled = false;
+          b.textContent = 'عرض وتطبيق';
+          if (!j.ok) throw new Error(j.error || 'تعذّر قراءة النسخة');
+          syncApply(j.snapshot);
+          syncShowNote('اتطبّقت النسخة القديمة «' + versionLabel(v.name, v.modifiedTime) +
+            '». اضغط «العودة للنسخة الحالية» ترجع لأحدث نسخة.', false);
+          toast('اتطبّقت النسخة القديمة ✓');
+        })
+        .catch(function (e) {
+          b.disabled = false;
+          b.textContent = 'عرض وتطبيق';
+          toast('فشل: ' + (e && e.message ? e.message : e), true);
+        });
+    });
+  }
+
+  /* العودة للنسخة الحالية (آخر ما على الدرايف) */
+  var syncVersionsBack = $('#syncVersionsBack');
+  if (syncVersionsBack) syncVersionsBack.addEventListener('click', function () {
+    syncVersionsBack.disabled = true;
+    syncApi('/api/sync/pull').then(function (pull) {
+      syncVersionsBack.disabled = false;
+      if (!pull || !pull.exists || !pull.snapshot) {
+        toast('لا توجد نسخة حالية على الدرايف', true);
+        return;
+      }
+      syncApply(pull.snapshot);
+      if (syncVersionsBox) syncVersionsBox.hidden = true;
+      syncShowNote('رجعت للنسخة الحالية من الدرايف.', false);
+      toast('رجعت للنسخة الحالية ✓');
+    }).catch(function (e) {
+      syncVersionsBack.disabled = false;
+      toast('فشل: ' + (e && e.message ? e.message : e), true);
+    });
+  });
 
   /* ---------- الفولدر المشترك ---------- */
   var syncFolderInput = $('#syncFolderUrl');
