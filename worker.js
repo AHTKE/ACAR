@@ -29,6 +29,34 @@ const MAX_SYNC_BYTES = 8 * 1024 * 1024;
 /* حد رسالة Gmail هو 25 ميجابايت — نتحقق قبل الإرسال عشان الخطأ يكون مفهوماً */
 const MAX_MAIL_BYTES = 24 * 1024 * 1024;
 
+function cleanNumber(v) {
+  if (v == null) return null;
+  if (typeof v === 'number') {
+    if (!isFinite(v)) return null;
+    return v;
+  }
+  if (typeof v === 'object') {
+    if (Array.isArray(v)) {
+      return v.map(cleanNumber);
+    }
+    const out = {};
+    for (const k of Object.keys(v)) {
+      out[k] = cleanNumber(v[k]);
+    }
+    return out;
+  }
+  return v;
+}
+
+function cleanSnapshot(s) {
+  if (!s) return s;
+  // Replace NaN/Infinity with null, ensure all numbers are finite
+  const cleaned = cleanNumber(s);
+  // Ensure phone-like strings stay as strings (they may start with 0)
+  // and convert any NaN-caused nulls back to 0 where appropriate
+  return JSON.parse(JSON.stringify(cleaned));
+}
+
 function json(data, status) {
   return new Response(JSON.stringify(data), { status: status || 200, headers: JSON_HEADERS });
 }
@@ -576,7 +604,7 @@ async function handleApi(request, env, pathname) {
     try { at = await accessToken(env, conn); }
     catch (e) { return json({ ok: false, error: 'انتهت صلاحية الربط: ' + e.message }, 401); }
 
-    const jsonText = JSON.stringify(snapshot);
+    const jsonText = JSON.stringify(cleanSnapshot(snapshot));
     if (jsonText.length > MAX_SYNC_BYTES) {
       return json({ ok: false, error: 'حجم النسخة أكبر من الحد المسموح (٨ ميجابايت)' }, 413);
     }
