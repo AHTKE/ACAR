@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>نظام الإدارة المتكامل</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- ===== أيقونات SVG ===== -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="ic-users" viewBox="0 0 24 24">
+    <path d="M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="4"/>
+    <path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+  </symbol>
+  <symbol id="ic-user-plus" viewBox="0 0 24 24">
+    <path d="M15 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/>
+    <path d="M19 8v6"/><path d="M22 11h-6"/>
+  </symbol>
+  <symbol id="ic-truck" viewBox="0 0 24 24">
+    <rect x="1.5" y="4.5" width="13" height="12" rx="1.5"/>
+    <path d="M14.5 8.5H18l3.5 3.5v4.5h-7z"/>
+    <circle cx="6" cy="18.5" r="2.2"/><circle cx="17.5" cy="18.5" r="2.2"/>
+  </symbol>
+  <symbol id="ic-exchange" viewBox="0 0 24 24">
+    <path d="M17 2.5 21 6l-4 3.5"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/>
+    <path d="M7 21.5 3 18l4-3.5"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/>
+  </symbol>
+  <symbol id="ic-coins" viewBox="0 0 24 24">
+    <ellipse cx="9" cy="6.5" rx="6" ry="3"/>
+    <path d="M3 6.5v5c0 1.66 2.69 3 6 3s6-1.34 6-3v-5"/>
+    <path d="M3 11.5v5c0 1.66 2.69 3 6 3 1.2 0 2.32-.18 3.3-.5"/>
+    <path d="M15 9.5c2.76 0 5 1.34 5 3s-2.24 3-5 3"/>
+    <path d="M17 15.5v2c0 1.66-2.24 3-5 3s-5-1.34-5-3"/>
+  </symbol>
+  <symbol id="ic-link" viewBox="0 0 24 24">
+    <circle cx="8.5" cy="12" r="5.5"/><circle cx="15.5" cy="12" r="5.5"/>
+  </symbol>
+  <symbol id="ic-group" viewBox="0 0 24 24">
+    <circle cx="12" cy="5.5" r="2.8"/><circle cx="5" cy="17.5" r="2.8"/><circle cx="19" cy="17.5" r="2.8"/>
+    <path d="M12 8.3v3.2"/><path d="M10.3 13.1 6.7 15.4"/><path d="M13.7 13.1l3.6 2.3"/>
+  </symbol>
+  <symbol id="ic-lock" viewBox="0 0 24 24">
+    <rect x="4" y="10.5" width="16" height="10.5" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>
+    <circle cx="12" cy="16" r="1.4"/>
+  </symbol>
+  <symbol id="ic-gear" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="3.2"/>
+    <path d="M19.4 15a1.6 1.6 0 0 0 .32 1.77l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.6 1.6 0 0 0-1.77-.32 1.6 1.6 0 0 0-1 1.47V21a2 2 0 1 1-4 0v-.11a1.6 1.6 0 0 0-1-1.47 1.6 1.6 0 0 0-1.77.32l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.6 1.6 0 0 0 5 15.4a1.6 1.6 0 0 0-1.47-1H3a2 2 0 1 1 0-4h.11A1.6 1.6 0 0 0 4.6 9a1.6 1.6 0 0 0-.32-1.77l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.6 1.6 0 0 0 9 4.72h.08A1.6 1.6 0 0 0 10.08 3.25V3a2 2 0 1 1 4 0v.11a1.6 1.6 0 0 0 1 1.47 1.6 1.6 0 0 0 1.77-.32l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.6 1.6 0 0 0 19.36 9v.08a1.6 1.6 0 0 0 1.47 1H21a2 2 0 1 1 0 4h-.11a1.6 1.6 0 0 0-1.47 1z"/>
+  </symbol>
+  <symbol id="ic-back" viewBox="0 0 24 24"><path d="M4 12h16"/><path d="m13 5 7 7-7 7"/></symbol>
+  <symbol id="ic-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="ic-plus" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
+  <symbol id="ic-arrow" viewBox="0 0 24 24"><path d="M14 6l-6 6 6 6"/></symbol>
+  <symbol id="ic-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5.5l-8-3-8 3V12c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="ic-check" viewBox="0 0 24 24"><path d="m5 13 4.5 4.5L19 7"/></symbol>
+</svg>
+
+<div class="glow glow--1"></div>
+<div class="glow glow--2"></div>
+<div class="glow glow--3"></div>
+
+<div class="app">
+  <!-- ===== شريط العنوان ===== -->
+  <header class="titlebar">
+    <div class="win-controls" aria-hidden="true">
+      <span class="win-dot win-dot--close"></span>
+      <span class="win-dot win-dot--min"></span>
+      <span class="win-dot win-dot--max"></span>
+    </div>
+
+    <button class="brand" data-go="home" title="الصفحة الرئيسية">
+      <span class="brand__logo">
+        <svg viewBox="0 0 24 24" class="ico"><use href="#ic-shield"/></svg>
+      </span>
+      <span class="brand__text">
+        <strong>نظام الإدارة</strong>
+        <small>الإصدار 1.0</small>
+      </span>
+    </button>
+
+    <div class="titlebar__actions">
+      <div class="search-pill">
+        <svg viewBox="0 0 24 24" class="ico"><use href="#ic-search"/></svg>
+        <input type="text" placeholder="بحث سريع…" id="quickSearch" />
+        <kbd>Ctrl K</kbd>
+      </div>
+      <button class="icon-btn" data-go="settings" title="الإعدادات">
+        <svg viewBox="0 0 24 24" class="ico"><use href="#ic-gear"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ===== المحتوى ===== -->
+  <main class="content" id="content">
+
+    <!-- الشاشة الرئيسية -->
+    <section class="view is-active" id="view-home">
+      <div class="hero">
+        <div class="hero__text">
+          <span class="badge"><span class="dot"></span> كل الأقسام جاهزة</span>
+          <h1>مرحباً بك في <span>نظام الإدارة</span></h1>
+          <p>كل أعمالك في مكان واحد: العملاء، الموردون، الدواخل والخوارج، التحصيل، الشركاء والجمعيات.</p>
+          <div class="hero__stats">
+            <div class="stat"><b id="statCustomers">0</b><small>عميل</small></div>
+            <div class="stat"><b>12</b><small>مورّد</small></div>
+            <div class="stat"><b>3</b><small>أقسام محمية</small></div>
+          </div>
+        </div>
+        <div class="hero__art" aria-hidden="true">
+          <div class="art-ring art-ring--1"></div>
+          <div class="art-ring art-ring--2"></div>
+          <div class="art-card art-card--a"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-coins"/></svg></div>
+          <div class="art-card art-card--b"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-users"/></svg></div>
+          <div class="art-card art-card--c"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-lock"/></svg></div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <!-- 1) العملاء -->
+        <button class="card card--featured" data-go="customers">
+          <span class="card__icon card__icon--indigo"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-users"/></svg></span>
+          <span class="card__body">
+            <span class="card__title">العملاء</span>
+            <span class="card__desc">عرض وإدارة قائمة العملاء وأرصدتهم وبيانات التواصل</span>
+            <span class="card__meta"><b id="cardCustomers">0</b> عميل مسجّل</span>
+          </span>
+          <span class="card__arrow"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-arrow"/></svg></span>
+        </button>
+
+        <!-- 2) إضافة عميل -->
+        <button class="card" data-go="add-customer">
+          <span class="card__icon card__icon--green"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-user-plus"/></svg></span>
+          <span class="card__body">
+            <span class="card__title">إضافة عميل</span>
+            <span class="card__desc">تسجيل عميل جديد ببياناته في خطوات قليلة</span>
+          </span>
+          <span class="card__arrow"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-arrow"/></svg></span>
+        </button>
+
+        <!-- 3) الموردون -->
+        <button class="card" data-go="suppliers">
+          <span class="card__icon card__icon--cyan"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-truck"/></svg></span>
+          <span class="card__body">
+            <span class="card__title">الموردون</span>
+            <span class="card__desc">متابعة الموردين والمستحقات عليهم ومشترياتهم</span>
+          </span>
+          <span class="card__arrow"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-arrow"/></svg></span>
+        </button>
+
+        <!-- 4) الدواخل والخوارج -->
+        <button class="card" data-go="ledger">
+          <span class="card__icon card__icon--violet"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-exchange"/></svg></span>
+          <span class="card__body">
+            <span class="card__title">الدواخل والخوارج</span>
+            <span class="card__desc">تسجيل المدخولات والمصروفات ومتابعة الحساب اليومي</span>
+          </span>
+          <span class="card__arrow"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-arrow"/></svg></span>
+        </button>
+
+        <!-- 5) التحصيل -->
+        <button class="card card--locked" data-go="collection">
+          <span class="card__icon card__icon--amber"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-coins"/></svg></span>
+          <span class="card__body">
+            <span class="card__title">التحصيل <svg viewBox="0 0 24 24" class="ico ico--lock"><use href="#ic-lock"/></svg></span>
+            <span class="card__desc">كشف التحصيل والديون والمستحقات القابلة للتحصيل</span>
+          </span>
+          <span class="card__arrow"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-arrow"/></svg></span>
+        </button>
+
+        <!-- 6) الشركاء -->
+        <button class="card card--locked" data-go="partners">
+          <span class="card__icon card__icon--pink"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-link"/></svg></span>
+          <span class="card__body">
+            <span class="card__title">الشركاء <svg viewBox="0 0 24 24" class="ico ico--lock"><use href="#ic-lock"/></svg></span>
+            <span class="card__desc">أسهم الشركاء وحصصهم والأرباح والحسابات</span>
+          </span>
+          <span class="card__arrow"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-arrow"/></svg></span>
+        </button>
+
+        <!-- 7) جمعيات -->
+        <button class="card card--locked" data-go="associations">
+          <span class="card__icon card__icon--blue"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-group"/></svg></span>
+          <span class="card__body">
+            <span class="card__title">جمعيات <svg viewBox="0 0 24 24" class="ico ico--lock"><use href="#ic-lock"/></svg></span>
+            <span class="card__desc">إدارة الجمعيات والأعضاء والاشتراكات والمحافظ</span>
+          </span>
+          <span class="card__arrow"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-arrow"/></svg></span>
+        </button>
+      </div>
+    </section>
+
+    <!-- العملاء -->
+    <section class="view" id="view-customers">
+      <div class="page-head">
+        <button class="back-btn" data-go="home"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-back"/></svg> رجوع</button>
+        <div class="page-head__title">
+          <span class="card__icon card__icon--indigo sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-users"/></svg></span>
+          <div><h2>العملاء</h2><p>قائمة جميع العملاء المسجّلين</p></div>
+        </div>
+        <button class="btn btn--primary" data-go="add-customer"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-plus"/></svg> إضافة عميل</button>
+      </div>
+
+      <div class="panel">
+        <div class="panel__toolbar">
+          <div class="field field--search">
+            <svg viewBox="0 0 24 24" class="ico"><use href="#ic-search"/></svg>
+            <input type="text" id="customerSearch" placeholder="ابحث بالاسم أو الهاتف…" />
+          </div>
+          <span class="count-pill" id="customersCount">0 عميل</span>
+        </div>
+        <div class="table-wrap">
+          <table class="table" id="customersTable">
+            <thead>
+              <tr><th>#</th><th>اسم العميل</th><th>الهاتف</th><th>العنوان</th><th>الرصيد</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- إضافة عميل -->
+    <section class="view" id="view-add-customer">
+      <div class="page-head">
+        <button class="back-btn" data-go="home"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-back"/></svg> رجوع</button>
+        <div class="page-head__title">
+          <span class="card__icon card__icon--green sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-user-plus"/></svg></span>
+          <div><h2>إضافة عميل</h2><p>أدخل بيانات العميل — الحقول المعلّمة بـ * إلزامية</p></div>
+        </div>
+      </div>
+
+      <!-- تنبيه الحقول الناقصة -->
+      <div class="form-alert" id="formAlert" hidden>
+        <div class="form-alert__icon"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-shield"/></svg></div>
+        <div class="form-alert__body">
+          <b>تعذّر الحفظ — بيانات غير مكتملة</b>
+          <p>يرجى إكمال الحقول التالية، أو تخطّيها إذا كنت تعلم ذلك:</p>
+          <ul id="missingList"></ul>
+          <div class="form-alert__actions">
+            <button type="button" class="btn btn--primary" id="btnSkipMissing">أنا أعلم، تخطّي وحفظ</button>
+            <button type="button" class="btn btn--ghost" id="btnBackFill">أرجع أكمل الآن</button>
+          </div>
+        </div>
+      </div>
+
+      <form id="customerForm" class="form" novalidate>
+        <!-- بيانات العميل -->
+        <div class="panel panel--narrow">
+          <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-users"/></svg> بيانات العميل</h3>
+          <div class="form__row">
+            <label class="field" data-field="name"><span>اسم العميل *</span><input type="text" name="name" required placeholder="مثال: أحمد محمد علي" /></label>
+            <label class="field" data-field="phone"><span>رقم التلفون *</span><input type="tel" name="phone" required placeholder="07xxxxxxxx" /></label>
+          </div>
+          <div class="form__row">
+            <label class="field" data-field="phone2"><span>رقم احتياطي *</span><input type="tel" name="phone2" required placeholder="07xxxxxxxx" /></label>
+            <label class="field" data-field="nationalId"><span>الرقم القومي *</span><input type="text" name="nationalId" required inputmode="numeric" placeholder="XXXXXXXXXXX" /></label>
+          </div>
+          <label class="field" data-field="address"><span>العنوان *</span><input type="text" name="address" required placeholder="المدينة / المنطقة / الحي" /></label>
+        </div>
+
+        <!-- الملاحظات المتعددة -->
+        <div class="panel panel--narrow">
+          <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-gear"/></svg> الملاحظات</h3>
+          <p class="panel__hint">اضغط هنا ثم «إضافة ملاحظة» لإضافة أكثر من ملاحظة.</p>
+          <div class="note-add">
+            <input type="text" id="noteInput" placeholder="اكتب ملاحظة جديدة…" />
+            <button type="button" class="btn btn--ghost" id="addNoteBtn"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-plus"/></svg> إضافة ملاحظة</button>
+          </div>
+          <ul class="notes-list" id="notesList"></ul>
+          <p class="notes-empty" id="notesEmpty">لا توجد ملاحظات — ابدأ بإضافة أول ملاحظة.</p>
+        </div>
+
+        <!-- المبالغ -->
+        <div class="panel panel--narrow">
+          <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-coins"/></svg> المبالغ</h3>
+          <div class="form__row">
+            <label class="field" data-field="paidByUs"><span>المبلغ المدفوع منا نحن للعميل *</span><input type="number" name="paidByUs" required min="0" step="any" placeholder="0" /></label>
+            <label class="field" data-field="total"><span>المبلغ الإجمالي قبل خصم المقدم *</span><input type="number" name="total" required min="0" step="any" placeholder="0" /></label>
+          </div>
+          <div class="form__row">
+            <label class="field" data-field="down"><span>المبلغ المدفوع من العميل (المقدم) *</span><input type="number" name="down" required min="0" step="any" placeholder="0" /></label>
+            <label class="field"><span>دفعات مسدّدة بعد المقدم (اختياري)</span><input type="number" name="later" min="0" step="any" placeholder="0" /></label>
+          </div>
+
+          <div class="calc-grid">
+            <div class="calc-box"><span>المطلوب سداده بعد خصم المقدم</span><input type="text" name="due" readonly tabindex="-1" value="0" /></div>
+            <div class="calc-box"><span>الباقي المتبقي</span><input type="text" name="rest" readonly tabindex="-1" value="0" /></div>
+            <div class="calc-box calc-box--accent"><span>قيمة القسط</span><input type="text" name="installment" readonly tabindex="-1" value="—" /></div>
+          </div>
+
+          <div class="form__row">
+            <div class="field field--full" data-field="duration">
+              <span>مدة السداد *</span>
+              <div class="duration-row">
+                <input type="number" name="durationValue" required min="1" step="1" placeholder="عدد" />
+                <select name="durationUnit">
+                  <option value="شهر">شهر</option>
+                  <option value="سنة">سنة</option>
+                  <option value="أسبوع">أسبوع</option>
+                  <option value="يوم">يوم</option>
+                  <option value="دفعة واحدة">دفعة واحدة</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- الحالة والسنوات -->
+        <div class="panel panel--narrow">
+          <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-shield"/></svg> حالة العميل والمدة الزمنية</h3>
+
+          <div class="field" data-field="status">
+            <span>العميل مستلم أم لا؟ *</span>
+            <div class="segmented" role="radiogroup">
+              <label><input type="radio" name="status" value="مستلم" /><span>مستلم</span></label>
+              <label><input type="radio" name="status" value="جاري العمل" /><span>جاري العمل</span></label>
+            </div>
+          </div>
+
+          <div class="form__row">
+            <label class="field" data-field="startYear"><span>سنة البدء *</span>
+              <select name="startYear" required>
+                <option value="">اختر سنة البدء</option>
+              </select>
+            </label>
+            <label class="field"><span>سنة الانتهاء</span>
+              <select name="endYear">
+                <option value="">لم يكتمل بعد</option>
+              </select>
+            </label>
+          </div>
+          <div class="form__row">
+            <label class="field" data-field="startDate"><span>تاريخ البدء</span><input type="date" name="startDate" /></label>
+            <label class="field"><span>تاريخ الانتهاء</span><input type="date" name="endDate" /></label>
+          </div>
+
+          <div class="form__actions">
+            <button type="submit" class="btn btn--primary"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-check"/></svg> حفظ العميل</button>
+            <button type="button" class="btn btn--ghost" data-go="home">إلغاء</button>
+          </div>
+        </div>
+      </form>
+    </section>
+
+    <!-- الموردون -->
+    <section class="view" id="view-suppliers">
+      <div class="page-head">
+        <button class="back-btn" data-go="home"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-back"/></svg> رجوع</button>
+        <div class="page-head__title">
+          <span class="card__icon card__icon--cyan sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-truck"/></svg></span>
+          <div><h2>الموردون</h2><p>إضافة الموردين، البحث، وكشف حساب كل مورد</p></div>
+        </div>
+        <button class="btn btn--primary" data-go="add-supplier"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-plus"/></svg> إضافة مورد</button>
+      </div>
+
+      <div class="panel">
+        <div class="panel__toolbar">
+          <div class="field field--search">
+            <svg viewBox="0 0 24 24" class="ico"><use href="#ic-search"/></svg>
+            <input type="text" id="supplierSearch" placeholder="ابحث عن مورد بالاسم أو المهنة أو الهاتف…" />
+          </div>
+          <span class="count-pill" id="suppliersCount">0 مورد</span>
+        </div>
+        <div class="table-wrap">
+          <table class="table" id="suppliersTable">
+            <thead><tr><th>#</th><th>اسم المورد</th><th>المهنة</th><th>الهاتف</th><th>إجمالي المشتريات</th><th>إجمالي المدفوع</th><th>المستحق</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- إضافة مورد -->
+    <section class="view" id="view-add-supplier">
+      <div class="page-head">
+        <button class="back-btn" data-go="suppliers"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-back"/></svg> رجوع للموردين</button>
+        <div class="page-head__title">
+          <span class="card__icon card__icon--cyan sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-truck"/></svg></span>
+          <div><h2>إضافة مورد</h2><p>أدخل بيانات المورد — الحقول المعلّمة بـ * إلزامية</p></div>
+        </div>
+      </div>
+
+      <div class="panel panel--narrow">
+        <p class="form__error" id="supplierFormError" hidden></p>
+        <form id="supplierForm" class="form" novalidate>
+          <div class="form__row">
+            <label class="field" data-field="sname"><span>اسم المورد *</span><input type="text" name="name" required placeholder="مثال: أحمد رشاد" /></label>
+            <label class="field" data-field="job"><span>المهنة / التخصص *</span><input type="text" name="job" required list="jobsList" placeholder="مثال: مواد بناء" /></label>
+          </div>
+          <div class="form__row">
+            <label class="field" data-field="sphone"><span>رقم التلفون *</span><input type="tel" name="phone" required placeholder="07xxxxxxxx" /></label>
+            <label class="field"><span>العنوان</span><input type="text" name="address" placeholder="المدينة / المنطقة" /></label>
+          </div>
+          <datalist id="jobsList">
+            <option value="مواد بناء"></option><option value="أغذية"></option><option value="قرطاسية"></option>
+            <option value="أثاث"></option><option value="أدوية"></option><option value="قطع غيار"></option>
+            <option value="مواد متنوعة"></option>
+          </datalist>
+          <div class="form__row">
+            <label class="field field--full"><span>ملاحظات</span><input type="text" name="note" placeholder="أي تفاصيل عن المورد…" /></label>
+          </div>
+          <div class="form__actions">
+            <button type="submit" class="btn btn--primary"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-check"/></svg> حفظ المورد</button>
+            <button type="button" class="btn btn--ghost" data-go="suppliers">إلغاء</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- بروفايل مورد / كشف الحساب -->
+    <section class="view" id="view-supplier-profile">
+      <div class="page-head">
+        <button class="back-btn" data-go="suppliers"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-back"/></svg> رجوع للموردين</button>
+        <div class="page-head__title">
+          <span class="card__icon card__icon--cyan sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-truck"/></svg></span>
+          <div><h2 id="supProfileTitle">كشف حساب مورد</h2><p id="supProfileSub">—</p></div>
+        </div>
+        <span class="status-pill" id="supProfilePhone">—</span>
+      </div>
+
+      <div class="panel panel--narrow" id="supProfileSummary"></div>
+
+      <div class="panel" id="supTxPanel">
+        <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-exchange"/></svg> حركات المورد</h3>
+        <p class="panel__hint">سجّل فاتورة الوارد أو المبلغ المدفوع للمورد — يُحسب الباقي تلقائياً من (الوارد − المدفوع).</p>
+
+        <form id="supTxForm" class="form" novalidate>
+          <div class="form__row">
+            <label class="field"><span>التاريخ *</span><input type="date" name="date" required /></label>
+            <label class="field"><span>رقم الإيصال</span><input type="text" name="no" placeholder="مثال: 1" /></label>
+          </div>
+          <div class="form__row">
+            <label class="field field--full"><span>البيان *</span><input type="text" name="desc" required placeholder="مثال: احمد محسن هالو 10 كرتون رخصات" /></label>
+          </div>
+          <div class="form__row">
+            <label class="field"><span>الوارد (فاتورة/مشتريات)</span><input type="number" name="incoming" min="0" step="any" placeholder="0" /></label>
+            <label class="field"><span>المدفوع للمورد</span><input type="number" name="paid" min="0" step="any" placeholder="0" /></label>
+          </div>
+          <div class="calc-grid">
+            <div class="calc-box"><span>إجمالي المشتريات</span><input type="text" name="tIn" readonly tabindex="-1" value="0" /></div>
+            <div class="calc-box"><span>إجمالي المدفوع</span><input type="text" name="tPaid" readonly tabindex="-1" value="0" /></div>
+            <div class="calc-box calc-box--accent"><span>الباقي بعد هذه الحركة</span><input type="text" name="tRest" readonly tabindex="-1" value="0" /></div>
+          </div>
+          <div class="form__row">
+            <label class="field field--full"><span>ملاحظات</span><input type="text" name="note" placeholder="ملاحظة على الحركة…" /></label>
+          </div>
+          <p class="form__error" id="supTxError" hidden></p>
+          <div class="form__actions">
+            <button type="submit" class="btn btn--primary"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-plus"/></svg> إضافة حركة</button>
+          </div>
+        </form>
+
+        <div class="table-wrap" style="margin-top:18px">
+          <table class="table" id="supTxTable">
+            <thead><tr><th>#</th><th>التاريخ</th><th>رقم الإيصال</th><th>البيان</th><th>الوارد</th><th>المدفوع</th><th>الباقي</th><th>ملاحظات</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- الدواخل والخوارج -->
+    <section class="view" id="view-ledger">
+      <div class="page-head">
+        <button class="back-btn" data-go="home"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-back"/></svg> رجوع</button>
+        <div class="page-head__title">
+          <span class="card__icon card__icon--violet sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-exchange"/></svg></span>
+          <div><h2>الدواخل والخوارج</h2><p>ملخص الحركة المالية</p></div>
+        </div>
+      </div>
+
+      <div class="summary">
+        <div class="summary__box summary__box--in"><small>إجمالي الدواخل</small><b>8,450,000</b><span>هـ.د</span></div>
+        <div class="summary__box summary__box--out"><small>إجمالي الخوارج</small><b>5,120,000</b><span>هـ.د</span></div>
+        <div class="summary__box summary__box--net"><small>الرصيد الصافي</small><b>3,330,000</b><span>هـ.د</span></div>
+      </div>
+
+      <div class="panel">
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>التاريخ</th><th>البيان</th><th>النوع</th><th>المبلغ</th></tr></thead>
+            <tbody>
+              <tr><td>24/10/2026</td><td>دفعة من عميل: أحمد محمد</td><td><span class="tag tag--in">دخل</span></td><td class="amount pos">+ 750,000</td></tr>
+              <tr><td>23/10/2026</td><td>إيجار المخزن</td><td><span class="tag tag--out">خرج</span></td><td class="amount neg">- 300,000</td></tr>
+              <tr><td>22/10/2026</td><td>بيع بضاعة – مؤسسة الأمل</td><td><span class="tag tag--in">دخل</span></td><td class="amount pos">+ 1,250,000</td></tr>
+              <tr><td>21/10/2026</td><td>رواتب الموظفين</td><td><span class="tag tag--out">خرج</span></td><td class="amount neg">- 900,000</td></tr>
+              <tr><td>20/10/2026</td><td>تحصيل من عميل: سالم عبدالله</td><td><span class="tag tag--in">دخل</span></td><td class="amount pos">+ 420,000</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- التحصيل (محمي) -->
+        <section class="view" id="view-collection">
+      <div class="page-head">
+        <button class="back-btn" data-go="home"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-back"/></svg> رجوع</button>
+        <div class="page-head__title">
+          <span class="card__icon card__icon--amber sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-coins"/></svg></span>
+          <div><h2>التحصيل</h2><p>قسم محمي بكلمة المرور</p></div>
+        </div>
+        <span class="protected-pill"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-lock"/></svg> محمي</span>
+      </div>
+
+      <div class="search-bar">
+        <div class="field field--search"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-search"/></svg>
+        <input type="text" id="collectionSearch" placeholder="ابحث عن عميل…" />
+        </div>
+        <span class="count-pill" id="collectionCount">0 عميل</span>
+      </div>
+
+      <div class="summary">
+        <div class="summary__box summary__box--in"><small>محصّل هذا الشهر</small><b>6,200,000</b><span>هـ.د</span></div>
+        <div class="summary__box summary__box--out"><small>متبقي للتحصيل</small><b>2,850,000</b><span>هـ.د</span></div>
+        <div class="summary__box summary__box--net"><small>نسبة التحصيل</small><b>68%</b><span>...</span></div>
+      </div>
+
+      <div class="panel">
+        <div class="table-wrap">
+          <table class="table" id="collectTable">
+            <thead><tr><th>#</th><th>التاريخ</th><th>المبلغ قبل الدفعة</th><th>المبلغ المدفوع</th><th>المرة في الدفع</th><th>المتبقي بعد الدفعة</th><th>ملاحظات</th></tr></thead>
+            <tbody id="collectTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+    <section class="view" id="view-partners">
+      <div class="page-head">
+        <button class="back-btn" data-go="home"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-back"/></svg> رجوع</button>
+        <div class="page-head__title">
+          <span class="card__icon card__icon--pink sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-link"/></svg></span>
+          <div><h2>الشركاء</h2><p>قسم محمي بكلمة المرور</p></div>
+        </div>
+        <span class="protected-pill"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-lock"/></svg> محمي</span>
+      </div>
+
+      <div class="cards-3">
+        <div class="mini-card">
+          <div class="mini-card__top"><span class="avatar">م ع</span><div><b>محمد علي</b><small>شريك مؤسس</small></div></div>
+          <div class="mini-card__row"><span>الحصة</span><b>40%</b></div>
+          <div class="mini-card__row"><span>رأس المال</span><b>4,000,000</b></div>
+          <div class="bar"><i style="width:40%"></i></div>
+        </div>
+        <div class="mini-card">
+          <div class="mini-card__top"><span class="avatar avatar--2">ع ح</span><div><b>عبدالله حسن</b><small>شريك</small></div></div>
+          <div class="mini-card__row"><span>الحصة</span><b>35%</b></div>
+          <div class="mini-card__row"><span>رأس المال</span><b>3,500,000</b></div>
+          <div class="bar"><i style="width:35%"></i></div>
+        </div>
+        <div class="mini-card">
+          <div class="mini-card__top"><span class="avatar avatar--3">س ك</span><div><b>سالم كريم</b><small>شريك</small></div></div>
+          <div class="mini-card__row"><span>الحصة</span><b>25%</b></div>
+          <div class="mini-card__row"><span>رأس المال</span><b>2,500,000</b></div>
+          <div class="bar"><i style="width:25%"></i></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>الشريك</th><th>أرباح السنة</th><th>مسحوبات</th><th>الصافي</th></tr></thead>
+            <tbody>
+              <tr><td>محمد علي</td><td class="amount pos">1,850,000</td><td class="amount">600,000</td><td class="amount">1,250,000</td></tr>
+              <tr><td>عبدالله حسن</td><td class="amount pos">1,620,000</td><td class="amount">400,000</td><td class="amount">1,220,000</td></tr>
+              <tr><td>سالم كريم</td><td class="amount pos">1,160,000</td><td class="amount">160,000</td><td class="amount">1,000,000</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- الجمعيات (محمي) -->
+    <section class="view" id="view-associations">
+      <div class="page-head">
+        <button class="back-btn" data-go="home"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-back"/></svg> رجوع</button>
+        <div class="page-head__title">
+          <span class="card__icon card__icon--blue sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-group"/></svg></span>
+          <div><h2>جمعيات</h2><p>قسم محمي بكلمة المرور</p></div>
+        </div>
+        <span class="protected-pill"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-lock"/></svg> محمي</span>
+      </div>
+
+      <div class="cards-3">
+        <div class="mini-card">
+          <div class="mini-card__top"><span class="card__icon card__icon--blue sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-group"/></svg></span><div><b>جمعية الإعمار</b><small>120 عضو</small></div></div>
+          <div class="mini-card__row"><span>اشتراك سنوي</span><b>12,000</b></div>
+          <div class="mini-card__row"><span>المحصّل</span><b class="pos">960,000</b></div>
+          <div class="bar"><i style="width:80%"></i></div>
+        </div>
+        <div class="mini-card">
+          <div class="mini-card__top"><span class="card__icon card__icon--pink sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-group"/></svg></span><div><b>جمعية البر</b><small>85 عضو</small></div></div>
+          <div class="mini-card__row"><span>اشتراك سنوي</span><b>10,000</b></div>
+          <div class="mini-card__row"><span>المحصّل</span><b class="pos">510,000</b></div>
+          <div class="bar"><i style="width:60%"></i></div>
+        </div>
+        <div class="mini-card">
+          <div class="mini-card__top"><span class="card__icon card__icon--amber sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-group"/></svg></span><div><b>جمعية الأمل</b><small>60 عضو</small></div></div>
+          <div class="mini-card__row"><span>اشتراك سنوي</span><b>10,000</b></div>
+          <div class="mini-card__row"><span>المحصّل</span><b class="pos">480,000</b></div>
+          <div class="bar"><i style="width:80%"></i></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>الجمعية</th><th>العضو</th><th>نوع الاشتراك</th><th>الحالة</th></tr></thead>
+            <tbody>
+              <tr><td>جمعية الإعمار</td><td>خالد ناصر</td><td>سنوي</td><td><span class="tag tag--in">مسدّد</span></td></tr>
+              <tr><td>جمعية الإعمار</td><td>وليد صلاح</td><td>شهري</td><td><span class="tag tag--warn">معلّق</span></td></tr>
+              <tr><td>جمعية البر</td><td>عمر ياسين</td><td>سنوي</td><td><span class="tag tag--in">مسدّد</span></td></tr>
+              <tr><td>جمعية الأمل</td><td>زياد فؤاد</td><td>شهري</td><td><span class="tag tag--out">متأخر</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ملف العميل -->
+    <section class="view" id="view-profile">
+      <div class="page-head">
+        <button class="back-btn" data-go="customers"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-back"/></svg> رجوع للعملاء</button>
+        <div class="page-head__title">
+          <span class="card__icon card__icon--indigo sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-users"/></svg></span>
+          <div><h2 id="profileTitle">ملف العميل</h2><p id="profileSubtitle">كل بيانات العميل بالتفصيل</p></div>
+        </div>
+        <span class="status-pill" id="profileStatus">—</span>
+      </div>
+
+      <div class="panel panel--narrow" id="profileSummary"></div>
+
+      <div class="profile-grid">
+        <div class="panel">
+          <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-users"/></svg> البيانات الشخصية</h3>
+          <div class="info-list" id="profileInfo"></div>
+          <div class="notes-block">
+            <h4>الملاحظات</h4>
+            <ul class="notes-list" id="profileNotes"></ul>
+            <p class="notes-empty" id="profileNotesEmpty">لا توجد ملاحظات لهذا العميل.</p>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-coins"/></svg> البيانات المالية</h3>
+          <div class="info-list" id="profileMoney"></div>
+        </div>
+      </div>
+
+      <div class="panel" id="sendPanel">
+        <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-truck"/></svg> المرسل من موارد</h3>
+        <p class="panel__hint">كل عملية إرسال من مواردنا للعميل تُخصم من «المبلغ المدفوع منا نحن للعميل» حتى ينتهي الرصيد، ويُعرض المتبقي بعد الطرح.</p>
+
+        <div class="summary summary--4" id="sendSummary"></div>
+
+        <form id="sendForm" class="form" novalidate>
+          <div class="form__row">
+            <label class="field field--full" data-field="work">
+              <span>الشغلانة *</span>
+              <input type="text" name="work" list="workTypes" required placeholder="اختر شغلانة موجودة أو اكتب شغلانة جديدة… مثال: بلاط محارة" />
+              <datalist id="workTypes"></datalist>
+            </label>
+          </div>
+          <div class="form__row">
+            <label class="field"><span>التاريخ *</span><input type="date" name="date" required /></label>
+            <label class="field"><span>المرسل / البيان *</span><input type="text" name="desc" required placeholder="مثال: عرافة رمية" /></label>
+          </div>
+          <div class="form__row">
+            <label class="field"><span>الكمية *</span><input type="number" name="qty" min="0" step="any" required placeholder="0" /></label>
+            <label class="field"><span>السعر *</span><input type="number" name="price" min="0" step="any" required placeholder="0" /></label>
+          </div>
+          <div class="calc-grid">
+            <div class="calc-box"><span>السعر الإجمالي (الكمية × السعر)</span><input type="text" name="sendTotal" readonly tabindex="-1" value="0" /></div>
+            <div class="calc-box"><span>الرصيد قبل الطرح</span><input type="text" name="beforeBal" readonly tabindex="-1" value="0" /></div>
+            <div class="calc-box calc-box--accent"><span>المتبقي بعد الطرح</span><input type="text" name="afterBal" readonly tabindex="-1" value="0" /></div>
+          </div>
+          <div class="form__row">
+            <label class="field field--full"><span>ملاحظة (اختياري)</span><input type="text" name="note" placeholder="ملاحظة على هذه العملية…" /></label>
+          </div>
+          <p class="form__error" id="sendError" hidden></p>
+          <div class="form__actions">
+            <button type="submit" class="btn btn--primary"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-plus"/></svg> إضافة مرسل</button>
+            <div class="send-tools">
+              <input type="text" id="sendFilter" list="filterTypes" placeholder="اعرض عمليات شغلانة معينة…" title="اكتب أو اختر شغلانة لعرض عملياتها فقط" />
+              <datalist id="filterTypes"></datalist>
+              <button type="button" class="btn btn--ghost" id="groupAllBtn">فرز الكل</button>
+            </div>
+          </div>
+        </form>
+
+        <div class="table-wrap" style="margin-top:18px">
+          <table class="table" id="sendTable">
+            <thead><tr><th>الشغلانة</th><th>التاريخ</th><th>المرسل / البيان</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th><th>المبلغ المدفوع منا للعميل</th><th>المتبقي بعد الطرح</th><th>ملاحظات</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel" id="collectPanel">
+        <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-exchange"/></svg> التحصيل</h3>
+        <p class="panel__hint">أدخل التاريخ والمبلغ المدفوع والمرة في الدفع ثم «إضافة تحصيل» — يُطرح المبلغ المدفوع من المبلغ الاجمالي المتبقي تلقائياً في كل مرة.</p>
+
+        <form id="collectForm" class="form" novalidate>
+          <div class="form__row form__row--3">
+            <label class="field"><span>التاريخ *</span><input type="date" name="date" required /></label>
+            <label class="field"><span>المبلغ المدفوع *</span><input type="number" name="amount" min="0" step="any" required placeholder="0" /></label>
+            <label class="field"><span>المرة الكام في الدفع *</span><input type="number" name="no" min="1" step="1" required placeholder="1" /></label>
+          </div>
+          <div class="form__row">
+            <label class="field field--full"><span>ملاحظة (اختياري)</span><input type="text" name="note" placeholder="ملاحظة حول هذه الدفعة…" /></label>
+          </div>
+          <div class="calc-grid">
+            <div class="calc-box"><span>المبلغ الاجمالي المتبقي</span><input type="text" id="collectRest" readonly tabindex="-1" value="0" /></div>
+            <div class="calc-box calc-box--accent"><span>المتبقي بعد هذه الدفعة</span><input type="text" id="collectAfter" readonly tabindex="-1" value="0" /></div>
+          </div>
+          <p class="form__error" id="collectError" hidden></p>
+          <div class="form__actions">
+            <button type="submit" class="btn btn--primary"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-plus"/></svg> إضافة تحصيل</button>
+          </div>
+        </form>
+
+        <div class="table-wrap" style="margin-top:18px">
+          <table class="table" id="collectTable">
+            <thead><tr><th>#</th><th>التاريخ</th><th>المبلغ قبل الدفعة</th><th>المبلغ المدفوع</th><th>المرة في الدفع</th><th>المتبقي بعد الدفعة</th><th>ملاحظات</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- الإعدادات -->
+    <section class="view" id="view-settings">
+      <div class="page-head">
+        <button class="back-btn" data-go="home"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-back"/></svg> رجوع</button>
+        <div class="page-head__title">
+          <span class="card__icon card__icon--slate sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-gear"/></svg></span>
+          <div><h2>الإعدادات</h2><p>كلمة المرور والأقسام المحمية</p></div>
+        </div>
+      </div>
+
+      <div class="settings-grid">
+        <div class="panel">
+          <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-lock"/></svg> تغيير كلمة المرور</h3>
+          <form id="passwordForm" class="form" novalidate>
+            <label class="field"><span>كلمة المرور الحالية *</span><input type="password" name="current" inputmode="numeric" required placeholder="••••" /></label>
+            <div class="form__row">
+              <label class="field"><span>كلمة المرور الجديدة *</span><input type="password" name="next" inputmode="numeric" required placeholder="••••" /></label>
+              <label class="field"><span>تأكيد كلمة المرور *</span><input type="password" name="confirm" inputmode="numeric" required placeholder="••••" /></label>
+            </div>
+            <p class="form__error" id="pwdFormError" hidden></p>
+            <div class="form__actions">
+              <button type="submit" class="btn btn--primary"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-check"/></svg> حفظ كلمة المرور</button>
+              <button type="button" class="btn btn--ghost" id="relockBtn">إعادة قفل الأقسام</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="panel">
+          <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-shield"/></svg> الأقسام المحمية</h3>
+          <p class="panel__hint">تُطلب كلمة المرور عند فتح هذه الأقسام، وتبقى الأقسام مفتوحة حتى إعادة التشغيل أو إعادة القفل.</p>
+          <ul class="protect-list">
+            <li><span class="card__icon card__icon--amber sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-coins"/></svg></span><div><b>التحصيل</b><small>يُقفل بكلمة المرور</small></div><svg viewBox="0 0 24 24" class="ico ico--lock"><use href="#ic-lock"/></svg></li>
+            <li><span class="card__icon card__icon--pink sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-link"/></svg></span><div><b>الشركاء</b><small>يُقفل بكلمة المرور</small></div><svg viewBox="0 0 24 24" class="ico ico--lock"><use href="#ic-lock"/></svg></li>
+            <li><span class="card__icon card__icon--blue sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-group"/></svg></span><div><b>جمعيات</b><small>يُقفل بكلمة المرور</small></div><svg viewBox="0 0 24 24" class="ico ico--lock"><use href="#ic-lock"/></svg></li>
+          </ul>
+          <p class="panel__note">تُحفظ كلمة المرور محلياً على هذا الجهاز فقط.</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===== شريط الحالة ===== -->
+  <footer class="statusbar">
+    <span class="statusbar__item"><span class="dot dot--ok"></span> جاهز</span>
+    <span class="statusbar__item" id="statusSection">الرئيسية</span>
+    <span class="statusbar__spacer"></span>
+    <span class="statusbar__item" id="dateHijri">— هـ</span>
+    <span class="statusbar__item" id="dateGreg">— م</span>
+    <span class="statusbar__item" id="clock">--:--</span>
+  </footer>
+</div>
+
+<!-- ===== نافذة كلمة المرور ===== -->
+<div class="modal" id="pwdModal" aria-hidden="true">
+  <div class="modal__backdrop" data-close></div>
+  <div class="modal__box" role="dialog" aria-modal="true" aria-labelledby="pwdTitle">
+    <div class="modal__icon"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-lock"/></svg></div>
+    <h3 id="pwdTitle">قسم محمي</h3>
+    <p class="modal__sub" id="pwdSub">أدخل كلمة المرور لفتح هذا القسم</p>
+
+    <div class="pwd-dots" id="pwdDots"><i></i><i></i><i></i><i></i></div>
+    <p class="pwd-error" id="pwdError" hidden>كلمة المرور غير صحيحة، حاول مجدداً</p>
+
+    <div class="keypad" id="keypad">
+      <button type="button" data-key="1">1</button>
+      <button type="button" data-key="2">2</button>
+      <button type="button" data-key="3">3</button>
+      <button type="button" data-key="4">4</button>
+      <button type="button" data-key="5">5</button>
+      <button type="button" data-key="6">6</button>
+      <button type="button" data-key="7">7</button>
+      <button type="button" data-key="8">8</button>
+      <button type="button" data-key="9">9</button>
+      <button type="button" data-key="clr" class="keypad__fn">مسح</button>
+      <button type="button" data-key="0">0</button>
+      <button type="button" data-key="ok" class="keypad__go"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-check"/></svg></button>
+    </div>
+
+    <button class="btn btn--ghost btn--block" data-close>إلغاء</button>
+  </div>
+</div>
+
+<!-- ===== تنبيهات ===== -->
+<div class="toast" id="toast" role="status" aria-live="polite"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-check"/></svg><span></span></div>
+
+<script src="app.js"></script>
+</body>
+</html>
