@@ -1,0 +1,11 @@
+# ⛔ مفاتيح Google — لا تُرفع للمستودع أبداً
+GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET
+secrets/
+
+# مخرجات البناء والاعتمادات المحلية
+node_modules/
+.pytools/
+artifacts/
+preview.log
+preview.pid

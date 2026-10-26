@@ -2,8 +2,18 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>نظام الإدارة المتكامل</title>
+<meta name="description" content="نظام الإدارة المتكامل — العملاء، الموردون، الدواخل والخوارج، التحصيل، الشركاء والجمعيات" />
+<meta name="theme-color" content="#0a0d1a" />
+<meta name="color-scheme" content="dark" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" type="image/png" href="icons/favicon.png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="نظام الإدارة" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet" />
@@ -474,23 +484,61 @@
         </div>
       </div>
 
-      <div class="summary">
-        <div class="summary__box summary__box--in"><small>إجمالي الدواخل</small><b>8,450,000</b><span>هـ.د</span></div>
-        <div class="summary__box summary__box--out"><small>إجمالي الخوارج</small><b>5,120,000</b><span>هـ.د</span></div>
-        <div class="summary__box summary__box--net"><small>الرصيد الصافي</small><b>3,330,000</b><span>هـ.د</span></div>
+      <div class="search-bar">
+        <div class="field field--search"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-search"/></svg>
+        <input type="text" id="ledgerSearch" placeholder="ابحث في الحركات بالبيان أو الملاحظة…" />
+        </div>
+        <select id="ledgerTypeFilter" title="عرض الدخل أو الخرج فقط">
+          <option value="">الكل</option>
+          <option value="in">دخل فقط</option>
+          <option value="out">خرج فقط</option>
+        </select>
+        <span class="count-pill" id="ledgerCount">0 حركة</span>
       </div>
 
+      <div class="summary" id="ledgerSummary"></div>
+
       <div class="panel">
-        <div class="table-wrap">
-          <table class="table">
-            <thead><tr><th>التاريخ</th><th>البيان</th><th>النوع</th><th>المبلغ</th></tr></thead>
-            <tbody>
-              <tr><td>24/10/2026</td><td>دفعة من عميل: أحمد محمد</td><td><span class="tag tag--in">دخل</span></td><td class="amount pos">+ 750,000</td></tr>
-              <tr><td>23/10/2026</td><td>إيجار المخزن</td><td><span class="tag tag--out">خرج</span></td><td class="amount neg">- 300,000</td></tr>
-              <tr><td>22/10/2026</td><td>بيع بضاعة – مؤسسة الأمل</td><td><span class="tag tag--in">دخل</span></td><td class="amount pos">+ 1,250,000</td></tr>
-              <tr><td>21/10/2026</td><td>رواتب الموظفين</td><td><span class="tag tag--out">خرج</span></td><td class="amount neg">- 900,000</td></tr>
-              <tr><td>20/10/2026</td><td>تحصيل من عميل: سالم عبدالله</td><td><span class="tag tag--in">دخل</span></td><td class="amount pos">+ 420,000</td></tr>
-            </tbody>
+        <p class="panel__hint">سجّل كل حركة مالية: <b>دخل</b> (دفعة من عميل، بيع، أي وارد) و<b>خرج</b> (إيجار، رواتب، مصاريف). المجموعات الثلاثة بالأعلى تُحسب تلقائياً من كل الحركات المسجّلة.</p>
+
+        <form id="ledgerForm" class="form" novalidate>
+          <div class="form__row form__row--3">
+            <label class="field"><span>التاريخ *</span><input type="date" name="date" required /></label>
+            <label class="field"><span>النوع *</span>
+              <select name="type">
+                <option value="in">دخل (وارد)</option>
+                <option value="out">خرج (صادر)</option>
+              </select>
+            </label>
+            <label class="field"><span>المبلغ *</span><input type="number" name="amount" min="0" step="any" required placeholder="0" /></label>
+          </div>
+          <div class="form__row">
+            <label class="field field--full"><span>البيان *</span><input type="text" name="desc" required placeholder="مثال: دفعة من عميل: أحمد محمد" /></label>
+          </div>
+          <div class="form__row">
+            <label class="field field--full"><span>ملاحظة (اختياري)</span><input type="text" name="note" placeholder="تفاصيل إضافية عن الحركة…" /></label>
+          </div>
+          <p class="form__error" id="ledgerError" hidden></p>
+          <div class="form__actions">
+            <button type="submit" class="btn btn--primary"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-plus"/></svg> إضافة حركة</button>
+            <button type="button" class="btn btn--ghost" id="ledgerClear">تفريغ الحقول</button>
+          </div>
+        </form>
+
+        <div class="table-wrap" style="margin-top:18px">
+          <table class="table" id="ledgerTable">
+            <thead>
+              <tr>
+                <th style="width:52px">#</th>
+                <th>التاريخ</th>
+                <th>البيان</th>
+                <th>النوع</th>
+                <th>المبلغ</th>
+                <th>ملاحظة</th>
+                <th style="width:84px"><span class="sr-only">حذف</span></th>
+              </tr>
+            </thead>
+            <tbody id="ledgerTbody"></tbody>
           </table>
         </div>
       </div>
@@ -509,21 +557,27 @@
 
       <div class="search-bar">
         <div class="field field--search"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-search"/></svg>
-        <input type="text" id="collectionSearch" placeholder="ابحث عن عميل…" />
+        <input type="text" id="collectionSearch" placeholder="ابحث عن عميل بالاسم أو الهاتف أو العنوان…" />
         </div>
         <span class="count-pill" id="collectionCount">0 عميل</span>
       </div>
 
-      <div class="summary">
-        <div class="summary__box summary__box--in"><small>محصّل هذا الشهر</small><b>6,200,000</b><span>هـ.د</span></div>
-        <div class="summary__box summary__box--out"><small>متبقي للتحصيل</small><b>2,850,000</b><span>هـ.د</span></div>
-        <div class="summary__box summary__box--net"><small>نسبة التحصيل</small><b>68%</b><span>...</span></div>
-      </div>
+      <div class="summary" id="collectionSummary"></div>
 
       <div class="panel">
+        <p class="panel__hint" style="margin:0 0 14px">اضغط على اسم العميل لفتح تفاصيل تحصيله — تظهر أسفل السطر مباشرة، ويمكنك إضافة دفعة جديدة من داخلها.</p>
         <div class="table-wrap">
-          <table class="table" id="collectTable">
-            <thead><tr><th>#</th><th>التاريخ</th><th>المبلغ قبل الدفعة</th><th>المبلغ المدفوع</th><th>المرة في الدفع</th><th>المتبقي بعد الدفعة</th><th>ملاحظات</th></tr></thead>
+          <table class="table" id="collectionList">
+            <thead>
+              <tr>
+                <th style="width:52px">#</th>
+                <th>اسم العميل</th>
+                <th>الهاتف</th>
+                <th>العنوان</th>
+                <th>المتبقي</th>
+                <th style="width:64px"><span class="sr-only">فتح التفاصيل</span></th>
+              </tr>
+            </thead>
             <tbody id="collectTbody"></tbody>
           </table>
         </div>
@@ -539,36 +593,79 @@
         <span class="protected-pill"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-lock"/></svg> محمي</span>
       </div>
 
-      <div class="cards-3">
-        <div class="mini-card">
-          <div class="mini-card__top"><span class="avatar">م ع</span><div><b>محمد علي</b><small>شريك مؤسس</small></div></div>
-          <div class="mini-card__row"><span>الحصة</span><b>40%</b></div>
-          <div class="mini-card__row"><span>رأس المال</span><b>4,000,000</b></div>
-          <div class="bar"><i style="width:40%"></i></div>
+      <div class="search-bar">
+        <div class="field field--search"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-search"/></svg>
+        <input type="text" id="partnerSearch" placeholder="ابحث عن شريك بالاسم أو الصفة…" />
         </div>
-        <div class="mini-card">
-          <div class="mini-card__top"><span class="avatar avatar--2">ع ح</span><div><b>عبدالله حسن</b><small>شريك</small></div></div>
-          <div class="mini-card__row"><span>الحصة</span><b>35%</b></div>
-          <div class="mini-card__row"><span>رأس المال</span><b>3,500,000</b></div>
-          <div class="bar"><i style="width:35%"></i></div>
-        </div>
-        <div class="mini-card">
-          <div class="mini-card__top"><span class="avatar avatar--3">س ك</span><div><b>سالم كريم</b><small>شريك</small></div></div>
-          <div class="mini-card__row"><span>الحصة</span><b>25%</b></div>
-          <div class="mini-card__row"><span>رأس المال</span><b>2,500,000</b></div>
-          <div class="bar"><i style="width:25%"></i></div>
-        </div>
+        <span class="count-pill" id="sharePill">—</span>
+        <span class="count-pill" id="partnersCount">0 شريك</span>
+      </div>
+
+      <div class="summary summary--4" id="partnersSummary"></div>
+
+      <div class="cards-3" id="partnerCards"></div>
+
+      <div class="panel">
+        <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-coins"/></svg> صافي أرباح السنة (الشركة)</h3>
+        <p class="panel__hint">يُوزَّع على الشركاء تلقائياً حسب نصيب كل واحد من الحصة المئوية: <b>النصيب = صافي الأرباح × الحصة ÷ 100</b> — غيّر المبلغ هنا ويتغيّر نصيب الجميع فوراً.</p>
+        <form id="profitForm" class="form" novalidate>
+          <div class="form__row">
+            <label class="field"><span>صافي أرباح السنة *</span><input type="number" name="profit" min="0" step="any" required placeholder="0" /></label>
+            <label class="field"><span>إجمالي المسحوبات (محسوب)</span><input type="text" id="withdrawalsTotal" readonly tabindex="-1" value="0" /></label>
+          </div>
+          <p class="form__error" id="profitError" hidden></p>
+          <div class="form__actions">
+            <button type="submit" class="btn btn--primary"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-check"/></svg> حفظ الأرباح</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="panel">
+        <p class="panel__hint">أضف أو عدّل الشركاء — الحصة ورأس المال والمسحوبات تُدخلها أنت، ونصيب كل شريك من الأرباح والصافي المستحق يُحسبان تلقائياً.</p>
+        <form id="partnerForm" class="form" novalidate>
+          <input type="hidden" name="idx" value="-1" />
+          <div class="form__row">
+            <label class="field"><span>اسم الشريك *</span><input type="text" name="name" required placeholder="مثال: محمد علي" /></label>
+            <label class="field"><span>الصفة *</span>
+              <select name="role">
+                <option value="شريك مؤسس">شريك مؤسس</option>
+                <option value="شريك">شريك</option>
+                <option value="مستثمر">مستثمر</option>
+                <option value="شريك إداري">شريك إداري</option>
+              </select>
+            </label>
+          </div>
+          <div class="form__row form__row--3">
+            <label class="field"><span>الحصة % *</span><input type="number" name="share" min="0" max="100" step="any" required placeholder="مثال: 40" /></label>
+            <label class="field"><span>رأس المال *</span><input type="number" name="capital" min="0" step="any" required placeholder="0" /></label>
+            <label class="field"><span>المسحوبات</span><input type="number" name="withdrawals" min="0" step="any" placeholder="0" /></label>
+          </div>
+          <div class="form__row">
+            <label class="field field--full"><span>ملاحظة (اختياري)</span><input type="text" name="note" placeholder="تفاصيل إضافية عن الشريك…" /></label>
+          </div>
+          <p class="form__error" id="partnerError" hidden></p>
+          <div class="form__actions">
+            <button type="submit" class="btn btn--primary" id="partnerSubmitBtn"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-plus"/></svg> إضافة شريك</button>
+            <button type="button" class="btn btn--ghost" id="partnerCancelBtn" hidden>إلغاء التعديل</button>
+          </div>
+        </form>
       </div>
 
       <div class="panel">
         <div class="table-wrap">
-          <table class="table">
-            <thead><tr><th>الشريك</th><th>أرباح السنة</th><th>مسحوبات</th><th>الصافي</th></tr></thead>
-            <tbody>
-              <tr><td>محمد علي</td><td class="amount pos">1,850,000</td><td class="amount">600,000</td><td class="amount">1,250,000</td></tr>
-              <tr><td>عبدالله حسن</td><td class="amount pos">1,620,000</td><td class="amount">400,000</td><td class="amount">1,220,000</td></tr>
-              <tr><td>سالم كريم</td><td class="amount pos">1,160,000</td><td class="amount">160,000</td><td class="amount">1,000,000</td></tr>
-            </tbody>
+          <table class="table" id="partnersTable">
+            <thead>
+              <tr>
+                <th style="width:52px">#</th>
+                <th>الشريك</th>
+                <th>الحصة</th>
+                <th>نصيبه من الأرباح</th>
+                <th>مسحوبات</th>
+                <th>الصافي المستحق</th>
+                <th style="width:170px"><span class="sr-only">إجراءات</span></th>
+              </tr>
+            </thead>
+            <tbody id="partnersTbody"></tbody>
           </table>
         </div>
       </div>
@@ -585,37 +682,85 @@
         <span class="protected-pill"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-lock"/></svg> محمي</span>
       </div>
 
-      <div class="cards-3">
-        <div class="mini-card">
-          <div class="mini-card__top"><span class="card__icon card__icon--blue sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-group"/></svg></span><div><b>جمعية الإعمار</b><small>120 عضو</small></div></div>
-          <div class="mini-card__row"><span>اشتراك سنوي</span><b>12,000</b></div>
-          <div class="mini-card__row"><span>المحصّل</span><b class="pos">960,000</b></div>
-          <div class="bar"><i style="width:80%"></i></div>
+      <div class="search-bar">
+        <div class="field field--search"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-search"/></svg>
+        <input type="text" id="memberSearch" placeholder="ابحث عن عضو بالاسم أو الجمعية…" />
         </div>
-        <div class="mini-card">
-          <div class="mini-card__top"><span class="card__icon card__icon--pink sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-group"/></svg></span><div><b>جمعية البر</b><small>85 عضو</small></div></div>
-          <div class="mini-card__row"><span>اشتراك سنوي</span><b>10,000</b></div>
-          <div class="mini-card__row"><span>المحصّل</span><b class="pos">510,000</b></div>
-          <div class="bar"><i style="width:60%"></i></div>
-        </div>
-        <div class="mini-card">
-          <div class="mini-card__top"><span class="card__icon card__icon--amber sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-group"/></svg></span><div><b>جمعية الأمل</b><small>60 عضو</small></div></div>
-          <div class="mini-card__row"><span>اشتراك سنوي</span><b>10,000</b></div>
-          <div class="mini-card__row"><span>المحصّل</span><b class="pos">480,000</b></div>
-          <div class="bar"><i style="width:80%"></i></div>
-        </div>
+        <select id="assocFilter" title="عرض أعضاء جمعية معينة">
+          <option value="">كل الجمعيات</option>
+        </select>
+        <span class="count-pill" id="assocsCount">0 جمعية</span>
+        <span class="count-pill" id="membersCount">0 عضو</span>
+      </div>
+
+      <div class="summary summary--4" id="assocSummary"></div>
+
+      <div class="cards-3" id="assocCards"></div>
+
+      <div class="panel">
+        <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-group"/></svg> الجمعيات</h3>
+        <p class="panel__hint">أضف الجمعية وقيمة الاشتراك السنوي — القيمة بتُستخدم كافتراضي لأي عضو جديد تضيفه بعدها. تعديل الاسم يتحدّث تلقائياً على كل أعضائها.</p>
+        <form id="assocForm" class="form" novalidate>
+          <input type="hidden" name="idx" value="-1" />
+          <div class="form__row">
+            <label class="field"><span>اسم الجمعية *</span><input type="text" name="name" required placeholder="مثال: جمعية الإعمار" /></label>
+            <label class="field"><span>قيمة الاشتراك السنوي *</span><input type="number" name="fee" min="0" step="any" required placeholder="0" /></label>
+          </div>
+          <p class="form__error" id="assocError" hidden></p>
+          <div class="form__actions">
+            <button type="submit" class="btn btn--primary" id="assocSubmitBtn"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-plus"/></svg> إضافة جمعية</button>
+            <button type="button" class="btn btn--ghost" id="assocCancelBtn" hidden>إلغاء التعديل</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-users"/></svg> الأعضاء والاشتراكات</h3>
+        <p class="panel__hint">سجّل العضو وقيمة اشتراكه والمبلغ المدفوع — <b>الحالة تُحسب تلقائياً</b>: المدفوع ≥ المطلوب = مسدّد، مدّ جزئي = معلّق، لم يدفع شيئاً = متأخر.</p>
+        <form id="memberForm" class="form" novalidate>
+          <input type="hidden" name="idx" value="-1" />
+          <div class="form__row">
+            <label class="field"><span>الجمعية *</span><select name="assoc" required id="memberAssoc"></select></label>
+            <label class="field"><span>اسم العضو *</span><input type="text" name="name" required placeholder="مثال: خالد ناصر" /></label>
+          </div>
+          <div class="form__row form__row--3">
+            <label class="field"><span>نوع الاشتراك *</span>
+              <select name="type">
+                <option value="سنوي">سنوي</option>
+                <option value="شهري">شهري</option>
+              </select>
+            </label>
+            <label class="field"><span>قيمة الاشتراك *</span><input type="number" name="fee" min="0" step="any" required placeholder="0" /></label>
+            <label class="field"><span>المدفوع</span><input type="number" name="paid" min="0" step="any" placeholder="0" /></label>
+          </div>
+          <div class="form__row">
+            <label class="field field--full"><span>ملاحظة (رقم الهاتف أو أي تفصيل)</span><input type="text" name="note" placeholder="مثال: 0770123456" /></label>
+          </div>
+          <p class="form__error" id="memberError" hidden></p>
+          <div class="form__actions">
+            <button type="submit" class="btn btn--primary" id="memberSubmitBtn"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-plus"/></svg> إضافة عضو</button>
+            <button type="button" class="btn btn--ghost" id="memberCancelBtn" hidden>إلغاء التعديل</button>
+          </div>
+        </form>
       </div>
 
       <div class="panel">
         <div class="table-wrap">
-          <table class="table">
-            <thead><tr><th>الجمعية</th><th>العضو</th><th>نوع الاشتراك</th><th>الحالة</th></tr></thead>
-            <tbody>
-              <tr><td>جمعية الإعمار</td><td>خالد ناصر</td><td>سنوي</td><td><span class="tag tag--in">مسدّد</span></td></tr>
-              <tr><td>جمعية الإعمار</td><td>وليد صلاح</td><td>شهري</td><td><span class="tag tag--warn">معلّق</span></td></tr>
-              <tr><td>جمعية البر</td><td>عمر ياسين</td><td>سنوي</td><td><span class="tag tag--in">مسدّد</span></td></tr>
-              <tr><td>جمعية الأمل</td><td>زياد فؤاد</td><td>شهري</td><td><span class="tag tag--out">متأخر</span></td></tr>
-            </tbody>
+          <table class="table" id="membersTable">
+            <thead>
+              <tr>
+                <th style="width:52px">#</th>
+                <th>الجمعية</th>
+                <th>العضو</th>
+                <th>نوع الاشتراك</th>
+                <th>المستحق</th>
+                <th>المدفوع</th>
+                <th>المتبقي</th>
+                <th>الحالة</th>
+                <th style="width:170px"><span class="sr-only">إجراءات</span></th>
+              </tr>
+            </thead>
+            <tbody id="membersTbody"></tbody>
           </table>
         </div>
       </div>
@@ -769,6 +914,75 @@
           </ul>
           <p class="panel__note">تُحفظ كلمة المرور محلياً على هذا الجهاز فقط.</p>
         </div>
+
+        <div class="panel" style="grid-column:1/-1">
+          <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-exchange"/></svg> تصدير البيانات</h3>
+          <p class="panel__hint">كل خاصية بملف مستقل: <b>Excel (.xlsx)</b> أو <b>تقرير PDF</b> — الملف بينزل على جهّك فوراً، ولو حساب Google متصل بيترفع على Drive أوتوماتيك بعده.</p>
+          <div class="export-grid" id="exportGrid"></div>
+          <div class="form__actions" style="margin-top:16px">
+            <button type="button" class="btn btn--primary" id="exportAllXlsx"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-check"/></svg> التطبيق كاملاً (Excel)</button>
+            <button type="button" class="btn btn--ghost" id="exportAllPdf">ملخّص التطبيق (PDF)</button>
+          </div>
+        </div>
+
+        <div class="panel" style="grid-column:1/-1">
+          <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-link"/></svg> ربط Google Drive</h3>
+          <p class="panel__hint">اربط حسابك مرة واحدة، وبعدها كل ملف تصدير بيترفع عليه أوتوماتيك، وتقدر كمان ترفع أي ملف من جهازك.</p>
+
+          <div class="drive-status" id="driveStatus"><span id="driveStatusText">جارٍ التحقق من حالة الربط…</span></div>
+
+          <div class="panel__note" id="driveSetup" hidden>
+            <b>للتفعيل (مرة واحدة):</b> أنشئ مشروعاً في <b>Google Cloud Console</b> ← فعّل <b>Drive API</b> ← املأ <b>OAuth consent screen</b> (External) وأضف حسابك كـ <b>Test user</b> ← أنشئ <b>OAuth client ID</b> من نوع <b>Web application</b> بـ Redirect URI: <code id="driveRedirect"></code><br />
+            ثم ضع <code>GOOGLE_CLIENT_ID</code> و <code>GOOGLE_CLIENT_SECRET</code> في إعدادات الموقع ← <b>Secrets</b>، وأعد النشر.
+          </div>
+
+          <label class="field" id="driveNotifyField" hidden>
+            <span>بريد تنبيه الرفع — يوصله إشعار بالملف مرفقاً (الافتراضي: بريدك المربوط)</span>
+            <input type="email" id="driveNotifyTo" placeholder="you@example.com" autocomplete="email" />
+          </label>
+
+          <div class="form__actions">
+            <button type="button" class="btn btn--primary" id="driveConnect" hidden>ربط حساب Google</button>
+            <button type="button" class="btn btn--ghost" id="driveDisconnect" hidden>فصل الربط</button>
+            <label class="btn btn--ghost" for="driveFile" id="driveUploadLabel" hidden>رفع ملف من الجهاز
+              <input type="file" id="driveFile" accept=".xlsx,.xls,.pdf,.csv,.png,.jpg,.jpeg" hidden />
+            </label>
+          </div>
+          <p class="panel__note" id="driveNote" hidden></p>
+        </div>
+
+        <div class="panel" style="grid-column:1/-1">
+          <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-back"/></svg> المزامنة السحابية</h3>
+          <p class="panel__hint">نسخة كاملة من كل بياناتك (العملاء، الموردون، الدواخل والخوارج، الشركاء، الجمعيات) بتترفع على فولدر <b>«نظام الإدارة — المزامنة»</b> داخل درايفك. تقدر تفتحه من أي جهاز، ودرفايف بيحفظ <b>نسخة سابقة</b> لكل تعديل — يعني تاريخ بياناتك كله محفوظ عندك.</p>
+
+          <div class="drive-status" id="syncState"><span id="syncStateText">لم تُفحص المزامنة بعد</span></div>
+
+          <label class="field" id="syncPolicyField">
+            <span>عندما توجد نسخة أحدث على الدرايف</span>
+            <select id="syncPolicy">
+              <option value="ask">اسألني قبل الاستبدال (موصى به — أمان البيانات)</option>
+              <option value="auto">طبّق تلقائياً مع نسخة احتياطية</option>
+              <option value="manual">لا تحمّل تلقائياً — أختار بنفسي</option>
+            </select>
+          </label>
+
+          <div class="panel__note" id="syncPending" hidden>
+            <b id="syncPendingHead">توجد نسخة أحدث على الدرايف</b>
+            <ul class="sync-diff" id="syncPendingList"></ul>
+            <p class="panel__hint" id="syncPendingMeta"></p>
+            <div class="form__actions">
+              <button type="button" class="btn btn--primary btn--sm" id="syncApply">تطبيق النسخة الجديدة</button>
+              <button type="button" class="btn btn--ghost btn--sm" id="syncIgnore">تجاهل</button>
+            </div>
+          </div>
+
+          <div class="form__actions">
+            <button type="button" class="btn btn--primary" id="syncPush">رفع نسخة الآن</button>
+            <button type="button" class="btn btn--ghost" id="syncCheck">فحص وتحميل</button>
+            <button type="button" class="btn btn--ghost" id="syncRestore" hidden>تراجع عن آخر استبدال</button>
+          </div>
+          <p class="panel__note" id="syncNote" hidden></p>
+        </div>
       </div>
     </section>
 
@@ -818,6 +1032,15 @@
 <!-- ===== تنبيهات ===== -->
 <div class="toast" id="toast" role="status" aria-live="polite"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-check"/></svg><span></span></div>
 
+<script src="export.js"></script>
 <script src="app.js"></script>
+<script>
+  /* تسجيل Service Worker ليعمل التطبيق مثبتاً على أندرويد/الديسكتوب بدون إنترنت */
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () {});
+    });
+  }
+</script>
 </body>
 </html>
