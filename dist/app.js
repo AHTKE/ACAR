@@ -3237,6 +3237,78 @@
     });
   }
 
+  /* ---------- الفولدر المشترك ---------- */
+  var syncFolderInput = $('#syncFolderUrl');
+  var syncFolderStatus = $('#syncFolderStatus');
+  var syncFolderClear = $('#syncFolderClear');
+
+  function syncFolderShow(msg, ok) {
+    if (!syncFolderStatus) return;
+    syncFolderStatus.textContent = msg;
+    syncFolderStatus.style.color = ok ? 'var(--ok)' : 'var(--muted)';
+    syncFolderStatus.hidden = false;
+  }
+
+  function loadSyncFolder() {
+    if (typeof fetch !== 'function') return Promise.resolve();
+    return fetch('/api/sync/folder').then(function (r) { return r.json(); }).then(function (j) {
+      if (j.ok) {
+        if (syncFolderInput && j.customFolder) {
+          syncFolderInput.value = j.customFolder;
+          if (syncFolderClear) syncFolderClear.hidden = false;
+          syncFolderShow('الفولدر المشترك مضبوط: ' + j.customFolder, true);
+        } else if (syncFolderInput && j.autoFolder) {
+          syncFolderInput.value = '';
+          if (syncFolderClear) syncFolderClear.hidden = true;
+          syncFolderShow('الفولدر التلقائي مضبوط — «نظام الإدارة — المزامنة»', true);
+        }
+      }
+    }).catch(function () {});
+  }
+  loadSyncFolder();
+
+  var syncFolderSave = $('#syncFolderSave');
+  if (syncFolderSave) {
+    syncFolderSave.addEventListener('click', function () {
+      var v = syncFolderInput ? syncFolderInput.value.trim() : '';
+      if (!v) { toast('الصق رابط الفولدر أولاً', true); return; }
+      syncFolderSave.disabled = true;
+      fetch('/api/sync/folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderId: v })
+      }).then(function (r) { return r.json(); }).then(function (j) {
+        syncFolderSave.disabled = false;
+        if (j.ok) {
+          toast('اتحفظ الفولدر المشترك ✓');
+          syncFolderShow('الفولدر المشترك مضبوط: ' + j.folderId, true);
+          if (syncFolderClear) syncFolderClear.hidden = false;
+        } else {
+          toast(j.error || 'فشل حفظ الفولدر', true);
+          syncFolderShow(j.error || 'فشل الحفظ', false);
+        }
+      }).catch(function (e) {
+        syncFolderSave.disabled = false;
+        toast('خطأ في الاتصال', true);
+      });
+    });
+  }
+
+  if (syncFolderClear) {
+    syncFolderClear.addEventListener('click', function () {
+      fetch('/api/sync/folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderId: '' })
+      }).then(function (r) { return r.json(); }).then(function (j) {
+        if (syncFolderInput) syncFolderInput.value = '';
+        syncFolderClear.hidden = true;
+        syncFolderShow('اترجع للفولدر التلقائي', true);
+        toast('اتحذف الفولدر المشترك');
+      }).catch(function () { toast('خطأ في الاتصال', true); });
+    });
+  }
+
   function startSyncTimers() {
     if (syncTimerPush || syncTimerCheck || typeof setInterval !== 'function') return;
     syncTimerCheck = setInterval(function () { syncCheck(true); }, SYNC_CHECK_MS);

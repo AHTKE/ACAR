@@ -19,6 +19,7 @@ const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GMAIL_SEND_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
 const DRIVE_FILES = 'https://www.googleapis.com/drive/v3/files';
+const DRIVE_UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
 
 /* فولدر المزامنة — يتخلق مرة واحدة على درايف المستخدم ويتخزّن معرّفه */
 const SYNC_FOLDER_NAME = 'نظام الإدارة — المزامنة';
@@ -155,7 +156,21 @@ async function requireConnection(request, env) {
 /* ---------- فولدر المزامنة على Drive ---------- */
 function escQuery(s) { return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
 
+/* استخراج معرّف الفولدر من رابط Google Drive أو نص خام */
+function extractFolderId(input) {
+  if (!input) return '';
+  var s = String(input).trim();
+  var m = s.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+  if (m) return m[1];
+  m = s.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (m) return m[1];
+  if (/^[a-zA-Z0-9_-]{10,}$/.test(s)) return s;
+  return '';
+}
+
 async function getOrCreateSyncFolder(env, at) {
+  const custom = await settingGet(env.DB, 'sync_custom_folder');
+  if (custom) return custom;
   const cached = await settingGet(env.DB, 'sync_folder_id');
   if (cached) return cached;
 
@@ -192,7 +207,7 @@ async function findSyncFile(at, folderId) {
 async function pushSyncFile(at, folderId, jsonText) {
   const existing = await findSyncFile(at, folderId);
   if (existing) {
-    const r = await fetch(DRIVE_FILES + '/' + existing.id +
+    const r = await fetch(DRIVE_UPLOAD + '/' + existing.id +
       '?uploadType=media&fields=id,name,modifiedTime,size', {
         method: 'PATCH',
         headers: { Authorization: 'Bearer ' + at, 'Content-Type': 'application/json; charset=UTF-8' },
@@ -211,7 +226,7 @@ async function pushSyncFile(at, folderId, jsonText) {
   const tail = '\r\n--' + boundary + '--';
   const payload = new Blob([head, jsonText, tail], { type: 'multipart/related; boundary=' + boundary });
 
-  const r = await fetch(DRIVE_FILES + '?uploadType=multipart&fields=id,name,modifiedTime,size', {
+  const r = await fetch(DRIVE_UPLOAD + '?uploadType=multipart&fields=id,name,modifiedTime,size', {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + at, 'Content-Type': 'multipart/related; boundary=' + boundary },
     body: payload
@@ -650,6 +665,30 @@ async function handleApi(request, env, pathname) {
       modifiedTime: info.modifiedTime || '', size: Number(info.size || 0),
       emailed: emailed, emailedTo: emailedTo
     });
+  }
+
+  /* ---- المزامنة: إعداد الفولدر المشترك ---- */
+  if (pathname === '/api/sync/folder') {
+    if (request.method === 'GET') {
+      let conn;
+      try { conn = await requireConnection(request, env); }
+      catch (e) { return json({ ok: false, error: e.message }, e.status || 500); }
+      const custom = await settingGet(env.DB, 'sync_custom_folder');
+      const auto = await settingGet(env.DB, 'sync_folder_id');
+      return json({ ok: true, customFolder: custom || '', autoFolder: auto || '' });
+    }
+    if (request.method === 'POST') {
+      let conn;
+      try { conn = await requireConnection(request, env); }
+      catch (e) { return json({ ok: false, error: e.message }, e.status || 500); }
+      let body;
+      try { body = await request.json(); } catch (e) { body = null; }
+      const folderId = extractFolderId(body && body.folderId);
+      if (!folderId) return json({ ok: false, error: 'رابط الفولدر غير صالح — تأكد إنه رابط Google Drive صحيح' }, 400);
+      await settingSet(env.DB, 'sync_custom_folder', folderId);
+      return json({ ok: true, folderId: folderId });
+    }
+    return json({ ok: false, error: 'طريقة غير مسموحة' }, 405);
   }
 
   /* فصل الربط */

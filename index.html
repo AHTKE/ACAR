@@ -957,6 +957,19 @@
 
           <div class="drive-status" id="syncState"><span id="syncStateText">لم تُفحص المزامنة بعد</span></div>
 
+          <label class="field" id="syncFolderField">
+            <span>الفولدر المشترك (رابط Google Drive) — لمشاركة الداتا بين الأجهزة</span>
+            <input type="text" id="syncFolderUrl" placeholder="https://drive.google.com/drive/folders/XXXXXXXXX" autocomplete="off">
+          </label>
+          <p class="panel__hint" style="margin-top:-6px;margin-bottom:8px">
+            🔗 الصق رابط فولدر مشترك من درايفك عشان أي جهاز يقدر يستلم الداتا منه. لو فاضي — التطبيق هينشئ فولدر تلقائياً باسم «نظام الإدارة — المزامنة».
+          </p>
+          <div class="form__actions" style="margin-bottom:8px">
+            <button type="button" class="btn btn--ghost btn--sm" id="syncFolderSave">حفظ الفولدر المشترك</button>
+            <button type="button" class="btn btn--ghost btn--sm" id="syncFolderClear" hidden>حذف الفولدر المشترك</button>
+          </div>
+          <p class="panel__note" id="syncFolderStatus" hidden></p>
+
           <label class="field" id="syncPolicyField">
             <span>عندما توجد نسخة أحدث على الدرايف</span>
             <select id="syncPolicy">
