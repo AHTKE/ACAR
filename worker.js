@@ -833,6 +833,11 @@ async function handleApi(request, env, pathname) {
       const folderId = extractFolderId(body && body.folderId);
       if (!folderId) return json({ ok: false, error: 'رابط الفولدر غير صالح — تأكد إنه رابط Google Drive صحيح' }, 400);
       await settingSet(env.DB, 'sync_custom_folder', folderId);
+      /* نتأكد إن القيمة اتحفظت فعلاً — مانرجّعش نجاح وهمي */
+      const saved = await settingGet(env.DB, 'sync_custom_folder');
+      if (String(saved || '') !== folderId) {
+        return json({ ok: false, error: 'تعذّر حفظ الفولدر في قاعدة البيانات — حاول مرة أخرى' }, 500);
+      }
       return json({ ok: true, folderId: folderId });
     }
     return json({ ok: false, error: 'طريقة غير مسموحة' }, 405);

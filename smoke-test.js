@@ -960,6 +960,97 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   delete window.fetch;
   ok('لا أخطاء في لائحة النسخ', errors.length === 0, errors.join(' | '));
 
+  console.log('\n[31] استمرارية الفولدر المشترك + التعديل والحذف + الرفع التلقائي');
+
+  /* الفولدر المشترك يُحفظ محلياً حتى لو قراءة السيرفر فشلت */
+  window.localStorage.setItem('app_sync_custom_folder', 'https://drive.google.com/drive/folders/ABC123XYZ');
+  click($('[data-go="settings"]'));
+  await wait(60);
+  ok('رابط الفولدر المشترك باقي بعد فتح الإعدادات', $('#syncFolderUrl').value.indexOf('ABC123XYZ') > -1,
+     $('#syncFolderUrl').value);
+  ok('زر الحذف ظاهر مع فولدر مخصص', $('#syncFolderClear').hidden === false);
+  ok('زر الحفظ موجود', !!$('#syncFolderSave'));
+  window.localStorage.removeItem('app_sync_custom_folder');
+
+  /* زر الحفظ السريع في الشريط العلوي */
+  ok('زر الحفظ السريع موجود في الهيدر', !!$('#quickSaveBtn'));
+  ok('أيقونة الحفظ مضبوطة', $('#quickSaveBtn').innerHTML.indexOf('ic-save') > -1);
+
+  /* نمط الرفع التلقائي */
+  ok('خانة نمط الرفع التلقائي موجودة', !!$('#syncAutoMode'));
+  ok('أربع أنماط (ساعات/تعديل/يومي/إيقاف)', $$('#syncAutoMode option').length === 4,
+     'n=' + $$('#syncAutoMode option').length);
+  ok('خانة عدد الساعات موجودة', !!$('#syncAutoHours'));
+  $('#syncAutoMode').value = 'change';
+  $('#syncAutoMode').dispatchEvent(new window.Event('change'));
+  ok('النمط اتسجل', window.localStorage.getItem('app_sync_auto_mode') === 'change',
+     window.localStorage.getItem('app_sync_auto_mode'));
+  ok('خانة الساعات اتخفت في نمط التعديل', $('#syncAutoHoursField').hidden === true);
+  $('#syncAutoMode').value = 'interval';
+  $('#syncAutoMode').dispatchEvent(new window.Event('change'));
+  ok('خانة الساعات رجعت في نمط الساعات', $('#syncAutoHoursField').hidden === false);
+
+  /* تعديل عميل من ملفه */
+  click($('[data-go="home"]'));
+  click($('[data-go="customers"]'));
+  await wait(40);
+  click($('#customersTable tbody tr[data-idx]'));
+  await wait(40);
+  ok('ملف العميل فتح', $('#view-profile').classList.contains('is-active'));
+  ok('زر تعديل العميل موجود', !!$('#profileEditBtn'));
+  ok('زر حذف العميل موجود', !!$('#profileDeleteBtn'));
+  click($('#profileEditBtn'));
+  await wait(40);
+  ok('راح لشاشة الإضافة', $('#view-add-customer').classList.contains('is-active'));
+  ok('العنوان اتغيّر لـ تعديل عميل', $('#view-add-customer h2').textContent.indexOf('تعديل') > -1,
+     $('#view-add-customer h2').textContent);
+  ok('النموذج اتملى بالبيانات', $('#customerForm').elements.name.value.length > 0,
+     $('#customerForm').elements.name.value);
+  $('#customerForm').elements.name.value = 'عميل بعد التعديل';
+  /* العميل الافتراضي ناقص حقول إلزامية — نكملها عشان الحفظ يمر */
+  var cff = $('#customerForm').elements;
+  cff.phone2.value = '0770000001';
+  cff.nationalId.value = '12345678901';
+  cff.paidByUs.value = '1000';
+  cff.total.value = '5000';
+  cff.down.value = '500';
+  cff.durationValue.value = '5';
+  $$('#customerForm input[name="status"]').forEach(function (r) { r.checked = (r.value === 'جاري العمل'); });
+  var sySel = $('#customerForm').elements.startYear;
+  if (!sySel.value) sySel.value = sySel.options[1] ? sySel.options[1].value : '';
+  $('#customerForm').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  await wait(60);
+  ok('رجع لملف العميل بعد الحفظ', $('#view-profile').classList.contains('is-active'));
+  ok('الاسم اتحدّث في الملف', $('#profileTitle').textContent === 'عميل بعد التعديل',
+     $('#profileTitle').textContent);
+  ok('العنوان رجع لـ إضافة عميل', $('#view-add-customer h2').textContent.indexOf('إضافة') > -1,
+     $('#view-add-customer h2').textContent);
+
+  /* حذف حركات الدواخل — زر التعديل موجود */
+  click($('[data-go="home"]'));
+  click($('[data-go="ledger"]'));
+  await wait(40);
+  ok('زر تعديل في جدول الدواخل', $$('#ledgerTbody [data-edit-ledger]').length > 0);
+  const ledRowsBefore = $$('#ledgerTbody tr').length;
+  click($$('#ledgerTbody [data-edit-ledger]')[0]);
+  await wait(40);
+  ok('نموذج الدواخل اتملى للتعديل', $('#ledgerForm').elements.desc.value.length > 0,
+     $('#ledgerForm').elements.desc.value);
+  ok('زر إلغاء التعديل ظهر', $('#ledgerCancelEdit').hidden === false);
+  $('#ledgerForm').elements.amount.value = '77777';
+  $('#ledgerForm').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  await wait(40);
+  ok('التعديل اتحفظ بدون زيادة صف', $$('#ledgerTbody tr').length === ledRowsBefore,
+     $$('#ledgerTbody tr').length + ' vs ' + ledRowsBefore);
+  ok('المبلغ اتحدّث', $('#ledgerTbody').textContent.indexOf('77,777') > -1);
+  ok('زر إلغاء التعديل اتخفى', $('#ledgerCancelEdit').hidden === true);
+
+  /* أزرار الحذف في جداول ملف العميل */
+  ok('زر حذف في جدول تحصيل الملف', $$('#collectTable [data-del-pay]').length > 0,
+     'n=' + $$('#collectTable [data-del-pay]').length);
+
+  ok('لا أخطاء في الإضافات الجديدة', errors.length === 0, errors.join(' | '));
+
   console.log('\n==================================================');
   console.log('  PASS: ' + pass + '   FAIL: ' + fail);
   console.log('  أخطاء وقت التنفيذ: ' + errors.length);
