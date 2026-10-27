@@ -4544,4 +4544,7 @@
   renderHomeStats();
   renderCustomers();
   showView('home');
+
+  window.syncApi = syncApi;
+  window.syncApply = syncApply;
 })();

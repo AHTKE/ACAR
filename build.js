@@ -15,6 +15,7 @@ const FILES = [
   'styles.css',
   'app.js',
   'export.js',
+  'auth-gate-addon.js',
   'manifest.webmanifest',
   'sw.js'
 ];

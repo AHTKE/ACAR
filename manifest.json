@@ -1,5 +1,0 @@
-{
-  "entrypoint": "index.html",
-  "assetsDirectory": "./dist",
-  "spa": true
-}
