@@ -312,6 +312,37 @@
     return s + suffix;
   }
 
+  /* تقسيم النص لأسطر تناسب العرض المطلوب — بدون فقد أي حرف */
+  function wrapText(ctx, text, maxW) {
+    var s = String(text == null ? '' : text);
+    if (!s) return [''];
+    if (maxW <= 0) return [s];
+    if (ctx.measureText(s).width <= maxW) return [s];
+    var words = s.split(' ');
+    var lines = [];
+    var line = '';
+    for (var i = 0; i < words.length; i++) {
+      var test = line ? line + ' ' + words[i] : words[i];
+      if (ctx.measureText(test).width <= maxW) {
+        line = test;
+      } else {
+        if (line) lines.push(line);
+        if (ctx.measureText(words[i]).width <= maxW) {
+          line = words[i];
+        } else {
+          var chunk = '', w = words[i];
+          for (var j = 0; j < w.length; j++) {
+            if (ctx.measureText(chunk + w[j]).width <= maxW) chunk += w[j];
+            else { if (chunk) lines.push(chunk); chunk = w[j]; }
+          }
+          line = chunk;
+        }
+      }
+    }
+    if (line) lines.push(line);
+    return lines.length ? lines : [s];
+  }
+
   /* تحويل خلايا التقرير إلى نصوص للعرض (الأعمدة المالية تأخذ فواصل الآلاف) */
   function buildGrid(report) {
     var cols = report.columns || [];
@@ -382,13 +413,21 @@
     var canvas = null, ctx = null, y = 0;
     var cols = report.columns || [];
     var grid = buildGrid(report);
-    var headerH = 62, rowH = 46;
+    var headerH = 62, minRowH = 46, lineH = 28;
 
     /* مساحة القياس: عرض الأعمدة يتحسب بالبكسل الحقيقي */
     var probe = document.createElement('canvas');
     probe.width = 4; probe.height = 4;
     var pctx = probe.getContext('2d');
     var widths = columnWidths(report, grid, W - 2 * M, pctx);
+
+    /* تقسيم كل خلية لأسطر تناسب عرض عمودها — بدون أي قص */
+    pctx.font = BODY_FONT;
+    var wrapped = grid.map(function (row) {
+      return row.map(function (cell, i) {
+        return wrapText(pctx, cell, widths[i] - 22);
+      });
+    });
 
     /* محاذاة الأعمدة من اليمين لليسار (عربي) */
     var rightEdges = [];
@@ -451,8 +490,15 @@
 
     newPage(true);
 
-    grid.forEach(function (row, ri) {
-      if (y + rowH > H - M) newPage(false);
+    wrapped.forEach(function (cellLines, ri) {
+      /* ارتفاع الصف حسب أكبر عدد أسطر — لا نقص أي محتوى */
+      var maxLines = 1;
+      cellLines.forEach(function (ls) { if (ls.length > maxLines) maxLines = ls.length; });
+      var rowH = Math.max(minRowH, maxLines * lineH + 14);
+      if (y + rowH > H - M) {
+        newPage(false);
+        if (y + rowH > H - M) rowH = Math.max(minRowH, H - M - y);
+      }
 
       if (ri % 2 === 1) {
         ctx.fillStyle = '#f9fafb';
@@ -461,8 +507,13 @@
 
       ctx.font = BODY_FONT;
       cols.forEach(function (label, i) {
+        var lines = cellLines[i];
+        var blockH = lines.length * lineH;
+        var startY = y + (rowH - blockH) / 2;
         ctx.fillStyle = '#111827';
-        ctx.fillText(fitText(ctx, row[i], widths[i] - 22), rightEdges[i] - 11, y + rowH / 2 + 7);
+        for (var li = 0; li < lines.length; li++) {
+          ctx.fillText(lines[li], rightEdges[i] - 11, startY + li * lineH + lineH * 0.72);
+        }
       });
 
       ctx.strokeStyle = '#e5e7eb';

@@ -2987,14 +2987,20 @@
 
   function reportWidths(report) {
     var n = report.columns.length, out = [];
+    var money = report.moneyCols || [];
     for (var i = 0; i < n; i++) {
       var max = String(report.columns[i] == null ? '' : report.columns[i]).length;
       report.rows.forEach(function (r) {
         var v = r[i];
-        var len = typeof v === 'number' ? String(v).length : String(v == null ? '' : v).length;
-        if (len > max) max = len;
+        var str;
+        if (money.indexOf(i) !== -1 && typeof v === 'number' && isFinite(v)) {
+          str = v.toLocaleString('en-US', { maximumFractionDigits: 2 });
+        } else {
+          str = v == null ? '' : String(v);
+        }
+        if (str.length > max) max = str.length;
       });
-      out.push(Math.min(46, Math.max(10, Math.round(max * 1.7) + 4)));
+      out.push(Math.max(14, Math.round(max * 2.0) + 6));
     }
     return out;
   }
