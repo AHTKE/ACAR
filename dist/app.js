@@ -27,7 +27,9 @@
     settings: 'الإعدادات',
     profile: 'ملف العميل',
     'add-supplier': 'إضافة مورد',
-    'supplier-profile': 'كشف حساب مورد'
+    'supplier-profile': 'كشف حساب مورد',
+    details: 'التفاصيل',
+    'partner-profile': 'بروفايل شريك'
   };
 
   var DEFAULT_CUSTOMERS = [
@@ -77,11 +79,16 @@
     if (id === 'ledger') { renderLedger(); renderLedgerSummary(); }
     if (id === 'partners') renderPartners();
     if (id === 'associations') renderAssociations();
-    if (id === 'settings') { renderExportGrid(); refreshDriveStatus(); loadSyncFolder(); }
+    if (id === 'details') renderDetails();
+    if (id === 'partner-profile') renderPartnerProfile();
+    if (id === 'ledger') fillPartyLists();
+    if (id === 'supplier-profile') fillPartyLists();
+    if (id === 'settings') { renderExportGrid(); refreshDriveStatus(); loadSyncFolder(); renderNetworkToggle(); }
     if (id === 'suppliers' && typeof renderSuppliers === 'function') {
       renderSuppliers($('#supplierSearch') ? $('#supplierSearch').value : '');
     }
     if (id === 'profile' && typeof renderProfile === 'function') renderProfile();
+    if (id === 'profile' && typeof renderProfileLinks === 'function') renderProfileLinks();
     if (id === 'add-customer' && typeof prepareCustomerView === 'function') prepareCustomerView();
     if (id === 'add-supplier' && typeof prepareSupplierView === 'function') prepareSupplierView();
     if (id === 'supplier-profile' && typeof renderSupplierProfile === 'function') renderSupplierProfile();
@@ -1282,6 +1289,7 @@
         '<td>' + esc(formatDate(t.date)) + '</td>' +
         '<td>' + esc(t.no || '—') + '</td>' +
         '<td>' + esc(t.desc || '—') + '</td>' +
+        '<td>' + (t.to ? esc(t.to) : '—') + '</td>' +
         '<td class="amount">' + money(t.incoming) + '</td>' +
         '<td class="amount">' + money(t.paid) + '</td>' +
         '<td class="amount">' + signed(running) + '</td>' +
@@ -1290,7 +1298,7 @@
         '</tr>';
     });
     if (!rows) {
-      rows = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:24px">لا توجد حركات على هذا المورد — أضف أول حركة من النموذج أعلاه.</td></tr>';
+      rows = '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:24px">لا توجد حركات على هذا المورد — أضف أول حركة من النموذج أعلاه.</td></tr>';
     }
     $('#supTxTable tbody').innerHTML = rows;
 
@@ -1301,6 +1309,8 @@
     f.elements.incoming.value = '';
     f.elements.paid.value = '';
     f.elements.note.value = '';
+    if (f.elements.to) f.elements.to.value = '';
+    fillPartyLists();
     $('#supTxError').hidden = true;
     updateSupTxCalc();
   }
@@ -1333,6 +1343,7 @@
           desc: desc,
           incoming: inc,
           paid: pd,
+          to: String((f.to && f.to.value) || '').trim(),
           note: String(f.note.value || '').trim()
         });
         tx.sort(function (a, b) { return String(a.date).localeCompare(String(b.date)); });
@@ -1902,7 +1913,7 @@
       html += '<tr data-ledger-idx="' + entry.i + '">' +
         '<td>' + (n + 1) + '</td>' +
         '<td>' + esc(formatDate(t.date)) + '</td>' +
-        '<td class="cell-desc">' + esc(t.desc || '—') + '</td>' +
+        '<td class="cell-desc">' + esc(t.desc || '—') + partyChip(t) + '</td>' +
         '<td><span class="tag ' + (isIn ? 'tag--in' : 'tag--out') + '">' + (isIn ? 'دخل' : 'خرج') + '</span></td>' +
         '<td class="amount ' + (isIn ? 'pos' : 'neg') + '">' + (isIn ? '+ ' : '- ') + money(t.amount) + '</td>' +
         '<td class="cell-note">' + (t.note ? esc(t.note) : '—') + '</td>' +
@@ -1935,6 +1946,7 @@
       var amount = parseFloat(f.amount.value);
       var desc = String(f.desc.value || '').trim();
       var note = String(f.note.value || '').trim();
+      var party = readLedgerParty();
 
       var miss = [];
       if (!date) miss.push('التاريخ');
@@ -1945,7 +1957,7 @@
 
       var list = getLedger();
       if (ledgerEditIdx >= 0 && list[ledgerEditIdx]) {
-        list[ledgerEditIdx] = { date: date, type: type, desc: desc, amount: amount, note: note };
+        list[ledgerEditIdx] = { date: date, type: type, desc: desc, amount: amount, note: note, party: party };
         saveLedger(list);
         endLedgerEdit();
         ledgerForm.reset();
@@ -1956,7 +1968,7 @@
         toast('تم حفظ تعديل الحركة ✓');
         return;
       }
-      list.push({ date: date, type: type, desc: desc, amount: amount, note: note });
+      list.push({ date: date, type: type, desc: desc, amount: amount, note: note, party: party });
       saveLedger(list);
 
       ledgerForm.reset();
@@ -2176,6 +2188,7 @@
           '<td class="amount">' + money(d.withdrawals) + '</td>' +
           '<td class="amount ' + (d.net >= 0 ? 'pos' : 'neg') + '">' + money(d.net) + '</td>' +
           '<td><span class="p-actions">' +
+            '<button type="button" class="btn btn--primary btn--sm" data-partner-profile="' + entry.i + '">البروفايل</button>' +
             '<button type="button" class="btn btn--ghost btn--sm" data-edit-partner="' + entry.i + '">تعديل</button>' +
             '<button type="button" class="btn btn--ghost btn--sm btn--danger" data-del-partner="' + entry.i + '">حذف</button>' +
           '</span></td>' +
@@ -2277,8 +2290,8 @@
 
       var miss = [];
       if (!name) miss.push('اسم الشريك');
-      if (!(share > 0)) miss.push('الحصة');
-      else if (share > 100) return fail('الحصة لا يمكن أن تتجاوز 100%');
+      /* الحصة غير إجبارية — النسب تُحسب فقط إذا حُدّدت */
+      if (share > 100) return fail('الحصة لا يمكن أن تتجاوز 100%');
       if (!(capital >= 0)) miss.push('رأس المال');
       if (miss.length) return fail('الرجاء إدخال: ' + miss.join('، '));
       if (errEl) errEl.hidden = true;
@@ -2286,7 +2299,12 @@
       var list = getPartners();
       var idx = parseInt(f.idx.value, 10);
       var editing = idx >= 0 && !!list[idx];
-      var rec = { name: name, role: role, share: share, capital: capital, withdrawals: withdrawals, note: note };
+      var rec = {
+        name: name, role: role, share: isNaN(share) ? null : share,
+        capital: capital, withdrawals: withdrawals, note: note,
+        /* أرباح هذا الشريك المضافة يدوياً بالتاريخ والمبلغ */
+        profits: (editing && list[idx] && list[idx].profits) ? list[idx].profits : []
+      };
       if (editing) list[idx] = rec; else list.push(rec);
       savePartners(list);
       resetPartnerForm();
@@ -4011,6 +4029,517 @@
     });
   }
 
+/* ============================================================
+     الشبكة المربوطة — كل الخصائص مترابطة بدون تكرار
+     القاعدة: كل عملية تُسجَّل مرّة واحدة وتُنسب إلى صنف واحد فقط،
+     والتوريد غير نقدي فلا يدخل «المبلغ الخارج» أبداً.
+     ============================================================ */
+  var KEY_NETWORK = 'app_network';
+
+  function isNetworkOn() {
+    try {
+      var v = localStorage.getItem(KEY_NETWORK);
+      return v === null ? true : v === '1';
+    } catch (e) { return true; }
+  }
+  function setNetworkOn(on) { try { localStorage.setItem(KEY_NETWORK, on ? '1' : '0'); } catch (e) {} }
+
+  var PARTY_LABELS = { customer: 'عميل', supplier: 'مورد', partner: 'شريك', general: 'عام' };
+
+  /* تحديد نوع الطرف من اسمه مقابل قوائم العملاء والموردين والشركاء */
+  function partyOfName(name) {
+    name = String(name || '').trim();
+    if (!name) return { type: 'general', name: '' };
+    if (getCustomers().some(function (c) { return String(c.name || '').trim() === name; })) return { type: 'customer', name: name };
+    if (getSuppliers().some(function (s) { return String(s.name || '').trim() === name; })) return { type: 'supplier', name: name };
+    if (getPartners().some(function (p) { return String(p.name || '').trim() === name; })) return { type: 'partner', name: name };
+    return { type: 'general', name: name };
+  }
+
+  function readLedgerParty() {
+    var tEl = $('#ledgerPartyType'), nEl = $('#ledgerPartyName');
+    var type = tEl ? tEl.value : '';
+    var name = nEl ? String(nEl.value || '').trim() : '';
+    if (!type && !name) return null;
+    if (name && !type) type = partyOfName(name).type;
+    return { type: type || 'general', name: name };
+  }
+
+  /* شارة الطرف داخل خلية البيان في جدول الدواخل والخوارج */
+  function partyChip(t) {
+    var p = t && t.party;
+    if (!p || (!p.name && !p.type)) return '';
+    var lbl;
+    if (p.name && p.type && PARTY_LABELS[p.type]) lbl = PARTY_LABELS[p.type] + ': ' + p.name;
+    else if (p.name) lbl = p.name;
+    else lbl = PARTY_LABELS[p.type] || '';
+    if (!lbl) return '';
+    return ' <span class="party-chip">' + esc(lbl) + '</span>';
+  }
+
+  /* تعبئة قوائم الاقتراح بالأسماء حسب النوع المختار */
+  function fillPartyLists() {
+    var ld = $('#ledgerPartyNames');
+    if (ld) {
+      var type = $('#ledgerPartyType') ? $('#ledgerPartyType').value : '';
+      var names = [];
+      if (!type || type === 'customer') names = names.concat(getCustomers().map(function (c) { return c.name; }));
+      if (!type || type === 'supplier') names = names.concat(getSuppliers().map(function (s) { return s.name; }));
+      if (!type || type === 'partner') names = names.concat(getPartners().map(function (p) { return p.name; }));
+      ld.innerHTML = names.filter(Boolean).map(function (n) { return '<option value="' + esc(n) + '"></option>'; }).join('');
+    }
+    var ln = $('#linkedNames');
+    if (ln) {
+      ln.innerHTML = getCustomers().map(function (c) { return '<option value="' + esc(c.name) + '"></option>'; }).join('');
+    }
+  }
+
+  /* ---------- تجميع العمليات: كل سجل مرة واحدة فقط ---------- */
+  function collectOps() {
+    var ops = [];
+
+    /* 1) الدواخل والخوارج — نقد */
+    getLedger().forEach(function (t, i) {
+      var out = t.type === 'out';
+      var p = (t.party && (t.party.name || t.party.type)) ? t.party : null;
+      ops.push({
+        key: 'led:' + i, src: 'الدواخل والخوارج',
+        kind: out ? 'out' : 'in', cash: true, dir: out ? 'out' : 'in',
+        partyType: (p && p.type) || 'general', partyName: (p && p.name) || '',
+        amount: Number(t.amount || 0), date: t.date || '', desc: t.desc || ''
+      });
+    });
+
+    /* 2) الموردون — الوارد توريد (غير نقدي) والمدفوع نقد خارج */
+    getSuppliers().forEach(function (s, si) {
+      (s.tx || []).forEach(function (t, ti) {
+        var inc = Number(t.incoming || 0);
+        if (inc > 0) {
+          var to = t.to ? partyOfName(t.to) : null;
+          ops.push({
+            key: 'sup:' + si + ':' + ti + ':in', src: 'الموردون',
+            kind: 'supply', cash: false, dir: 'none',
+            partyType: 'supplier', partyName: s.name || '',
+            toType: to ? to.type : '', toName: to ? to.name : '',
+            amount: inc, date: t.date || '', desc: t.desc || ''
+          });
+        }
+        var pd = Number(t.paid || 0);
+        if (pd > 0) {
+          ops.push({
+            key: 'sup:' + si + ':' + ti + ':paid', src: 'الموردون',
+            kind: 'payment', cash: true, dir: 'out',
+            partyType: 'supplier', partyName: s.name || '',
+            amount: pd, date: t.date || '', desc: t.desc || ''
+          });
+        }
+      });
+    });
+
+    /* 3) العملاء — المدفوع منا نقد خارج، المرسل غير نقدي، المقدم والتحصيل نقد داخل */
+    getCustomers().forEach(function (c, ci) {
+      var adv = Number(c.paidByUs || 0);
+      if (adv > 0) {
+        ops.push({ key: 'cus:' + ci + ':adv', src: 'العملاء', kind: 'advance', cash: true, dir: 'out',
+          partyType: 'customer', partyName: c.name || '', amount: adv, date: '',
+          desc: 'المبلغ المدفوع منا نحن للعميل' });
+      }
+      (c.sends || []).forEach(function (s, k) {
+        var amt = Number(s.total != null ? s.total : (Number(s.qty || 0) * Number(s.price || 0)));
+        if (amt > 0) {
+          ops.push({ key: 'cus:' + ci + ':snd:' + k, src: 'العملاء', kind: 'supply', cash: false, dir: 'none',
+            partyType: 'customer', partyName: c.name || '', amount: amt, date: s.date || '',
+            desc: s.desc || 'مرسل من موارد' });
+        }
+      });
+      var down = Number(c.down || 0);
+      if (down > 0) {
+        ops.push({ key: 'cus:' + ci + ':down', src: 'العملاء', kind: 'collection', cash: true, dir: 'in',
+          partyType: 'customer', partyName: c.name || '', amount: down, date: '', desc: 'مقدم مدفوع من العميل' });
+      }
+      (c.payments || []).forEach(function (p, k) {
+        var amt = Number(p.amount || 0);
+        if (amt > 0) {
+          ops.push({ key: 'cus:' + ci + ':pay:' + k, src: 'التحصيل', kind: 'collection', cash: true, dir: 'in',
+            partyType: 'customer', partyName: c.name || '', amount: amt, date: p.date || '',
+            desc: 'تحصيل من العميل' });
+        }
+      });
+    });
+
+    /* 4) الشركاء — الأرباح المستلمة والمسحوبات نقد خارج */
+    getPartners().forEach(function (p, pi) {
+      (p.profits || []).forEach(function (f, k) {
+        var amt = Number(f.amount || 0);
+        if (amt > 0) {
+          ops.push({ key: 'prt:' + pi + ':prof:' + k, src: 'الشركاء', kind: 'profit', cash: true, dir: 'out',
+            partyType: 'partner', partyName: p.name || '', amount: amt, date: f.date || '', desc: 'ربح مستلم' });
+        }
+      });
+      var w = Number(p.withdrawals || 0);
+      if (w > 0) {
+        ops.push({ key: 'prt:' + pi + ':wd', src: 'الشركاء', kind: 'withdraw', cash: true, dir: 'out',
+          partyType: 'partner', partyName: p.name || '', amount: w, date: '', desc: 'مسحوبات الشريك' });
+      }
+    });
+
+    return ops;
+  }
+
+  /* تجنّب احتساب التوريد مرتين: وُرّد عند المورد لعميل وأُعيد تسجيله عند العميل */
+  function markSupplyDuplicates(ops) {
+    var seen = Object.create(null);
+    ops.forEach(function (o) {
+      if (o.kind === 'supply' && o.partyType === 'supplier' && o.toName) {
+        seen['s|' + o.toName + '|' + o.date + '|' + o.amount] = true;
+      }
+    });
+    var dup = 0;
+    ops.forEach(function (o) {
+      if (o.kind !== 'supply' || o.partyType !== 'customer') return;
+      if (seen['s|' + o.partyName + '|' + o.date + '|' + o.amount]) { o.dup = true; dup++; }
+    });
+    return dup;
+  }
+
+  /* الصنف = مكان العملية. كل عملية تنتمي لصنف واحد حصراً فلا تتكرر */
+  function bucketOf(o) {
+    if (!o.cash) return null;
+    if (o.dir === 'out') {
+      if (o.partyType === 'customer') return 'outCustomer';
+      if (o.partyType === 'supplier') return 'outSupplier';
+      if (o.partyType === 'partner') return 'outPartner';
+      return 'outGeneral';
+    }
+    if (o.dir === 'in') return o.partyType === 'customer' ? 'inCustomer' : 'inGeneral';
+    return null;
+  }
+
+  function detailsTotals() {
+    var ops = collectOps();
+    var dupSupply = markSupplyDuplicates(ops);
+    var t = {
+      outCustomer: 0, outSupplier: 0, outPartner: 0, outGeneral: 0,
+      nOutCustomer: 0, nOutSupplier: 0, nOutPartner: 0, nOutGeneral: 0,
+      inCustomer: 0, inGeneral: 0, nInCustomer: 0, nInGeneral: 0,
+      supply: 0, supplyCount: 0, dupSupply: dupSupply
+    };
+    ops.forEach(function (o) {
+      if (o.kind === 'supply') {
+        if (!o.dup) { t.supply += o.amount; t.supplyCount++; }
+        return;
+      }
+      var b = bucketOf(o);
+      if (!b) return;
+      t[b] += o.amount;
+      var nc = 'n' + b.charAt(0).toUpperCase() + b.slice(1);
+      t[nc] = (t[nc] || 0) + 1;
+    });
+    t.outTotal = t.outCustomer + t.outSupplier + t.outPartner + t.outGeneral;
+    t.nOut = t.nOutCustomer + t.nOutSupplier + t.nOutPartner + t.nOutGeneral;
+    t.inTotal = t.inCustomer + t.inGeneral;
+    t.nIn = t.nInCustomer + t.nInGeneral;
+
+    t.capital = 0; t.profitReceived = 0;
+    getPartners().forEach(function (p) {
+      t.capital += Number(p.capital || 0);
+      (p.profits || []).forEach(function (f) { t.profitReceived += Number(f.amount || 0); });
+    });
+
+    var paidByUs = 0, owedToUs = 0;
+    getCustomers().forEach(function (c) {
+      var d = derive(c);
+      paidByUs += d.paidByUs;
+      owedToUs += d.rest;
+    });
+    t.paidByUs = paidByUs;
+    t.owedToUs = owedToUs;
+    t.profit = paidByUs - owedToUs;
+    return t;
+  }
+
+  /* ---------- عرض جدول عمليات ---------- */
+  function opsTable(list) {
+    if (!list.length) return '';
+    var rows = list.map(function (o, i) {
+      var src = o.src;
+      if (o.kind === 'supply' && o.partyType === 'supplier' && o.toName) src += ' ← ' + o.toName;
+      return '<tr>' +
+        '<td>' + (i + 1) + '</td>' +
+        '<td>' + esc(o.date ? formatDate(o.date) : '—') + '</td>' +
+        '<td>' + esc(o.desc || '—') + '</td>' +
+        '<td>' + esc(src) + '</td>' +
+        '<td class="amount ' + (o.dir === 'in' ? 'pos' : (o.dir === 'out' ? 'neg' : '')) + '">' +
+          (o.dir === 'in' ? '+ ' : (o.dir === 'out' ? '- ' : '')) + money(o.amount) + '</td>' +
+        '<td>' + (o.cash ? 'نقدي' : 'غير نقدي') + '</td>' +
+        '</tr>';
+    }).join('');
+    return '<div class="table-wrap"><table class="table"><thead><tr>' +
+      '<th>#</th><th>التاريخ</th><th>البيان</th><th>المصدر</th><th>المبلغ</th><th>النوع</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+  }
+
+  function dBox(label, value, cls, raw) {
+    return '<div class="summary__box ' + (cls || '') + '"><small>' + label + '</small><b>' +
+      (raw ? value : money(value)) + '</b></div>';
+  }
+
+  /* ---------- شاشة التفاصيل ---------- */
+  function renderDetails() {
+    var on = isNetworkOn();
+    var pill = $('#networkPill');
+    if (pill) {
+      pill.textContent = on ? 'الشبكة: مفعّلة' : 'الشبكة: متوقفة';
+      pill.className = 'count-pill ' + (on ? 'count-pill--ok' : 'count-pill--warn');
+    }
+    var note = $('#detailsNote'), body = $('#detailsBody');
+    if (!body) return;
+
+    if (!on) {
+      if (note) {
+        note.hidden = false;
+        note.innerHTML = '<b>الشبكة المربوطة متوقفة.</b><br />' +
+          'فعّلها من الإعدادات ← «جعل التطبيق شبكة مربوطة» لعرض الإجماليات المرتبطة وربط البروفايلات ببعضها.' +
+          '<div class="form__actions" style="margin-top:12px"><button type="button" class="btn btn--primary btn--sm" data-go="settings">فتح الإعدادات</button></div>';
+      }
+      body.innerHTML = '';
+      return;
+    }
+
+    var t = detailsTotals();
+    if (note) {
+      note.hidden = false;
+      note.innerHTML = '<b>قاعدة عدم التكرار:</b> كل عملية تُسجَّل مرّة واحدة وتُنسب إلى صنف واحد فقط ' +
+        '(عملاء / موردون / شركاء / عام)، والتوريد <b>غير نقدي</b> فلا يدخل «المبلغ الخارج». ' +
+        'بهذا يكون الإجمالي العام = مجموع الأصناف بالضبط.';
+    }
+
+    var h = '';
+
+    /* النقد الخارجي */
+    h += '<div class="panel"><h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-exchange"/></svg> المدفوع منا — مفصّل حسب الصنف</h3>' +
+      '<div class="summary summary--4">' +
+        dBox('المبلغ المستثمر (رأس المال)', t.capital, 'summary__box--net') +
+        dBox('المدفوع للعملاء منا نحن', t.outCustomer, 'summary__box--out') +
+        dBox('المدفوع للموردين', t.outSupplier, 'summary__box--out') +
+        dBox('المدفوع للشركاء (ربح + مسحوبات)', t.outPartner, 'summary__box--out') +
+      '</div>' +
+      '<div class="summary">' +
+        dBox('الخارج العام (إيجار، رواتب…)', t.outGeneral, 'summary__box--out') +
+        dBox('إجمالي المبلغ الخارج (نقدي)', t.outTotal, 'summary__box--net') +
+        dBox('إجمالي المبلغ الداخل (نقدي)', t.inTotal, 'summary__box--in') +
+      '</div>' +
+      '<p class="panel__note">' + t.nOut + ' عملية صادرة مرّة واحدة فقط — المجموع العام = مجموع الأصناف الأربعة.</p>' +
+      '</div>';
+
+    /* غير النقدي */
+    h += '<div class="panel"><h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-truck"/></svg> التوريدات (غير نقدية) — لا تُجمع مع المبلغ الخارج</h3>' +
+      '<div class="summary">' +
+        dBox('إجمالي التوريدات والمرسلات', t.supply, 'summary__box--in') +
+        dBox('عدد عمليات التوريد', t.supplyCount, '', true) +
+        dBox('عمليات مكرّرة أُستبعدت', t.dupSupply, '', true) +
+      '</div>' +
+      (t.dupSupply > 0
+        ? '<p class="panel__note">وجدنا ' + t.dupSupply + ' عملية وردت عند المورد وعند العميل بنفس التاريخ والمبلغ — احتُسبت مرّة واحدة فقط.</p>'
+        : '<p class="panel__note">الوارد من الموردين لا يُحسب نقداً: هو التزام يظهر في البروفايلات ويُخصم من أرصدة العملاء، ولا يدخل «المبلغ الخارج» إلا عند الدفع الفعلي.</p>') +
+      '</div>';
+
+    /* الأرباح */
+    h += '<div class="panel"><h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-coins"/></svg> الأرباح</h3>' +
+      '<div class="summary summary--4">' +
+        dBox('المبلغ المدفوع منا للعملاء', t.paidByUs, 'summary__box--out') +
+        dBox('المطلوب دفعه لنا من العملاء', t.owedToUs, 'summary__box--in') +
+        dBox('إجمالي الأرباح (المدفوع منا − المطلوب لينا)', t.profit, 'summary__box--net') +
+        dBox('إجمالي الأرباح المستلمة من الشركاء', t.profitReceived, 'summary__box--in') +
+      '</div></div>';
+
+    /* جدول الأصناف */
+    var rows = [
+      ['مدفوع للعملاء منا نحن', 'العملاء + الدواخل المرتبطة', t.nOutCustomer, t.outCustomer],
+      ['مدفوع للموردين', 'الموردون + الدواخل المرتبطة', t.nOutSupplier, t.outSupplier],
+      ['مدفوع للشركاء', 'أرباح مستلمة + مسحوبات', t.nOutPartner, t.outPartner],
+      ['خارج عام', 'الدواخل والخوارج', t.nOutGeneral, t.outGeneral],
+      ['داخل من العملاء', 'مقدم + تحصيل', t.nInCustomer, t.inCustomer],
+      ['داخل عام', 'الدواخل والخوارج', t.nInGeneral, t.inGeneral],
+      ['توريدات (غير نقدي)', 'الموردون + المرسل من موارد', t.supplyCount, t.supply]
+    ].map(function (r) {
+      return '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td><td>' + r[2] + '</td><td class="amount">' + money(r[3]) + '</td></tr>';
+    }).join('');
+
+    h += '<div class="panel"><h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-save"/></svg> تفصيل الأصناف ومصادرها</h3>' +
+      '<div class="table-wrap"><table class="table"><thead><tr>' +
+      '<th>الصنف</th><th>المصدر</th><th>عدد العمليات</th><th>المبلغ</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<p class="panel__note">الصنف الأول حتى الرابع يشكّل «المبلغ الخارج»، والخامس والسادس يشكّلان «المبلغ الداخل»، والسابع خارج الحساب النقدي.</p></div>';
+
+    body.innerHTML = h;
+  }
+
+  /* ---------- مفتاح الشبكة في الإعدادات ---------- */
+  function renderNetworkToggle() {
+    var el = $('#networkToggle');
+    if (!el) return;
+    el.checked = isNetworkOn();
+    var st = $('#networkState');
+    if (st) {
+      st.textContent = el.checked
+        ? 'مفعّلة — العمليات تُربط وتظهر عند كل الأطراف المعنية بدون تكرار'
+        : 'متوقفة — كل قسم يعمل بشكل مستقل';
+    }
+    el.onchange = function () {
+      setNetworkOn(el.checked);
+      renderNetworkToggle();
+      toast(el.checked ? 'تم تفعيل الشبكة المربوطة ✓' : 'تم إيقاف الشبكة المربوطة');
+    };
+  }
+
+  /* ---------- ربط بروفايل العميل ---------- */
+  function renderProfileLinks() {
+    var panel = $('#linkPanel'), body = $('#linkBody');
+    if (!panel || !body) return;
+    var c = getCustomers()[currentIdx];
+    var name = c ? String(c.name || '').trim() : '';
+    if (!c || !name || !isNetworkOn()) { panel.hidden = true; body.innerHTML = ''; return; }
+    panel.hidden = false;
+
+    var ops = collectOps();
+    var supplies = ops.filter(function (o) {
+      return o.kind === 'supply' && o.partyType === 'supplier' && o.toName === name;
+    });
+    var led = ops.filter(function (o) {
+      return o.src === 'الدواخل والخوارج' && o.partyType === 'customer' && o.partyName === name;
+    });
+
+    var h = '<h4 class="link-sub">توريدات وردت لك من الموردين</h4>';
+    h += supplies.length
+      ? opsTable(supplies)
+      : '<p class="panel__hint">لا توجد توريدات موردين مربوطة بهذا العميل. سجّلها من كشف حساب المورد ← حقل «ورّد إلى» واكتب اسمه.</p>';
+    h += '<h4 class="link-sub">حركة الدواخل والخوارج المرتبطة</h4>';
+    h += led.length
+      ? opsTable(led)
+      : '<p class="panel__hint">لا توجد حركات مرتبطة. اختر «الطرف = عميل» واكتب اسمه من قسم الدواخل والخوارج.</p>';
+    body.innerHTML = h;
+  }
+
+  /* ---------- بروفايل الشريك ---------- */
+  var currentPartnerIdx = -1;
+
+  function renderPartnerProfile() {
+    var p = getPartners()[currentPartnerIdx];
+    if (!p) { showView('partners'); return; }
+    var d = derivePartner(p);
+    var profits = p.profits || [];
+    var profitSum = 0;
+    profits.forEach(function (f) { profitSum += Number(f.amount || 0); });
+
+    var title = $('#pfpTitle'); if (title) title.textContent = p.name || 'شريك';
+    var sub = $('#pfpSub'); if (sub) sub.textContent = (p.role || 'شريك') + (p.note ? ' • ' + p.note : '');
+    var role = $('#pfpRole');
+    if (role) role.textContent = (p.share != null && p.share !== '') ? ('الحصة ' + money(p.share) + '%') : 'بدون نسبة محددة';
+
+    var sum = $('#pfpSummary');
+    if (sum) {
+      sum.innerHTML =
+        '<div class="summary-top">' +
+          '<div><h3>ملخص حساب الشريك</h3><p>' + esc(p.name || '') + ' — ' + profits.length + ' عملية ربح مسجّلة</p></div>' +
+          '<div class="stat"><b>' + money(profitSum) + '</b><small>إجمالي أرباحه المستلمة</small></div>' +
+        '</div>' +
+        '<div class="summary summary--4">' +
+          '<div class="summary__box summary__box--net"><small>رأس المال (المستثمر)</small><b>' + money(d.capital) + '</b></div>' +
+          '<div class="summary__box summary__box--in"><small>إجمالي الأرباح المضافة</small><b>' + money(profitSum) + '</b></div>' +
+          '<div class="summary__box summary__box--out"><small>المسحوبات</small><b>' + money(d.withdrawals) + '</b></div>' +
+          '<div class="summary__box summary__box--net"><small>الصافي المستحق (بالحصة)</small><b>' + money(d.net) + '</b></div>' +
+        '</div>';
+    }
+
+    var rows = '';
+    profits.forEach(function (f, i) {
+      rows += '<tr>' +
+        '<td>' + (i + 1) + '</td>' +
+        '<td>' + esc(formatDate(f.date)) + '</td>' +
+        '<td class="amount pos">' + money(f.amount) + '</td>' +
+        '<td>' + (f.note ? esc(f.note) : '—') + '</td>' +
+        '<td class="col-cell"><button type="button" class="btn btn--ghost btn--sm btn--danger" data-del-profit="' + i + '">حذف</button></td>' +
+        '</tr>';
+    });
+    if (!rows) {
+      rows = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">لا توجد أرباح مسجّلة لهذا الشريك بعد — أضف أول ربح من النموذج أعلاه.</td></tr>';
+    }
+    var tb = $('#pfpTable tbody'); if (tb) tb.innerHTML = rows;
+
+    var links = $('#pfpLinks');
+    if (links) {
+      var ops = collectOps().filter(function (o) {
+        return o.partyType === 'partner' && o.partyName === String(p.name || '').trim();
+      });
+      links.innerHTML = ops.length
+        ? opsTable(ops)
+        : '<p class="panel__hint">لا توجد حركات نقدية مرتبطة بهذا الشريك — سجّل أرباحه من النموذج أعلاه أو اختره «الطرف» في الدواخل والخوارج.</p>';
+    }
+
+    var f = $('#pfpForm');
+    if (f) {
+      f.elements.date.value = todayISO();
+      f.elements.amount.value = '';
+      f.elements.note.value = '';
+      var er = $('#pfpError'); if (er) er.hidden = true;
+    }
+  }
+
+  var pfpForm = $('#pfpForm');
+  if (pfpForm) {
+    pfpForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var err = $('#pfpError');
+      var fail = function (m) { if (err) { err.textContent = m; err.hidden = false; } };
+      var date = pfpForm.elements.date.value;
+      var amt = parseFloat(pfpForm.elements.amount.value);
+      var note = String(pfpForm.elements.note.value || '').trim();
+      if (!date) return fail('الرجاء إدخال التاريخ');
+      if (!(amt > 0)) return fail('أدخل مبلغاً صحيحاً أكبر من صفر');
+      if (err) err.hidden = true;
+
+      var list = getPartners();
+      var p = list[currentPartnerIdx];
+      if (!p) return;
+      if (!p.profits) p.profits = [];
+      p.profits.push({ date: date, amount: amt, note: note });
+      p.profits.sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
+      savePartners(list);
+      renderPartnerProfile();
+      toast('تمت إضافة ربح ' + money(amt) + ' للشريك «' + (p.name || '') + '» ✓');
+    });
+    pfpForm.addEventListener('input', function () {
+      var er = $('#pfpError'); if (er) er.hidden = true;
+    });
+  }
+
+  /* فتح البروفايل وحذف الأرباح */
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+
+    var dp = t.closest('[data-del-profit]');
+    if (dp) {
+      var i = Number(dp.getAttribute('data-del-profit'));
+      var list = getPartners();
+      var p = list[currentPartnerIdx];
+      if (!p || !p.profits || !p.profits[i]) return;
+      p.profits.splice(i, 1);
+      savePartners(list);
+      renderPartnerProfile();
+      toast('تم حذف عملية الربح');
+      return;
+    }
+
+    var bp = t.closest('[data-partner-profile]');
+    if (bp) {
+      currentPartnerIdx = Number(bp.getAttribute('data-partner-profile'));
+      navigate('partner-profile');
+    }
+  });
+
+  /* ---------- الإقلاع ---------- */
   /* ---------- الإقلاع ---------- */
   renderHomeStats();
   renderCustomers();

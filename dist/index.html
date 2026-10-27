@@ -205,6 +205,16 @@
           </span>
           <span class="card__arrow"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-arrow"/></svg></span>
         </button>
+
+        <!-- 8) التفاصيل -->
+        <button class="card" data-go="details">
+          <span class="card__icon card__icon--amber"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-coins"/></svg></span>
+          <span class="card__body">
+            <span class="card__title">التفاصيل</span>
+            <span class="card__desc">الإجماليات المرتبطة: المستثمر، المدفوعات، الأرباح — بدون تكرار</span>
+          </span>
+          <span class="card__arrow"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-arrow"/></svg></span>
+        </button>
       </div>
     </section>
 
@@ -465,6 +475,12 @@
             <div class="calc-box calc-box--accent"><span>الباقي بعد هذه الحركة</span><input type="text" name="tRest" readonly tabindex="-1" value="0" /></div>
           </div>
           <div class="form__row">
+            <label class="field field--full"><span>ورّد إلى (اسم عميل أو أي بيان — اختياري)</span>
+              <input type="text" name="to" list="linkedNames" placeholder="اختر اسم عميل من القائمة أو اكتب أي حاجة…" />
+              <datalist id="linkedNames"></datalist>
+            </label>
+          </div>
+          <div class="form__row">
             <label class="field field--full"><span>ملاحظات</span><input type="text" name="note" placeholder="ملاحظة على الحركة…" /></label>
           </div>
           <p class="form__error" id="supTxError" hidden></p>
@@ -475,7 +491,7 @@
 
         <div class="table-wrap" style="margin-top:18px">
           <table class="table" id="supTxTable">
-            <thead><tr><th>#</th><th>التاريخ</th><th>رقم الإيصال</th><th>البيان</th><th>الوارد</th><th>المدفوع</th><th>الباقي</th><th>ملاحظات</th><th style="width:64px"><span class="sr-only">حذف</span></th></tr></thead>
+            <thead><tr><th>#</th><th>التاريخ</th><th>رقم الإيصال</th><th>البيان</th><th>ورّد إلى</th><th>الوارد</th><th>المدفوع</th><th>الباقي</th><th>ملاحظات</th><th style="width:64px"><span class="sr-only">حذف</span></th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -522,6 +538,20 @@
           </div>
           <div class="form__row">
             <label class="field field--full"><span>البيان *</span><input type="text" name="desc" required placeholder="مثال: دفعة من عميل: أحمد محمد" /></label>
+          </div>
+          <div class="form__row">
+            <label class="field"><span>الطرف (اختياري)</span>
+              <select name="partyType" id="ledgerPartyType">
+                <option value="">عام</option>
+                <option value="customer">عميل</option>
+                <option value="supplier">مورد</option>
+                <option value="partner">شريك</option>
+              </select>
+            </label>
+            <label class="field"><span>اسم الطرف</span>
+              <input type="text" name="partyName" id="ledgerPartyName" list="ledgerPartyNames" placeholder="اختر أو اكتب الاسم…" />
+              <datalist id="ledgerPartyNames"></datalist>
+            </label>
           </div>
           <div class="form__row">
             <label class="field field--full"><span>ملاحظة (اختياري)</span><input type="text" name="note" placeholder="تفاصيل إضافية عن الحركة…" /></label>
@@ -645,7 +675,7 @@
             </label>
           </div>
           <div class="form__row form__row--3">
-            <label class="field"><span>الحصة % *</span><input type="number" name="share" min="0" max="100" step="any" required placeholder="مثال: 40" /></label>
+            <label class="field"><span>الحصة % (اختياري)</span><input type="number" name="share" min="0" max="100" step="any" placeholder="اتركه فارغاً إذا لا تحدّد نسبة" /></label>
             <label class="field"><span>رأس المال *</span><input type="number" name="capital" min="0" step="any" required placeholder="0" /></label>
             <label class="field"><span>المسحوبات</span><input type="number" name="withdrawals" min="0" step="any" placeholder="0" /></label>
           </div>
@@ -858,6 +888,12 @@
         </div>
       </div>
 
+      <div class="panel" id="linkPanel" hidden>
+        <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-link"/></svg> المرتبط بهذا العميل</h3>
+        <p class="panel__hint">توريدات الموردين وحركة الدواخل والخوارج المرتبطة بهذا العميل — تظهر هنا كمرجع ولا تُعاد كتابتها، فلا تُحسب مرتين.</p>
+        <div id="linkBody"></div>
+      </div>
+
       <div class="panel" id="collectPanel">
         <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-exchange"/></svg> التحصيل</h3>
         <p class="panel__hint">أدخل التاريخ والمبلغ المدفوع والمرة في الدفع ثم «إضافة تحصيل» — يُطرح المبلغ المدفوع من المبلغ الاجمالي المتبقي تلقائياً في كل مرة.</p>
@@ -926,6 +962,18 @@
             <li><span class="card__icon card__icon--blue sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-group"/></svg></span><div><b>جمعيات</b><small>يُقفل بكلمة المرور</small></div><svg viewBox="0 0 24 24" class="ico ico--lock"><use href="#ic-lock"/></svg></li>
           </ul>
           <p class="panel__note">تُحفظ كلمة المرور محلياً على هذا الجهاز فقط.</p>
+        </div>
+
+        <div class="panel" style="grid-column:1/-1">
+          <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-link"/></svg> جعل التطبيق شبكة مربوطة</h3>
+          <p class="panel__hint">كل الخصائص مترابطة: عملية واحدة تُسجَّل مرة واحدة وتظهر عند كل الأطراف المعنية (المورد، العميل، الدواخل والخوارج، الشركاء) <b>من غير ما تُحسب أكثر من مرّة</b> في الإجماليات.</p>
+          <label class="switch-row">
+            <input type="checkbox" id="networkToggle" />
+            <span class="switch-row__box"><i></i></span>
+            <span class="switch-row__text"><b>جعل التطبيق شبكة مربوطة — كل الخصائص مرتبطه ببعض</b>
+            <small id="networkState">—</small></span>
+          </label>
+          <p class="panel__note">القاعدة: <b>التوريد غير نقدي</b> فلا يدخل «المبلغ الخارج»، وكل عملية نقدية تُنسب إلى صنف واحد فقط (عملاء / موردون / شركاء / عام) فالمجموع العام = مجموع الأصناف بالضبط.</p>
         </div>
 
         <div class="panel" style="grid-column:1/-1">
@@ -1043,6 +1091,61 @@
             </div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- التفاصيل — الإجماليات المرتبطة بدون تكرار -->
+    <section class="view" id="view-details">
+      <div class="page-head">
+        <button class="back-btn" data-go="home"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-back"/></svg> رجوع</button>
+        <div class="page-head__title">
+          <span class="card__icon card__icon--amber sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-coins"/></svg></span>
+          <div><h2>التفاصيل</h2><p>الإجماليات المرتبطة — كل عملية تُحسب مرّة واحدة فقط</p></div>
+        </div>
+        <span class="count-pill" id="networkPill">—</span>
+      </div>
+      <div class="panel panel--narrow" id="detailsNote"></div>
+      <div id="detailsBody"></div>
+    </section>
+
+    <!-- بروفايل شريك -->
+    <section class="view" id="view-partner-profile">
+      <div class="page-head">
+        <button class="back-btn" data-go="partners"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-back"/></svg> رجوع للشركاء</button>
+        <div class="page-head__title">
+          <span class="card__icon card__icon--pink sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-link"/></svg></span>
+          <div><h2 id="pfpTitle">بروفايل الشريك</h2><p id="pfpSub">—</p></div>
+        </div>
+        <span class="status-pill" id="pfpRole">—</span>
+      </div>
+
+      <div class="panel panel--narrow" id="pfpSummary"></div>
+
+      <div class="panel">
+        <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-coins"/></svg> إضافة أرباح لهذا الشريك</h3>
+        <p class="panel__hint">سجّل الربح بتاريخه ومبلغه — يُضاف إلى إجمالي أرباح الشريك فوراً ويظهر في «التفاصيل».</p>
+        <form id="pfpForm" class="form" novalidate>
+          <div class="form__row form__row--3">
+            <label class="field"><span>التاريخ *</span><input type="date" name="date" required /></label>
+            <label class="field"><span>الربح (المبلغ) *</span><input type="number" name="amount" min="0" step="any" required placeholder="0" /></label>
+            <label class="field"><span>ملاحظة</span><input type="text" name="note" placeholder="اختياري" /></label>
+          </div>
+          <p class="form__error" id="pfpError" hidden></p>
+          <div class="form__actions">
+            <button type="submit" class="btn btn--primary"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-plus"/></svg> إضافة ربح</button>
+          </div>
+        </form>
+        <div class="table-wrap" style="margin-top:18px">
+          <table class="table" id="pfpTable">
+            <thead><tr><th>#</th><th>التاريخ</th><th>الربح</th><th>ملاحظة</th><th style="width:64px"><span class="sr-only">حذف</span></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-exchange"/></svg> الحركات المرتبطة بهذا الشريك</h3>
+        <div id="pfpLinks"></div>
       </div>
     </section>
 
