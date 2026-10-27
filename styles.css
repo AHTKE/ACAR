@@ -677,3 +677,81 @@ label.btn{cursor:pointer;user-select:none}
   .search-pill{display:none}
   .content{padding:18px}
 }
+
+/* ===== بطاقة المطوّر AMW Code والتواصل عبر واتساب ===== */
+.amw-badge {
+  margin: 24px auto 34px;
+  max-width: 680px;
+  padding: 24px 26px;
+  border-radius: 18px;
+  direction: ltr;
+  text-align: left;
+  background: linear-gradient(135deg, #0a1e33 0%, #0c1a38 55%, #0a2b3d 100%);
+  border: 1px solid rgba(45, 212, 191, .5);
+  box-shadow: 0 0 26px rgba(45, 212, 191, .14), inset 0 0 46px rgba(6, 182, 212, .05);
+}
+.amw-badge__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+.amw-badge__text small {
+  display: block;
+  color: #9fb3c8;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+.amw-badge__text b {
+  display: block;
+  color: #ffffff;
+  font-size: 26px;
+  font-weight: 800;
+}
+.amw-badge__text span {
+  display: block;
+  color: #e5eef7;
+  font-size: 16px;
+  margin-top: 4px;
+}
+.amw-badge__logo {
+  flex: 0 0 auto;
+  width: 88px;
+  height: 88px;
+  border-radius: 16px;
+  background: #0a1033;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .45);
+}
+.amw-badge__logo svg {
+  width: 64px;
+  height: 40px;
+  display: block;
+}
+.amw-badge__wa {
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  text-decoration: none;
+  font-weight: 800;
+  font-size: 18px;
+  color: #ffffff;
+  background: linear-gradient(90deg, #06b6d4 0%, #19d3c4 50%, #22c55e 100%);
+  box-shadow: 0 6px 18px rgba(34, 197, 94, .28);
+  transition: filter .15s, transform .15s;
+}
+.amw-badge__wa:hover { filter: brightness(1.06); transform: translateY(-1px); }
+.amw-badge__wa svg { width: 22px; height: 22px; fill: #ffffff; flex: 0 0 auto; }
+@media (max-width: 560px) {
+  .amw-badge { padding: 18px; margin: 16px auto 24px; }
+  .amw-badge__text b { font-size: 21px; }
+  .amw-badge__logo { width: 70px; height: 70px; }
+  .amw-badge__logo svg { width: 52px; height: 34px; }
+  .amw-badge__wa { font-size: 16px; }
+}
