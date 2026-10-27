@@ -1264,33 +1264,12 @@
   /* الشاشة الإلزامية: تظهر حتى يتم ربط حساب Google */
   var gate = document.getElementById('forceAuthGate');
   if (gate) gate.style.display = 'flex';
-  fetch('/api/google/status', { credentials: 'same-origin' })
-    .then(function (r) { return r.json().catch(function () { return {}; }); })
-    .then(function (s) {
-      if (s && s.connected) {
-        var email = String(s.email || '').trim().toLowerCase();
-        /* الحساب المسموح بالتعديل هو gstsyusudg@gmail.com فقط — غيره مشاهد */
-        var isAdmin = (email === 'gstsyusudg@gmail.com');
-        try {
-          localStorage.setItem('app_user_email', email);
-          localStorage.setItem('app_user_role', isAdmin ? 'admin' : 'viewer');
-        } catch (e) {}
-        if (gate) gate.style.display = 'none';
-        if (!isAdmin) {
-          setTimeout(function () {
-            try {
-              document.querySelectorAll('button[type="submit"]').forEach(function (b) { b.disabled = true; });
-              document.querySelectorAll('button, .btn').forEach(function (b) {
-                var t = (b.textContent || '');
-                if (/إضافة|تعديل|حذف|حفظ|رفع|حذف الكل|مسح/.test(t)) b.style.display = 'none';
-              });
-              document.querySelectorAll('[data-add],[data-del],[data-edit],[data-delete],[data-del-profit]').forEach(function (el) { el.style.display = 'none'; });
-            } catch (e) {}
-          }, 400);
-        }
-      }
-    })
-    .catch(function () {});
+  if (typeof fetch === 'function') {
+    fetch('/api/google/status', { credentials: 'same-origin' })
+      .then(function (r) { return r.json().catch(function () { return {}; }); })
+      .then(function (s) { if (s && s.connected && gate) gate.style.display = 'none'; })
+      .catch(function () {});
+  }
   /* تسجيل Service Worker ليعمل التطبيق مثبتاً على أندرويد/الديسكتوب بدون إنترنت */
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {

@@ -1,25 +1,38 @@
 /* ============================================================
-   auth-gate-addon.js — بعد ربط Google: جلب البيانات من المجلد العام
-   وحفظ رابط المجلد الذي يضيفه المستخدم في شاشة الربط
+   auth-gate-addon.js — وضع المشاهد (حساب غير مصرح له)
+   ------------------------------------------------------------
+   غير gstsyusudg@gmail.com  →  مشاهد فقط:
+     • تُخفى أزرار الإضافة/التعديل/الحذف/الحفظ/الرفع/التصدير
+     • يُمنع النقر عليها حتى لو ظهرت (منع من طبقة الأعلى)
+     • تُمنع إرسال أي نموذج (Enter أو زر حفظ)
+   gstsyusudg@gmail.com  →  صلاحيات كاملة (تعديل/حذف/إضافة)
+   + استعادة رابط المجلد العام وسحب البيانات بعد الربط
    ============================================================ */
 (function () {
   'use strict';
 
   var ADMIN_EMAIL = 'gstsyusudg@gmail.com';
-  var input = document.getElementById('forceFolderUrl');
+  var VIEWER = false;
 
-  /* استعادة الرابط المحفوظ */
-  try {
-    var saved = localStorage.getItem('app_shared_folder_url') || '';
-    if (input && saved) input.value = saved;
-  } catch (e) {}
+  /* نصوص الأزرار المحظورة على المشاهد */
+  var BLOCK_RE = /إضافة|إضافه|تعديل|حذف|حذف الكل|مسح|حفظ|رفع|تصدير|تحميل|دفع|أرباح|ارباح|إدخال|تنفيذ|إرسال|ارسال|مزامنة|استعادة|إرجاع|إلغاء|تغيير|إفراغ|ترحيل/;
 
-  /* حفظ الرابط عند الكتابة */
-  if (input) {
-    input.addEventListener('input', function () {
-      try { localStorage.setItem('app_shared_folder_url', input.value.trim()); } catch (e) {}
-    });
-  }
+  /* أزرار مسموح بها للمشاهد (تصفح فقط) */
+  var ALLOW_RE = /البروفايل|بروفايل|عرض|كشف|رجوع|مشاهدة|فتح|التفاصيل|رجوع للرئيسية/;
+
+  var SEL_BLOCK = [
+    'button[type="submit"]',
+    'input[type="file"]',
+    'label.btn',
+    '[data-add]', '[data-del]', '[data-edit]', '[data-delete]',
+    '[data-del-profit]', '[data-save]', '[data-new]', '[data-push]',
+    '[data-export]', '[data-upload]', '.switch-row'
+  ].join(',');
+
+  var BLOCK_ATTR = ['data-add', 'data-del', 'data-edit', 'data-delete',
+    'data-del-profit', 'data-save', 'data-new', 'data-push', 'data-export', 'data-upload'];
+
+  var SEL_ALLOW_ATTR = ['data-key', 'data-close', 'data-partner-profile', 'data-profile'];
 
   function toastMsg(text) {
     try {
@@ -27,8 +40,112 @@
       if (!t) return;
       t.querySelector('span').textContent = text;
       t.classList.add('show');
-      setTimeout(function () { t.classList.remove('show'); }, 2400);
+      clearTimeout(toastMsg._t);
+      toastMsg._t = setTimeout(function () { t.classList.remove('show'); }, 2400);
     } catch (e) {}
+  }
+
+  function btnText(el) {
+    if (!el) return '';
+    return ((el.textContent || '') + ' ' +
+      (el.getAttribute ? (el.getAttribute('title') || '') : '') + ' ' +
+      (el.getAttribute ? (el.getAttribute('aria-label') || '') : ''));
+  }
+
+  /* أزرار مسموح بها للمشاهد (تصفح فقط: تنقّل، توسيع، رجوع) */
+  function allowed(el) {
+    if (!el) return false;
+    if (el.classList && (el.classList.contains('chev') || el.classList.contains('back-btn'))) return true;
+    for (var i = 0; i < SEL_ALLOW_ATTR.length; i++) {
+      if (el.hasAttribute && el.hasAttribute(SEL_ALLOW_ATTR[i])) return true;
+    }
+    var txt = btnText(el);
+    if (ALLOW_RE.test(txt)) return true;
+    /* بطاقة تنقّل عادية (ليست إضافة/تعديل/حذف) */
+    if (el.hasAttribute && el.hasAttribute('data-go') && !BLOCK_RE.test(txt)) return true;
+    return false;
+  }
+
+  /* زر محظور على المشاهد؟ */
+  function blocked(el) {
+    if (!el) return false;
+    if (allowed(el)) return false;
+    var txt = btnText(el);
+    if (BLOCK_RE.test(txt)) return true;
+    if (el.type === 'submit') return true;
+    if (el.tagName === 'INPUT' && el.type === 'file') return true;
+    if (el.classList && el.classList.contains('switch-row')) return true;
+    for (var i = 0; i < BLOCK_ATTR.length; i++) {
+      if (el.hasAttribute && el.hasAttribute(BLOCK_ATTR[i])) return true;
+    }
+    /* أي زر داخل نموذج = زر حفظ */
+    if (el.tagName === 'BUTTON' && el.form) return true;
+    return false;
+  }
+
+  /* ---------- إخفاء العناصر المحظورة (مع مراقبة التغييرات) ---------- */
+  function hideControls() {
+    if (!VIEWER) return;
+    var els = document.querySelectorAll(SEL_BLOCK);
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      if (el.style.display !== 'none') el.style.display = 'none';
+    }
+    var btns = document.querySelectorAll('button, label.btn, label[for], input[type="file"]');
+    for (var j = 0; j < btns.length; j++) {
+      var b = btns[j];
+      if (blocked(b) && b.style.display !== 'none') b.style.display = 'none';
+    }
+  }
+
+  /* ---------- المنع عند النقر (طبقة الأعلى — قبل أي معالج في التطبيق) ---------- */
+  document.addEventListener('click', function (e) {
+    if (!VIEWER) return;
+    var t = e.target;
+    if (!t || !t.closest) return;
+    var el = t.closest('button, label, input[type="file"], .switch-row, [data-add], [data-del], [data-edit], [data-delete], [data-save], [data-push]');
+    if (!el || !blocked(el)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    toastMsg('حساب مشاهد فقط — الإضافة والتعديل والحذف غير مسموحين');
+  }, true);
+
+  /* ---------- منع إرسال أي نموذج ---------- */
+  document.addEventListener('submit', function (e) {
+    if (!VIEWER) return;
+    e.preventDefault();
+    e.stopPropagation();
+    toastMsg('حساب مشاهد فقط — لا يمكن الحفظ أو التعديل');
+  }, true);
+
+  /* ---------- تفعيل وضع المشاهد ---------- */
+  function applyViewer() {
+    if (VIEWER) return;
+    VIEWER = true;
+    document.documentElement.setAttribute('data-viewer-mode', '1');
+    try { localStorage.setItem('app_user_role', 'viewer'); } catch (e) {}
+    hideControls();
+    if (window.MutationObserver) {
+      var mo = new MutationObserver(function () { hideControls(); });
+      mo.observe(document.documentElement, { childList: true, subtree: true });
+    }
+    /* تطبيقات متتالية للعناصر التي تظهر لاحقاً (بدون مؤقت لا نهائي يعلّق الاختبارات) */
+    [600, 1500, 3000, 6000].forEach(function (ms) { setTimeout(hideControls, ms); });
+    setTimeout(function () {
+      toastMsg('أنت داخل بحساب مشاهد — تصفح فقط بدون إضافة أو تعديل');
+    }, 900);
+  }
+
+  /* ---------- رابط المجلد العام ---------- */
+  var input = document.getElementById('forceFolderUrl');
+  try {
+    var saved = localStorage.getItem('app_shared_folder_url') || '';
+    if (input && saved) input.value = saved;
+  } catch (e) {}
+  if (input) {
+    input.addEventListener('input', function () {
+      try { localStorage.setItem('app_shared_folder_url', input.value.trim()); } catch (e) {}
+    });
   }
 
   function pullShared() {
@@ -48,8 +165,20 @@
     } catch (e) {}
   }
 
-  /* بعد نجاح الربط والعودة للصفحة (?g=ok) — اسحب البيانات */
-  if (/[?&]g=ok/.test(location.search)) {
-    setTimeout(pullShared, 800);
+  /* ---------- تحديد الدور من الخادم ---------- */
+  if (typeof fetch === 'function') {
+    fetch('/api/google/status', { credentials: 'same-origin' })
+      .then(function (r) { return r.json().catch(function () { return {}; }); })
+      .then(function (s) {
+        if (!s || !s.connected) return;
+        var email = String(s.email || '').trim().toLowerCase();
+        try {
+          localStorage.setItem('app_user_email', email);
+          localStorage.setItem('app_user_role', email === ADMIN_EMAIL ? 'admin' : 'viewer');
+        } catch (e) {}
+        if (email !== ADMIN_EMAIL) applyViewer();
+        if (/[?&]g=ok/.test(location.search)) setTimeout(pullShared, 700);
+      })
+      .catch(function () {});
   }
 })();
