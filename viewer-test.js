@@ -71,6 +71,23 @@ const ok = (name, cond, extra) => {
      'total=' + delBtns.length);
   ok('أزرار «تعديل» تُخفت', editBtns.every((b) => b.style.display === 'none'),
      'total=' + editBtns.length);
+  const navBtns = $$('button[data-go]').filter((b) => !/^add-/.test(b.getAttribute('data-go') || ''));
+  ok('أزرار التنقل بين الأقسام ظاهرة (لا تُغلق)', navBtns.length > 0 &&
+     navBtns.every((b) => b.style.display !== 'none'),
+     'total=' + navBtns.length + ' hidden=' + navBtns.filter((b) => b.style.display === 'none').length);
+  const addNav = $$('button[data-go]').filter((b) => /^add-/.test(b.getAttribute('data-go') || ''));
+  ok('بوابات «إضافة» في التنقل مخفية', addNav.length > 0 &&
+     addNav.every((b) => b.style.display === 'none'),
+     'total=' + addNav.length + ' hidden=' + addNav.filter((b) => b.style.display === 'none').length);
+  const uploadBtns = $$('button').filter((b) => /رفع/.test(b.textContent || ''));
+  if (uploadBtns.length) ok('أزرار «رفع» لا تُخفى (منع بالنقر فقط)', uploadBtns.every((b) => b.style.display !== 'none'),
+     'total=' + uploadBtns.length);
+  const disconnectBtn = $('#driveDisconnect');
+  if (disconnectBtn) {
+    const dev = new window.MouseEvent('click', { bubbles: true, cancelable: true });
+    disconnectBtn.dispatchEvent(dev);
+    ok('زر «فصل الربط» محظور على المشاهد', dev.defaultPrevented === true);
+  }
 
   console.log('\n[3] منع النقر حتى لو زر ظاهر');
   // نعيد إظهار زر حذف يدوياً لمحاكاة زر فُتح بطريقة غير متوقعة

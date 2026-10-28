@@ -14,8 +14,8 @@
   var ADMIN_EMAIL = 'gstsyusudg@gmail.com';
   var VIEWER = false;
 
-  /* نصوص الأزرار المحظورة على المشاهد */
-  var BLOCK_RE = /إضافة|إضافه|تعديل|حذف|حذف الكل|مسح|حفظ|رفع|تصدير|تحميل|دفع|أرباح|ارباح|إدخال|تنفيذ|إرسال|ارسال|مزامنة|استعادة|إرجاع|إلغاء|تغيير|إفراغ|ترحيل/;
+  /* نصوص الأزرار المحظورة على المشاهد (وراء دفع/تحصيل أفعال مثل «تسجيل دفع») */
+  var BLOCK_RE = /إضافة|إضافه|تعديل|حذف|حذف الكل|مسح|حفظ|رفع|تصدير|تحميل|دفع|تحصيل|فصل|استرجاع|استرداد|أرباح|ارباح|إدخال|تنفيذ|إرسال|ارسال|مزامنة|استعادة|إرجاع|تغيير|إفراغ|ترحيل/;
 
   /* أزرار مسموح بها للمشاهد (تصفح فقط) */
   var ALLOW_RE = /البروفايل|بروفايل|عرض|كشف|رجوع|مشاهدة|فتح|التفاصيل|رجوع للرئيسية/;
@@ -71,6 +71,8 @@
     if (!el) return false;
     if (allowed(el)) return false;
     var txt = btnText(el);
+    /* بطاقة تنقّل بين الأقسام: تُحجب فقط لو بوابة إضافة/تعديل/حذف — لا نمنع الوصول للقسم */
+    if (el.hasAttribute && el.hasAttribute('data-go')) return HARD_RE.test(txt);
     if (BLOCK_RE.test(txt)) return true;
     if (el.type === 'submit') return true;
     if (el.tagName === 'INPUT' && el.type === 'file') return true;
@@ -83,18 +85,37 @@
     return false;
   }
 
+  /* الاستثناءات الحسّاسة: لا تُخفى — تبقى ظاهرة لكتمان التبويب وتُمنع بالمنع عند النقر فقط */
+  var SENSITIVE_RE = /تحميل|تصدير|رفع|مزامنة|دفع|تحصيل/;
+  var HARD_RE = /إضافة|إضافه|تعديل|حذف|مسح|حفظ/;
+  function sensitive(el) {
+    var t = btnText(el);
+    if (HARD_RE.test(t)) return false;   /* «إضافة/تعديل/حذف» تُخفى مهما كان بقية نصها */
+    return SENSITIVE_RE.test(t);
+  }
+
   /* ---------- إخفاء العناصر المحظورة (مع مراقبة التغييرات) ---------- */
   function hideControls() {
     if (!VIEWER) return;
     var els = document.querySelectorAll(SEL_BLOCK);
     for (var i = 0; i < els.length; i++) {
       var el = els[i];
+      if (sensitive(el)) continue;
       if (el.style.display !== 'none') el.style.display = 'none';
     }
     var btns = document.querySelectorAll('button, label.btn, label[for], input[type="file"]');
     for (var j = 0; j < btns.length; j++) {
       var b = btns[j];
-      if (blocked(b) && b.style.display !== 'none') b.style.display = 'none';
+      if (blocked(b) && !sensitive(b) && b.style.display !== 'none') b.style.display = 'none';
+    }
+  }
+
+  /* ---------- استعادة التبويب المُغلق (وضع مشاهد مستقر — منع فقط دون إخفاء) ---------- */
+  function restoreTabs() {
+    if (!VIEWER) return;
+    var hidden = document.querySelectorAll('[data-tab-btn]');
+    for (var i = 0; i < hidden.length; i++) {
+      if (hidden[i].style.display === 'none') hidden[i].style.display = '';
     }
   }
 
@@ -131,6 +152,7 @@
     }
     /* تطبيقات متتالية للعناصر التي تظهر لاحقاً (بدون مؤقت لا نهائي يعلّق الاختبارات) */
     [600, 1500, 3000, 6000].forEach(function (ms) { setTimeout(hideControls, ms); });
+    [600, 1500, 3000, 6000].forEach(function (ms) { setTimeout(restoreTabs, ms); });
     setTimeout(function () {
       toastMsg('أنت داخل بحساب مشاهد — تصفح فقط بدون إضافة أو تعديل');
     }, 900);
@@ -165,20 +187,29 @@
     } catch (e) {}
   }
 
-  /* ---------- تحديد الدور من الخادم ---------- */
+  /* ---------- تحديد الدور ----------
+     القاعدة: «المُصرَّح به» = gstsyusudg@gmail.com وهو متصل فقط.
+     أي حساب آخر، أو فصل الربط، أو تعذّر التأكد → وضع المشاهد. */
   if (typeof fetch === 'function') {
     fetch('/api/google/status', { credentials: 'same-origin' })
       .then(function (r) { return r.json().catch(function () { return {}; }); })
       .then(function (s) {
-        if (!s || !s.connected) return;
-        var email = String(s.email || '').trim().toLowerCase();
+        var connected = !!(s && s.connected);
+        var email = connected ? String(s.email || '').trim().toLowerCase() : '';
+        var isAdmin = connected && email === ADMIN_EMAIL;
         try {
           localStorage.setItem('app_user_email', email);
-          localStorage.setItem('app_user_role', email === ADMIN_EMAIL ? 'admin' : 'viewer');
+          localStorage.setItem('app_user_role', isAdmin ? 'admin' : 'viewer');
         } catch (e) {}
-        if (email !== ADMIN_EMAIL) applyViewer();
-        if (/[?&]g=ok/.test(location.search)) setTimeout(pullShared, 700);
+        if (!isAdmin) applyViewer();   /* غير المصرح له أو مفصول الربط = مشاهد */
+        if (connected && /[?&]g=ok/.test(location.search)) setTimeout(pullShared, 700);
       })
-      .catch(function () {});
+      .catch(function () { applyViewer(); });   /* تعذّر التأكد = مشاهد */
   }
+
+  /* فصل الربط أثناء الجلسة → يبقى مشاهداً فوراً */
+  document.addEventListener('click', function (e) {
+    var d = e.target && e.target.closest && e.target.closest('#driveDisconnect');
+    if (d) applyViewer();
+  }, true);
 })();

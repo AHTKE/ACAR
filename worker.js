@@ -190,7 +190,7 @@ async function getOrCreateSyncFolder(env, at) {
     return lj.files[0].id;
   }
 
-  const cr = await fetch(DRIVE_FILES + '?fields=id', {
+  const cr = await fetch(DRIVE_FILES + '?fields=id&supportsAllDrives=true', {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + at, 'Content-Type': 'application/json; charset=UTF-8' },
     body: JSON.stringify({ name: SYNC_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' })
@@ -204,9 +204,67 @@ async function getOrCreateSyncFolder(env, at) {
 async function findSyncFile(at, folderId) {
   const q = "name='" + SYNC_FILE_NAME + "' and '" + folderId + "' in parents and trashed=false";
   const r = await fetch(DRIVE_FILES + '?q=' + encodeURIComponent(q) +
-    '&fields=files(id,name,modifiedTime,size)&pageSize=1', { headers: { Authorization: 'Bearer ' + at } });
+    '&fields=files(id,name,modifiedTime,size,capabilities(canEdit))&pageSize=10&supportsAllDrives=true',
+    { headers: { Authorization: 'Bearer ' + at } });
   const j = await r.json().catch(() => ({}));
-  return (j.files && j.files[0]) || null;
+  const files = (j.files && Array.isArray(j.files)) ? j.files : [];
+  if (!files.length) return null;
+  /* نفضّل الملف اللي الحساب الحالي يقدر يعدّله — القديم ممكن يكون منشأ بحساب آخر */
+  const editable = files.find(function (f) {
+    return !f.capabilities || f.capabilities.canEdit !== false;
+  });
+  return editable || files[0];
+}
+
+/* ---------- تشخيص صلاحيات المجلد — بدل رسالة جوجل الإنجليزية الغامضة ---------- */
+
+/* يفحص المجلد: اسمه، صاحبه، وهل الحساب الحالي يقدر يكتب فيه */
+async function folderAccessInfo(at, folderId) {
+  try {
+    const r = await fetch(DRIVE_FILES + '/' + folderId +
+      '?fields=id,name,owners(emailAddress),capabilities(canEdit)&supportsAllDrives=true',
+      { headers: { Authorization: 'Bearer ' + at } });
+    if (!r.ok) return { ok: false, status: r.status };
+    const j = await r.json().catch(() => ({}));
+    return {
+      ok: true,
+      name: j.name || '',
+      owners: (j.owners || []).map((o) => o.emailAddress).filter(Boolean),
+      canEdit: !!(j.capabilities && j.capabilities.canEdit)
+    };
+  } catch (e) {
+    /* الفحص تكمّلي — ما نمنعش الرفع لو Google ما استجابش */
+    return { ok: true, name: '', owners: [], canEdit: true, probeFailed: true };
+  }
+}
+
+function isPermError(e) {
+  return /permission|sufficient|403|forbidden|insufficient/i.test(String((e && e.message) || e || ''));
+}
+
+/* رسالة عربية واضحة: مين الحساب، مين صاحب المجلد، وإيه الحل */
+function permErrorMessage(conn, access, raw) {
+  const acct = String((conn && conn.email) || '').trim() || 'الحساب المربوط';
+  const owner = access && access.owners && access.owners.length ? access.owners.join('، ') : 'غير معروف';
+  const name = access && access.name ? '«' + access.name + '»' : 'المجلد';
+  if (access && access.canEdit === false) {
+    return 'المجلد ' + name + ' مشترك مع الحساب الحالي بصلاحية «مشاهدة» فقط' +
+      ' — الحساب المتصل: ' + acct + ' — صاحب المجلد: ' + owner +
+      '. الحل: افتح المجلد على Google Drive ← زر «مشاركة» ← أضف ' + acct +
+      ' بصلاحية «محرر»، أو اربط الحساب صاحب المجلد.';
+  }
+  return 'الحساب ' + acct + ' ما عندهش صلاحية كتابة في ' + name + ' (صاحبه: ' + owner + ')' +
+    (raw ? ' — ' + raw : '') + '. تأكد من مشاركة المجلد بصلاحية «محرر».';
+}
+
+/* رسالة قراءة مجلد مرفوضة */
+function readErrorMessage(conn, access) {
+  const acct = String((conn && conn.email) || '').trim() || 'الحساب المربوط';
+  const owner = access && access.owners && access.owners.length ? access.owners.join('، ') : 'غير معروف';
+  const name = access && access.name ? '«' + access.name + '»' : 'المجلد';
+  return 'تعذّر قراءة المجلد ' + name + ' — الحساب المتصل: ' + acct +
+    ' — صاحب المجلد: ' + owner +
+    '. تأكد إن المجلد مشترك مع هذا الحساب (على الأقل بصلاحية «قارئ») أو اربط الحساب صاحب المجلد.';
 }
 
 /* فولدر تصدير Excel/PDF — يتكوّن مرة واحدة ويُحفظ معرّفه */
@@ -224,7 +282,7 @@ async function getOrCreateExportFolder(env, at) {
     return lj.files[0].id;
   }
 
-  const cr = await fetch(DRIVE_FILES + '?fields=id', {
+  const cr = await fetch(DRIVE_FILES + '?fields=id&supportsAllDrives=true', {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + at, 'Content-Type': 'application/json; charset=UTF-8' },
     body: JSON.stringify({ name: EXPORT_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' })
@@ -248,7 +306,7 @@ function versionName(d) {
 async function listSyncFiles(at, folderId) {
   const q = "'" + folderId + "' in parents and trashed=false";
   const r = await fetch(DRIVE_FILES + '?q=' + encodeURIComponent(q) +
-    '&fields=files(id,name,modifiedTime,size)&pageSize=1000',
+    '&fields=files(id,name,modifiedTime,size)&pageSize=1000&supportsAllDrives=true',
     { headers: { Authorization: 'Bearer ' + at } });
   const j = await r.json().catch(() => ({}));
   return (j.files && Array.isArray(j.files)) ? j.files : [];
@@ -263,7 +321,7 @@ async function archiveVersion(at, folderId, jsonText) {
     meta + '\r\n--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n';
   const tail = '\r\n--' + boundary + '--';
   const payload = new Blob([head, jsonText, tail], { type: 'multipart/related; boundary=' + boundary });
-  const r = await fetch(DRIVE_UPLOAD + '?uploadType=multipart&fields=id,name', {
+  const r = await fetch(DRIVE_UPLOAD + '?uploadType=multipart&fields=id,name&supportsAllDrives=true', {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + at, 'Content-Type': 'multipart/related; boundary=' + boundary },
     body: payload
@@ -307,7 +365,7 @@ async function pruneSyncFiles(at, folderId) {
 
     for (const f of toDelete) {
       try {
-        await fetch(DRIVE_FILES + '/' + f.id, {
+        await fetch(DRIVE_FILES + '/' + f.id + '?supportsAllDrives=true', {
           method: 'DELETE', headers: { Authorization: 'Bearer ' + at }
         });
       } catch (e) { /* حذف فاشل لا يوقف المنطق */ }
@@ -315,19 +373,26 @@ async function pruneSyncFiles(at, folderId) {
   } catch (e) { /* التنظيف تكمّلي */ }
 }
 
-/** يرفع النسخة — يعدّل الملف القديم إن وُجد (درفايف بيسجّل مراجعة لكل تعديل) */
+/** يرفع النسخة — يعدّل الملف القديم إن وُجد، وإن تعذّر عليه التعديل يرفع ملفاً جديداً بدل ما يفشل الرفع */
 async function pushSyncFile(at, folderId, jsonText) {
   const existing = await findSyncFile(at, folderId);
-  if (existing) {
+  const existingEditable = !!existing &&
+    (!existing.capabilities || existing.capabilities.canEdit !== false);
+  if (existingEditable) {
     const r = await fetch(DRIVE_UPLOAD + '/' + existing.id +
-      '?uploadType=media&fields=id,name,modifiedTime,size', {
+      '?uploadType=media&fields=id,name,modifiedTime,size&supportsAllDrives=true', {
         method: 'PATCH',
         headers: { Authorization: 'Bearer ' + at, 'Content-Type': 'application/json; charset=UTF-8' },
         body: jsonText
       });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error((j.error && j.error.message) || 'فشل تحديث نسخة المزامنة');
-    return j;
+    if (r.ok && j.id) return j;
+    const msg = (j.error && j.error.message) || '';
+    /* رفض صلاحيات على الملف القديم (منشأ بحساب آخر مثلاً) → نكمّل برفع ملف جديد */
+    if (!msg || !isPermError({ message: msg })) {
+      throw new Error(msg || 'فشل تحديث نسخة المزامنة');
+    }
+    /* كمّل بالأسفل: إنشاء ملف جديد باسم المزامنة */
   }
 
   const boundary = '-------gsync' + crypto.randomUUID().replace(/-/g, '');
@@ -338,7 +403,7 @@ async function pushSyncFile(at, folderId, jsonText) {
   const tail = '\r\n--' + boundary + '--';
   const payload = new Blob([head, jsonText, tail], { type: 'multipart/related; boundary=' + boundary });
 
-  const r = await fetch(DRIVE_UPLOAD + '?uploadType=multipart&fields=id,name,modifiedTime,size', {
+  const r = await fetch(DRIVE_UPLOAD + '?uploadType=multipart&fields=id,name,modifiedTime,size&supportsAllDrives=true', {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + at, 'Content-Type': 'multipart/related; boundary=' + boundary },
     body: payload
@@ -512,11 +577,24 @@ async function handleApi(request, env, pathname) {
 
     try {
       const tok = await exchangeCode(env, code, origin + '/api/google/callback');
+      const receivedRefresh = !!tok.refresh_token;
       const email = await fetchProfile(tok.access_token);
-      const clientToken = crypto.randomUUID();
+      let clientToken = crypto.randomUUID();
 
       await ensureSchema(env.DB);
-      await env.DB.prepare('DELETE FROM google_connections').run();
+      /* حذف اتصال المزامنة الحالي فقط — لا نحذف جلسات الأعضاء الآخرين */
+      if (receivedRefresh) {
+        await env.DB.prepare('DELETE FROM google_connections WHERE refresh_token = ?')
+          .bind(tok.refresh_token).run();
+      } else {
+        /* Google لم يُعد refresh_token: نجدّد ونحدّث اتصالنا الحالي إن وُجد */
+        const existing = await env.DB.prepare('SELECT client_token FROM google_connections LIMIT 1').first();
+        if (existing) {
+          await env.DB.prepare('UPDATE google_connections SET email = ?, updated_at = ? WHERE client_token = ?')
+            .bind(email, Date.now(), existing.client_token).run();
+        }
+        clientToken = existing ? existing.client_token : clientToken;
+      }
       await env.DB.prepare('INSERT INTO google_connections (client_token, refresh_token, email) VALUES (?, ?, ?)')
         .bind(clientToken, tok.refresh_token, email).run();
 
@@ -592,7 +670,7 @@ async function handleApi(request, env, pathname) {
 
     let res;
     try {
-      res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+      res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true', {
         method: 'POST',
         headers: {
           Authorization: 'Bearer ' + at,
@@ -604,7 +682,28 @@ async function handleApi(request, env, pathname) {
       return json({ ok: false, error: 'تعذّر الوصول إلى Google Drive' }, 502);
     }
 
-    const info = await res.json().catch(() => ({}));
+    let info = await res.json().catch(() => ({}));
+    let inFolder = true;
+
+    /* المجلد المحدد مرفوض للكتابة → نرفع الملف للحساب نفسه ونرجّع رابطه بدل الفشل */
+    if ((!res.ok || !info.id) && parentId &&
+        isPermError({ message: (info.error && info.error.message) || '' })) {
+      try {
+        const metaNoParent = JSON.stringify({ name: String(name), mimeType: mime });
+        res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true', {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer ' + at,
+            'Content-Type': 'multipart/related; boundary=' + boundary
+          },
+          body: new Blob([head.replace(meta, metaNoParent), bytes, tail],
+            { type: 'multipart/related; boundary=' + boundary })
+        });
+        info = await res.json().catch(() => ({}));
+        inFolder = false;
+      } catch (e) { /* يبقى الخطأ الأصلي تحت */ }
+    }
+
     if (!res.ok || !info.id) {
       return json({ ok: false, error: (info.error && info.error.message) || 'فشل الرفع إلى Drive' },
         res.status >= 400 && res.status < 600 ? res.status : 502);
@@ -613,12 +712,12 @@ async function handleApi(request, env, pathname) {
     let link = '';
     try {
       const lr = await fetch('https://www.googleapis.com/drive/v3/files/' + info.id +
-        '?fields=id,name,webViewLink', { headers: { Authorization: 'Bearer ' + at } });
+        '?fields=id,name,webViewLink&supportsAllDrives=true', { headers: { Authorization: 'Bearer ' + at } });
       const lj = await lr.json().catch(() => ({}));
       link = lj.webViewLink || '';
     } catch (e) { /* الرابط اختياري */ }
 
-    return json({ ok: true, id: info.id, name: info.name || name, link: link });
+    return json({ ok: true, id: info.id, name: info.name || name, link: link, inFolder: inFolder });
   }
 
   /* إرسال تنبيه بالبريد مع المرفق */
@@ -702,15 +801,30 @@ async function handleApi(request, env, pathname) {
     try { folderId = await getOrCreateSyncFolder(env, at); }
     catch (e) { return json({ ok: false, error: e.message }, 502); }
 
+    /* فحص الوصول للمجلد — رسالة عربية واضحة لو القراءة مرفوضة */
+    const access = await folderAccessInfo(at, folderId);
+    if (access.ok === false && (access.status === 403 || access.status === 404)) {
+      if (access.status === 404) {
+        return json({ ok: false, code: 'PERM',
+          error: 'المجلد غير موجود أو حُذف — تأكد من رابط المجلد العام في الإعدادات' }, 404);
+      }
+      return json({ ok: false, code: 'PERM', error: readErrorMessage(conn, access) }, 403);
+    }
+
     let file;
     try { file = await findSyncFile(at, folderId); }
-    catch (e) { return json({ ok: false, error: 'تعذّر قراءة فولدر المزامنة' }, 502); }
+    catch (e) {
+      if (isPermError(e)) {
+        return json({ ok: false, code: 'PERM', error: readErrorMessage(conn, access) }, 403);
+      }
+      return json({ ok: false, error: 'تعذّر قراءة فولدر المزامنة' }, 502);
+    }
 
     if (!file) return json({ ok: true, exists: false, folderId: folderId });
 
     let snapshot = null;
     try {
-      const rr = await fetch(DRIVE_FILES + '/' + file.id + '?alt=media',
+      const rr = await fetch(DRIVE_FILES + '/' + file.id + '?alt=media&supportsAllDrives=true',
         { headers: { Authorization: 'Bearer ' + at } });
       if (rr.ok) snapshot = await rr.json().catch(() => null);
     } catch (e) { /* نرجّع البيانات بدون المحتوى */ }
@@ -751,11 +865,29 @@ async function handleApi(request, env, pathname) {
     try { folderId = await getOrCreateSyncFolder(env, at); }
     catch (e) { return json({ ok: false, error: e.message }, 502); }
 
+    /* فحص الصلاحية قبل الكتابة — رسالة عربية واضحة بدل خطأ جوجل العام */
+    const access = await folderAccessInfo(at, folderId);
+    if (access.ok === false && (access.status === 403 || access.status === 404)) {
+      if (access.status === 404) {
+        return json({ ok: false, code: 'PERM',
+          error: 'المجلد غير موجود أو حُذف — تأكد من رابط المجلد العام في الإعدادات' }, 404);
+      }
+      return json({ ok: false, code: 'PERM',
+        error: permErrorMessage(conn, { canEdit: false, owners: [], name: '' }, '') }, 403);
+    }
+    if (access.ok && access.canEdit === false) {
+      return json({ ok: false, code: 'PERM', error: permErrorMessage(conn, access, '') }, 403);
+    }
+
     let info;
     try {
       info = await pushSyncFile(at, folderId, jsonText);
     } catch (e) {
-      /* لو الفولدر المخصص فشل بسبب الصلاحيات — نرجّع للفولدر التلقائي */
+      /* رفض صلاحيات من Google أثناء الكتابة → رسالة مفصّلة */
+      if (isPermError(e)) {
+        return json({ ok: false, code: 'PERM', error: permErrorMessage(conn, access, e.message) }, 403);
+      }
+      /* فشل آخر — لو المجلد المخصص نرجع للمجلد التلقائي للحساب */
       const custom = await settingGet(env.DB, 'sync_custom_folder');
       if (custom && folderId === custom) {
         try {
@@ -767,6 +899,9 @@ async function handleApi(request, env, pathname) {
             throw e;
           }
         } catch (e2) {
+          if (isPermError(e2)) {
+            return json({ ok: false, code: 'PERM', error: permErrorMessage(conn, access, e2.message) }, 403);
+          }
           return json({ ok: false, error: e2.message }, 502);
         }
       } else {
@@ -856,6 +991,16 @@ async function handleApi(request, env, pathname) {
     let folderId;
     try { folderId = await getOrCreateSyncFolder(env, at); }
     catch (e) { return json({ ok: false, error: e.message }, 502); }
+
+    /* فحص الوصول — نفس رسالة التشخيص العربية */
+    const access = await folderAccessInfo(at, folderId);
+    if (access.ok === false && (access.status === 403 || access.status === 404)) {
+      if (access.status === 404) {
+        return json({ ok: false, code: 'PERM',
+          error: 'المجلد غير موجود أو حُذف — تأكد من رابط المجلد العام في الإعدادات' }, 404);
+      }
+      return json({ ok: false, code: 'PERM', error: readErrorMessage(conn, access) }, 403);
+    }
 
     let files;
     try { files = await listSyncFiles(at, folderId); }

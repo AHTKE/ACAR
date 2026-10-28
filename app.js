@@ -3142,20 +3142,25 @@
     if (t) t.textContent = text;
   }
 
-  function applyDriveState(cfg, conn, email) {
+  function applyDriveState(cfg, conn, email, backendDown) {
     driveState.configured = !!cfg;
     driveState.connected = !!conn;
+    driveState.backendDown = !!backendDown;
     var setup = $('#driveSetup'), connect = $('#driveConnect'),
         disconnect = $('#driveDisconnect'), upload = $('#driveUploadLabel'), note = $('#driveNote');
-    if (setup) setup.hidden = !!cfg;
+    if (setup) setup.hidden = !!cfg || !!backendDown;
 
-    /* الزر دايم ظاهر — معطّل بس لما المفاتيح ناقصة، عشان المستخدم يعرف ناقص إيه */
+    /* الزر دايم ظاهر — ومعطّل بس لو السيرفر نفسه قال «المفاتيح ناقصة».
+       لو السيرفر مش رادّ خالص (نشر من غير مسار /api) مبنقولش «المفاتيح
+       ناقصة»: دي مشكلة في النشر مش في المفاتيح. */
     if (connect) {
       connect.hidden = false;
-      connect.disabled = !(cfg && !conn);
-      connect.title = (cfg && !conn)
-        ? 'اضغط لاختيار حساب Google وتفويضه'
-        : 'أضف المفتاحين GOOGLE_CLIENT_ID و GOOGLE_CLIENT_SECRET في Sites ← Secrets أولاً';
+      connect.disabled = backendDown ? false : !(cfg && !conn);
+      connect.title = backendDown
+        ? 'تعذّر الوصول لخادم الربط — اضغط للتجربة'
+        : (cfg && !conn)
+          ? 'اضغط لاختيار حساب Google وتفويضه'
+          : 'أضف المفتاحين GOOGLE_CLIENT_ID و GOOGLE_CLIENT_SECRET في Sites ← Secrets أولاً';
     }
     if (disconnect) disconnect.hidden = !conn;
     if (upload) upload.hidden = !conn;
@@ -3182,6 +3187,9 @@
       if (conn) {
         note.hidden = false;
         note.textContent = 'أي ملف تصدير هيتنزّل ويترفع على Drive تلقائياً.';
+      } else if (backendDown) {
+        note.hidden = false;
+        note.textContent = 'خادم الربط مش متاح على هذا النشر: مسار /api/google/status ما ردّش. لو التطبيق منشور على Vercel لازم مجلد api/ ومعاه vercel.json يكونوا مرفوعين، وإلا مفيش حاجة تقدر تربط Google.';
       } else if (!cfg) {
         note.hidden = false;
         note.textContent = 'الزر معطّل مؤقتاً: حطّ GOOGLE_CLIENT_ID و GOOGLE_CLIENT_SECRET في Sites ← Secrets وأعد النشر، وهيتشغّل فوراً.';
@@ -3191,7 +3199,8 @@
       }
     }
 
-    if (!cfg) setDriveStatus('is-warn', 'ناقص مفتاحين: GOOGLE_CLIENT_ID و GOOGLE_CLIENT_SECRET — اضيفهم في Sites ← Secrets');
+    if (backendDown) setDriveStatus('is-warn', 'تعذّر الوصول لخادم الربط (/api/google/status) — مش خطأ في المفاتيح، راجع نشر مجلد api/');
+    else if (!cfg) setDriveStatus('is-warn', 'ناقص مفتاحين: GOOGLE_CLIENT_ID و GOOGLE_CLIENT_SECRET — اضيفهم في Sites ← Secrets');
     else if (conn) setDriveStatus('is-ok', 'متصل بحساب Google Drive' + (email ? ' — ' + email : ''));
     else setDriveStatus('', 'المفاتيح مضبوطة — لم يتم ربط حساب بعد');
   }
@@ -3200,15 +3209,34 @@
     var redir = $('#driveRedirect');
     var origin = (typeof location !== 'undefined' && location.origin) ? location.origin : '';
     if (redir) redir.textContent = origin + '/api/google/callback';
+    var redirV = $('#driveRedirectVercel');
+    if (redirV) redirV.textContent = 'https://<اسم-مشروعك>.vercel.app/api/google/callback';
 
     if (typeof fetch !== 'function') {
       applyDriveState(false, false, '');
       return;
     }
     fetch('/api/google/status', { credentials: 'same-origin' })
-      .then(function (r) { return r.json(); })
-      .then(function (s) { applyDriveState(s && s.configured, s && s.connected, s && s.email); })
-      .catch(function () { applyDriveState(false, false, ''); });
+      .then(function (r) {
+        if (!r || typeof r.json !== 'function' || !r.ok) {
+          var e = new Error('status ' + (r && r.status));
+          e.backendDown = true;
+          throw e;
+        }
+        return r.json().then(function (sc) {
+          if (!sc || typeof sc.configured === 'undefined') {
+            var e2 = new Error('bad payload');
+            e2.backendDown = true;
+            throw e2;
+          }
+          return sc;
+        });
+      })
+      .then(function (sc) { applyDriveState(sc.configured, sc.connected, sc.email, false); })
+      .catch(function () {
+        /* فشل الاتصال أو الرد مش JSON: السيرفر مش متاح — ده مش معناه إن المفاتيح ناقصة */
+        applyDriveState(false, false, '', true);
+      });
   }
 
   function uploadToDrive(name, mime, b64) {
@@ -3501,7 +3529,11 @@
     }
     return fetch(path, opts).then(function (r) {
       return r.json().then(function (j) {
-        if (!r.ok || !j.ok) throw new Error((j && j.error) || 'فشلت عملية المزامنة');
+        if (!r.ok || !j.ok) {
+          var err = new Error((j && j.error) || 'فشلت عملية المزامنة');
+          err.code = (j && j.code) || '';
+          throw err;
+        }
         return j;
       });
     });
@@ -3548,7 +3580,9 @@
     }).catch(function (e) {
       if (!auto) {
         syncShowNote('فشل الرفع: ' + (e && e.message ? e.message : e), true);
-        toast('فشل رفع المزامنة: ' + (e && e.message ? e.message : e), true);
+        toast(e && e.code === 'PERM'
+          ? 'الحساب الحالي صلاحيته مشاهدة فقط على المجلد — الحل مكتوب بالأسفل'
+          : 'فشل رفع المزامنة: ' + (e && e.message ? e.message : e), true);
       }
       return null;
     }).then(function (r) { syncBusy = false; return r; });
@@ -3637,7 +3671,9 @@
     }).catch(function (e) {
       if (!auto) {
         syncShowNote('فشل الفحص: ' + (e && e.message ? e.message : e), true);
-        toast('فشل فحص المزامنة: ' + (e && e.message ? e.message : e), true);
+        toast(e && e.code === 'PERM'
+          ? 'تعذّر الوصول للمجلد — الحساب صلاحيته مشاهدة فقط، الحل بالأسفل'
+          : 'فشل فحص المزامنة: ' + (e && e.message ? e.message : e), true);
       }
       syncBusy = false;
       return null;

@@ -658,6 +658,30 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
      $('#driveStatusText').textContent.indexOf('GOOGLE_CLIENT_SECRET') > -1, $('#driveStatusText').textContent);
   ok('عنوان الزر يوضح المطلوب', ($('#driveConnect').title || '').indexOf('Secrets') > -1,
      $('#driveConnect').title);
+
+  /* حالة جديدة: السيرفر ما ردّش (نشر من غير مجلد api/) — مش معناه إن المفاتيح ناقصة */
+  window.fetch = () => Promise.resolve({ ok: false, status: 404, json: () => Promise.reject(new Error('no json')) });
+  await goSettings();
+  ok('السيرفر ما ردّش → زر الربط يفضل مفعّل عشان يجرّب فعلياً', $('#driveConnect').disabled === false,
+     'disabled=' + $('#driveConnect').disabled);
+  ok('الرسالة ما تقولش «ناقص مفاتيح»',
+     $('#driveStatusText').textContent.indexOf('ناقص مفتاحين') === -1 &&
+     $('#driveStatusText').textContent.indexOf('GOOGLE_CLIENT_ID') === -1,
+     $('#driveStatusText').textContent);
+  ok('نص الحالة يشرح المشكلة الحقيقية',
+     $('#driveStatusText').textContent.indexOf('/api/google/status') > -1,
+     $('#driveStatusText').textContent);
+  ok('تعليمات تفعيل المفاتيح مخفية (لم يتأكد نقصها)', $('#driveSetup').hidden === true,
+     'hidden=' + $('#driveSetup').hidden);
+  ok('الرسالة تقول إنها مشكلة نشر مش مفاتيح',
+     ($('#driveNote').textContent || '').indexOf('api') > -1,
+     $('#driveNote').textContent);
+
+  window.fetch = () => Promise.reject(new Error('network down'));
+  await goSettings();
+  ok('فشل الشبكة → نفس الحالة (الزر مفعّل)', $('#driveConnect').disabled === false,
+     'disabled=' + $('#driveConnect').disabled);
+
   delete window.fetch;
   ok('لا أخطاء في لوحة الربط', errors.length === 0, errors.join(' | '));
 
