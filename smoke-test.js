@@ -729,7 +729,21 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
   const ASSETS = { fetch: async (r) => new Response('ASSET_OK:' + new URL(r.url).pathname) };
   const mkEnv = (extra) => Object.assign({ ASSETS: ASSETS }, extra || {});
-  const SEC = { GOOGLE_CLIENT_ID: 'cid-test', GOOGLE_CLIENT_SECRET: 'csec-test' };
+  const TEST_CID = '1089687675916-07b8oa53303rere6sd3tqb6fs2gmkg7a.apps.googleusercontent.com';
+  const TEST_SECRET = 'GOCSPX-testsecret0123456789abcd';
+  const SEC = { GOOGLE_CLIENT_ID: TEST_CID, GOOGLE_CLIENT_SECRET: TEST_SECRET };
+  /* محاكاة فحص Google اللي بيحصل قبل التوجيه (ما نخرجش للشبكة في الاختبارات) */
+  const realFetchNode = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    const u = String(url);
+    if (u.indexOf('accounts.google.com') > -1) {
+      return new Response(null, { status: 302, headers: { Location: 'https://site.test/api/google/callback?error=login_required' } });
+    }
+    if (u.indexOf('oauth2.googleapis.com') > -1) {
+      return new Response(JSON.stringify({ error: 'invalid_grant' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
+    return realFetchNode(url, init);
+  };
 
   let r = await worker.fetch(new Request('https://site.test/index.html'), mkEnv());
   let txt = await r.text();
@@ -747,7 +761,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const loc = r.headers.get('location') || '';
   ok('login بيرجّع 302', r.status === 302, 'status=' + r.status);
   ok('login رايح لـ Google OAuth', loc.indexOf('https://accounts.google.com/o/oauth2/v2/auth') === 0, loc.slice(0, 70));
-  ok('login فيه client_id', loc.indexOf('client_id=cid-test') > -1);
+  ok('login فيه client_id', loc.indexOf('client_id=' + encodeURIComponent(TEST_CID)) > -1, loc.slice(0, 90));
   ok('login فيه redirect_uri متوقّع',
      loc.indexOf(encodeURIComponent('https://site.test/api/google/callback')) > -1, loc);
   ok('login فيه drive scope', loc.indexOf('auth%2Fdrive') > -1 || loc.indexOf('auth/drive') > -1);
@@ -1309,6 +1323,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   console.log('  أخطاء وقت التنفيذ: ' + errors.length);
   if (errors.length) console.log(errors.join('\n'));
   console.log('==================================================\n');
+  globalThis.fetch = realFetchNode;
   window.close();
   process.exit(fail === 0 && errors.length === 0 ? 0 : 1);
 })();

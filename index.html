@@ -29,6 +29,9 @@
     <label style="display:block;text-align:right;color:#f2f6fb;margin-bottom:8px;">رابط المجلد العام</label>
     <input type="text" id="forceFolderUrl" style="width:100%;padding:12px;background:#0a0e15;border:1px solid #4f8cff;border-radius:12px;color:#f2f6fb;margin-bottom:20px;" placeholder="https://drive.google.com/drive/folders/...">
     <button type="button" id="gateConnect" onclick="window.location.href='/api/google/login';localStorage.setItem('app_shared_folder_url',document.getElementById('forceFolderUrl').value);" style="width:100%;padding:14px;background:linear-gradient(90deg,#4f8cff,#7aa8ff);color:#fff;border:none;border-radius:12px;font-weight:700;cursor:pointer;">ربط حساب Google Drive</button>
+    <div id="gateError" style="display:none;margin-top:16px;padding:12px 14px;border-radius:12px;border:1px solid #f87171;background:rgba(248,113,113,.12);color:#fecaca;font-size:13px;line-height:1.9;text-align:right;"></div>
+    <button type="button" id="gateDiag" style="margin-top:14px;width:100%;padding:10px;background:transparent;border:1px solid #33415a;border-radius:10px;color:#9fadc2;font-weight:600;font-size:12.5px;cursor:pointer;">🔍 فحص المفاتيح (لو بيقول إنها ناقصة)</button>
+    <div id="gateDiagBox" style="display:none;margin-top:10px;padding:12px 14px;border-radius:12px;border:1px solid #33415a;background:#0d1420;color:#cbd5e1;font-size:12.5px;line-height:1.9;text-align:right;word-break:break-word;"></div>
   </div>
 </div>
 
@@ -1115,6 +1118,12 @@
           <p class="panel__hint">اربط حسابك مرة واحدة، وبعدها كل ملف تصدير بيترفع عليه أوتوماتيك، وتقدر كمان ترفع أي ملف من جهازك.</p>
 
           <div class="drive-status" id="driveStatus"><span id="driveStatusText">جارٍ التحقق من حالة الربط…</span></div>
+
+          <div class="drive-diag" id="driveDiagBox" hidden></div>
+          <div class="form__actions" style="margin:12px 0">
+            <button type="button" class="btn btn--ghost btn--sm" id="driveCheck">🔍 فحص المفاتيح والاتصال بجوجل</button>
+            <button type="button" class="btn btn--ghost btn--sm" id="driveReload" hidden>إعادة تحميل الصفحة</button>
+          </div>
 
           <div class="panel__note" id="driveSetup" hidden>
             <b>للتفعيل (مرة واحدة):</b> أنشئ مشروعاً في <b>Google Cloud Console</b> ← فعّل <b>Drive API</b> ← املأ <b>OAuth consent screen</b> (External) وأضف حسابك كـ <b>Test user</b> ← أنشئ <b>OAuth client ID</b> من نوع <b>Web application</b> بـ Redirect URI: <code id="driveRedirect"></code><br />

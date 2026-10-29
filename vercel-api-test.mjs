@@ -8,6 +8,19 @@ import runHandler from './vercel-run.js';
 import { createCookieDB } from './vercel-db.js';
 import fs from 'node:fs';
 
+/* محاكاة Google (فحص المفاتيح قبل التوجيه + تجديد التوكن) — بدون شبكة */
+const realFetch = globalThis.fetch;
+globalThis.fetch = async (url, init) => {
+  const u = String(url);
+  if (u.indexOf('accounts.google.com') > -1) {
+    return new Response(null, { status: 302, headers: { Location: 'https://app.example.com/api/google/callback?error=login_required' } });
+  }
+  if (u.indexOf('oauth2.googleapis.com') > -1) {
+    return new Response(JSON.stringify({ error: 'invalid_grant' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+  }
+  return realFetch(url, init);
+};
+
 let pass = 0, fail = 0;
 const ok = (name, cond, extra) => {
   if (cond) { pass++; console.log('  PASS  ' + name); }
@@ -76,8 +89,10 @@ ok('configured=false من السيرفر (مش من الواجهة)', j && j.con
 ok('Content-Type JSON', String(r.headers['content-type']).indexOf('json') > -1, r.headers['content-type']);
 
 console.log('\n[V2] بالمفتاحين المضبوطين');
-process.env.GOOGLE_CLIENT_ID = 'cid-test';
-process.env.GOOGLE_CLIENT_SECRET = 'csec-test';
+const TEST_CID = '1089687675916-07b8oa53303rere6sd3tqb6fs2gmkg7a.apps.googleusercontent.com';
+const TEST_SECRET = 'GOCSPX-testsecret0123456789abcd';
+process.env.GOOGLE_CLIENT_ID = TEST_CID;
+process.env.GOOGLE_CLIENT_SECRET = TEST_SECRET;
 r = await run(makeReq({ url: '/api/google/status' }));
 j = json(r);
 ok('configured=true', j && j.configured === true, JSON.stringify(j));
@@ -88,7 +103,7 @@ r = await run(makeReq({ url: '/api/google/login' }));
 ok('302 Redirect', r.status === 302, 'status=' + r.status);
 const loc = r.headers.location || '';
 ok('المسار لـ accounts.google.com', loc.indexOf('https://accounts.google.com/o/oauth2/v2/auth') === 0, loc.slice(0, 60));
-ok('فيه client_id', loc.indexOf('client_id=cid-test') > -1, loc);
+ok('فيه client_id', loc.indexOf('client_id=' + encodeURIComponent(TEST_CID)) > -1, loc.slice(0, 90));
 ok('redirect_uri على نفس الدومين',
    loc.indexOf(encodeURIComponent('https://app.example.com/api/google/callback')) > -1, loc);
 ok('كوكي gstate اتحط', cookiesOf(r).join(' ').indexOf('gstate=') > -1, cookiesOf(r).join('|'));

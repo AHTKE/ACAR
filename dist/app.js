@@ -4128,10 +4128,56 @@
     if (t) t.textContent = text;
   }
 
-  function applyDriveState(cfg, conn, email, backendDown) {
+  /* ترجمة نتيجة الفحص من الخادم إلى نص عربي واضح */
+  function googleVerdictText(verdict) {
+    switch (verdict) {
+      case 'missing_keys': return 'الخادم لا يرى المتغيّرين أصلاً';
+      case 'bad_client_id_format': return 'قيمة GOOGLE_CLIENT_ID غير صحيحة الصيغة';
+      case 'bad_client_secret_format': return 'قيمة GOOGLE_CLIENT_SECRET غير صحيحة الصيغة';
+      case 'client_id_not_found': return 'Google لا يعرف هذا الـClient ID';
+      case 'bad_client_secret': return 'الـClient Secret لا يطابق الـClient ID';
+      case 'redirect_uri_mismatch': return 'رابط الإرجاع غير مسجّل في Google Cloud';
+      case 'keys_ok': return 'المفاتيح صحيحة ومطابقة لـ Google';
+      default: return 'الحالة غير معروفة — شغّل الفحص';
+    }
+  }
+
+  function renderGoogleDiag(j) {
+    if (!j) return '<b>لا توجد نتيجة</b>';
+    var ok = j.verdict === 'keys_ok';
+    var cls = ok ? 'drive-diag is-ok' : (j.verdict === 'missing_keys' || j.verdict === 'bad_client_id_format' ? 'drive-diag is-bad' : 'drive-diag is-warn');
+    var ip = j.idProbe || {};
+    var sp = j.secretProbe || {};
+    var h = '<div class="' + cls + '">';
+    h += '<b>نتيجة الفحص: ' + esc(googleVerdictText(j.verdict)) + '</b>';
+    if (j.advice) h += '<span class="diag-step">' + esc(j.advice) + '</span>';
+    h += '<span class="diag-step">Client ID على الخادم: ' +
+      (j.clientId ? '<code>' + esc(j.clientId) + '</code>' : '<b>غير موجود</b>') +
+      ' — الصيغة ' + (j.clientIdValid ? '✅ صحيحة' : '❌ غير صحيحة') + '</span>';
+    h += '<span class="diag-step">Client Secret: ' +
+      (j.secretPresent ? 'موجود' : 'غير موجود') + ' — ' + (j.secretValid ? '✅ صيغته سليمة' : '❌ صيغته غير سليمة') + '</span>';
+    h += '<span class="diag-step">رابط الإرجاع المستخدم: <code>' + esc(j.redirectUri || '') + '</code></span>';
+    if (ip.status !== undefined) {
+      h += '<span class="diag-step">فحص Google للـClient ID: ' +
+        (ip.clientNotFound ? '❌ غير معروف' : ip.redirectUriMismatch ? '⚠️ صحيح لكن رابط الإرجاع غير مسجّل' :
+          ip.redirected ? '✅ معروف' : (ip.network ? 'تعذّر الفحص (شبكة)' : 'حالة ' + ip.status)) + '</span>';
+    }
+    if (sp.error) {
+      h += '<span class="diag-step">فحص الـSecret: ' +
+        (sp.error === 'invalid_grant' ? '✅ مطابق (Google قبل المفتاحين)' :
+          sp.error === 'invalid_client' ? '❌ غير مطابق' : esc(sp.error)) + '</span>';
+    }
+    h += '</div>';
+    return h;
+  }
+
+  function applyDriveState(cfg, conn, email, backendDown, diag) {
     driveState.configured = !!cfg;
     driveState.connected = !!conn;
     driveState.backendDown = !!backendDown;
+    driveState.diag = diag || {};
+    var verdict = driveState.diag.verdict || (cfg ? 'keys_ready' : 'missing_keys');
+    var tail = driveState.diag.clientIdTail || '';
     var setup = $('#driveSetup'), connect = $('#driveConnect'),
         disconnect = $('#driveDisconnect'), upload = $('#driveUploadLabel'), note = $('#driveNote');
     if (setup) setup.hidden = !!cfg || !!backendDown;
@@ -4147,7 +4193,9 @@
         ? 'تعذّر الوصول لخادم الربط — اضغط للتجربة'
         : (cfg && !conn)
           ? 'اضغط لاختيار حساب Google وتفويضه'
-          : 'أضف المفتاحين GOOGLE_CLIENT_ID و GOOGLE_CLIENT_SECRET في Sites ← Secrets أولاً';
+          : verdict === 'bad_client_id_format'
+            ? 'GOOGLE_CLIENT_ID غير صحيح الصيغة — لازم ينتهي بـ .apps.googleusercontent.com'
+            : 'أضف المفتاحين GOOGLE_CLIENT_ID و GOOGLE_CLIENT_SECRET في Sites/Vercel ← Secrets ثم أعد النشر';
     }
     if (disconnect) disconnect.hidden = !conn;
     if (upload) upload.hidden = !conn;
@@ -4179,7 +4227,15 @@
         note.textContent = 'خادم الربط مش متاح على هذا النشر: مسار /api/google/status ما ردّش. لو التطبيق منشور على Vercel لازم مجلد api/ ومعاه vercel.json يكونوا مرفوعين، وإلا مفيش حاجة تقدر تربط Google.';
       } else if (!cfg) {
         note.hidden = false;
-        note.textContent = 'الزر معطّل مؤقتاً: حطّ GOOGLE_CLIENT_ID و GOOGLE_CLIENT_SECRET في Sites ← Secrets وأعد النشر، وهيتشغّل فوراً.';
+        note.textContent = 'الزر معطّل مؤقتاً: حطّ GOOGLE_CLIENT_ID و GOOGLE_CLIENT_SECRET في Sites ← Secrets (أو Vercel ← Environment Variables) وأعد النشر، وهيتشغّل فوراً. ' +
+          'مهم على Vercel: المتغيّرات تُطبَّق على النشر الجديد فقط — اعمل Redeploy بعد إضافتها، وتأكد إنها مضافة على Production و Preview.';
+      } else if (verdict === 'bad_client_id_format' || verdict === 'bad_client_secret_format') {
+        note.hidden = false;
+        note.textContent = 'المفاتيح موجودة لكن صيغتها غير صحيحة: ' +
+          (verdict === 'bad_client_id_format'
+            ? 'GOOGLE_CLIENT_ID لازم ينتهي بـ .apps.googleusercontent.com (القيمة الحالية تنتهي بـ ' + (tail || '—') + ').'
+            : 'GOOGLE_CLIENT_SECRET لازم يكون بالشكل GOCSPX-... من Google Cloud ← Clients.') +
+          ' انسخ القيمة كاملة من Google Cloud وأعد النشر (Redeploy) على Vercel.';
       } else {
         note.hidden = true;
         note.textContent = '';
@@ -4187,9 +4243,12 @@
     }
 
     if (backendDown) setDriveStatus('is-warn', 'تعذّر الوصول لخادم الربط (/api/google/status) — مش خطأ في المفاتيح، راجع نشر مجلد api/');
-    else if (!cfg) setDriveStatus('is-warn', 'ناقص مفتاحين: GOOGLE_CLIENT_ID و GOOGLE_CLIENT_SECRET — اضيفهم في Sites ← Secrets');
-    else if (conn) setDriveStatus('is-ok', 'متصل بحساب Google Drive' + (email ? ' — ' + email : ''));
-    else setDriveStatus('', 'المفاتيح مضبوطة — لم يتم ربط حساب بعد');
+    else if (!cfg) setDriveStatus('is-warn', 'ناقص مفتاحين: GOOGLE_CLIENT_ID و GOOGLE_CLIENT_SECRET — اضيفهم في Sites/Vercel ← Secrets ثم اعمل Redeploy');
+    else if (verdict === 'bad_client_id_format' || verdict === 'bad_client_secret_format') {
+      setDriveStatus('is-warn', 'المفاتيح موجودة لكن ' + googleVerdictText(verdict) +
+        (tail ? ' — القيمة الحالية تنتهي بـ ' + tail + ')' : '') + ' — اضغط «فحص المفاتيح»');
+    } else if (conn) setDriveStatus('is-ok', 'متصل بحساب Google Drive' + (email ? ' — ' + email : ''));
+    else setDriveStatus('', 'المفاتيح مضبوطة — لم يتم ربط حساب بعد' + (tail ? ' (Client ID ينتهي بـ ' + tail + ')' : ''));
   }
 
   function refreshDriveStatus() {
@@ -4219,12 +4278,50 @@
           return sc;
         });
       })
-      .then(function (sc) { applyDriveState(sc.configured, sc.connected, sc.email, false); })
+      .then(function (sc) { applyDriveState(sc.configured, sc.connected, sc.email, false, sc); })
       .catch(function () {
         /* فشل الاتصال أو الرد مش JSON: السيرفر مش متاح — ده مش معناه إن المفاتيح ناقصة */
         applyDriveState(false, false, '', true);
       });
   }
+
+  /* ---------- فحص المفاتيح فعلياً مع Google ---------- */
+  function runGoogleCheck(btn, box) {
+    if (!box) return;
+    box.hidden = false;
+    box.className = 'drive-diag';
+    box.innerHTML = '<b>جارٍ فحص المفاتيح مع Google…</b>';
+    if (btn) btn.disabled = true;
+    fetch('/api/google/check', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        box.innerHTML = renderGoogleDiag(j);
+        box.hidden = false;
+        var reload = $('#driveReload');
+        if (reload) reload.hidden = j.verdict !== 'keys_ok';
+        if (j.verdict === 'keys_ok') toast('المفاتيح صحيحة ومطابقة لـ Google ✓');
+        else toast('نتيجة الفحص: ' + googleVerdictText(j.verdict), true);
+      })
+      .catch(function () {
+        box.className = 'drive-diag is-bad';
+        box.innerHTML = '<b>تعذّر الوصول لمسار الفحص /api/google/check</b>' +
+          '<span class="diag-step">تأكد إن مجلد api/ منشور على نفس الدومين، وإن التطبيق معمول له Redeploy بعد آخر تعديل.</span>';
+      })
+      .then(function () { if (btn) btn.disabled = false; });
+  }
+
+  var driveCheckBtn = $('#driveCheck');
+  if (driveCheckBtn) driveCheckBtn.addEventListener('click', function () {
+    runGoogleCheck(driveCheckBtn, $('#driveDiagBox'));
+  });
+
+  var driveReloadBtn = $('#driveReload');
+  if (driveReloadBtn) driveReloadBtn.addEventListener('click', function () {
+    try { location.reload(); } catch (e) {}
+  });
+
+  window.runGoogleCheck = runGoogleCheck;
+  window.renderGoogleDiag = renderGoogleDiag;
 
   function uploadToDrive(name, mime, b64) {
     return fetch('/api/google/upload', {
@@ -4363,8 +4460,17 @@
     if (typeof location !== 'undefined' && location.search && typeof URLSearchParams === 'function') {
       var gq = new URLSearchParams(location.search);
       if (gq.get('g')) {
-        if (gq.get('g') === 'ok') toast('تم ربط حساب Google بنجاح ✓');
-        else if (gq.get('g') === 'err') toast('تعذّر ربط Google: ' + (gq.get('m') || ''), true);
+        var gState = gq.get('g');
+        var gMsg = gq.get('m') || '';
+        /* نحتفظ بالرسالة للمكوّنات اللي بتشتغل بعد تنظيف الرابط */
+        try { window.__googleOAuth = { g: gState, m: gMsg }; } catch (e) {}
+        if (gState === 'ok') toast('تم ربط حساب Google بنجاح ✓');
+        else if (gState === 'err') {
+          toast('تعذّر ربط Google: ' + gMsg, true);
+          /* رسالة واضحة فوق شاشة الربط نفسها بدل صفحة خطأ Google */
+          var gBox = document.getElementById('gateError');
+          if (gBox && gMsg) { gBox.textContent = gMsg; gBox.style.display = 'block'; }
+        }
         if (history && history.replaceState) history.replaceState(null, '', location.pathname);
       }
     }

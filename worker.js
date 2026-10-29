@@ -93,12 +93,48 @@ function cookie(name, value, maxAge) {
     '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + maxAge;
 }
 
+/* تنظيف قيمة متغيّر بيئة: مسافات/أسطر/اقتباسات/محارف خفية بتفسد
+   client_id وتخلّي Google يرد invalid_client رغم إن المفاتيح مضافة. */
+function cleanEnvVal(v) {
+  var s = String(v == null ? '' : v);
+  s = s.replace(/[\u200B-\u200D\uFEFF]/g, '');
+  s = s.replace(/^[\s"'\u0060]+/, '').replace(/[\s"'\u0060]+$/, '');
+  s = s.replace(/[\r\n\t]/g, '');
+  return s.trim();
+}
+
+/* المفاتيح كما هي صالحة للاستخدام فعلاً (بعد التنظيف والتحقق) */
+function googleCreds(env) {
+  var id = cleanEnvVal(env && env.GOOGLE_CLIENT_ID);
+  var secret = cleanEnvVal(env && env.GOOGLE_CLIENT_SECRET);
+  var idValid = /^\d{6,}-[a-z0-9_-]{10,}\.apps\.googleusercontent\.com$/i.test(id);
+  var secretValid = /^GOCSPX-[A-Za-z0-9_-]{8,}$/.test(secret) || secret.length >= 24;
+  return {
+    id: id,
+    secret: secret,
+    hasId: !!id,
+    hasSecret: !!secret,
+    idValid: !!idValid,
+    secretValid: !!secretValid,
+    configured: !!(id && secret),
+    ready: !!(id && secret && idValid && secretValid)
+  };
+}
+
 function configured(env) {
-  return !!(env && env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+  return googleCreds(env).configured;
 }
 
 function originOf(request) {
   try { return new URL(request.url).origin; } catch (e) { return ''; }
+}
+
+/* رابط الإرجاع: نقدر نثبّته على دومين واحد عبر APP_BASE_URL
+   (مهم على Vercel لأن روابط الـPreview بتتغير كل نشر). */
+function originFor(request, env) {
+  var forced = cleanEnvVal(env && (env.APP_BASE_URL || env.PUBLIC_ORIGIN || env.APP_ORIGIN));
+  if (/^https?:\/\//i.test(forced)) return forced.replace(/\/+$/, '');
+  return originOf(request);
 }
 
 /* ---------- D1 ---------- */
@@ -496,8 +532,8 @@ async function accessToken(env, conn) {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_id: env.GOOGLE_CLIENT_ID,
-      client_secret: env.GOOGLE_CLIENT_SECRET,
+      client_id: googleCreds(env).id,
+      client_secret: googleCreds(env).secret,
       refresh_token: conn.refresh_token,
       grant_type: 'refresh_token'
     }).toString()
@@ -515,8 +551,8 @@ async function exchangeCode(env, code, redirectUri) {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_id: env.GOOGLE_CLIENT_ID,
-      client_secret: env.GOOGLE_CLIENT_SECRET,
+      client_id: googleCreds(env).id,
+      client_secret: googleCreds(env).secret,
       code: code,
       redirect_uri: redirectUri,
       grant_type: 'authorization_code'
@@ -543,12 +579,136 @@ async function fetchProfile(accessToken) {
 async function handleApi(request, env, pathname) {
   const origin = originOf(request);
 
-  /* الحالة */
+  /* الحالة + تشخيص المفاتيح (بدون أي كشف للسر) */
   if (pathname === '/api/google/status') {
-    if (!configured(env)) return json({ configured: false, connected: false });
+    const c = googleCreds(env);
+    const redirectUri = originFor(request, env) + '/api/google/callback';
+    const diag = {
+      configured: c.configured,
+      connected: false,
+      email: '',
+      clientIdTail: c.id ? c.id.slice(-10) : '',
+      clientIdLength: c.id.length,
+      clientIdValid: c.idValid,
+      secretPresent: c.hasSecret,
+      secretValid: c.secretValid,
+      redirectUri: redirectUri,
+      origin: originFor(request, env),
+      verdict: !c.configured ? 'missing_keys'
+        : !c.idValid ? 'bad_client_id_format'
+          : !c.secretValid ? 'bad_client_secret_format'
+            : 'keys_ready'
+    };
+    if (!c.configured) return json(diag);
     const tok = readCookie(request, 'gconn');
     const conn = await findConnection(env.DB, tok);
-    return json({ configured: true, connected: !!conn, email: conn ? (conn.email || '') : '' });
+    diag.connected = !!conn;
+    diag.email = conn ? (conn.email || '') : '';
+    return json(diag);
+  }
+
+  /* فحص فعلي للمفاتيح مع Google — يفرّق بين client_id و secret */
+  if (pathname === '/api/google/check') {
+    const c = googleCreds(env);
+    const redirectUri = originFor(request, env) + '/api/google/callback';
+    const out = {
+      ok: true,
+      verdict: '',
+      clientId: c.id,
+      clientIdValid: c.idValid,
+      secretPresent: c.hasSecret,
+      secretValid: c.secretValid,
+      redirectUri: redirectUri,
+      idProbe: null,
+      secretProbe: null,
+      advice: ''
+    };
+
+    if (!c.configured) {
+      out.verdict = 'missing_keys';
+      out.advice = 'الخادم لا يرى المتغيّرين أصلاً. أضفهما في Vercel ← Settings ← Environment Variables (Production و Preview) ثم اعمل Redeploy — الإضافات لا تُطبَّق على نشر قديم.';
+      return json(out, 200);
+    }
+    if (!c.idValid) {
+      out.verdict = 'bad_client_id_format';
+      out.advice = 'قيمة GOOGLE_CLIENT_ID ليست بصيغة Google الصحيحة. لازم تنتهي بـ .apps.googleusercontent.com وبتبدأ بأرقام ثم شَرطة. انسخها من Google Cloud ← Clients ← OAuth client، وتأكد إنها اتلصقت كاملة بدون مسافات.';
+      return json(out, 200);
+    }
+
+    /* 1) هل Google يعرف الـclient_id؟ (طلب تفويض بدون واجهة) */
+    try {
+      const u = new URL(AUTH_URL);
+      u.searchParams.set('client_id', c.id);
+      u.searchParams.set('redirect_uri', redirectUri);
+      u.searchParams.set('response_type', 'code');
+      u.searchParams.set('scope', 'openid email');
+      u.searchParams.set('prompt', 'none');
+      const r = await fetch(u.toString(), { redirect: 'manual' });
+      const loc = r.headers.get('location') || '';
+      let body = '';
+      if (loc) {
+        try {
+          const lj = new URL(loc);
+          body = (lj.searchParams.get('error') || '') + ' ' + (lj.searchParams.get('error_description') || '');
+        } catch (e) { body = loc; }
+      } else if (r.status >= 400) {
+        body = (await r.text().catch(() => '')).slice(0, 6000);
+      }
+      const redirectToApp = /^https?:/i.test(loc) && loc.indexOf('accounts.google.com') === -1;
+      const mismatch = /redirect_uri_mismatch/i.test(body) || /redirect_uri_mismatch/i.test(loc);
+      const unknownClient = /invalid_client/i.test(body) || /OAuth client was not found/i.test(body) ||
+        /deleted_client/i.test(body) || /unauthorized_client/i.test(body);
+      out.idProbe = {
+        status: r.status,
+        redirected: redirectToApp,
+        redirectUriMismatch: mismatch,
+        clientNotFound: unknownClient
+      };
+    } catch (e) {
+      out.idProbe = { status: 0, network: true, error: String((e && e.message) || e).slice(0, 200) };
+    }
+
+    /* 2) هل السر يطابق الـclient_id؟ (طلب توكن بكود وهمي) */
+    try {
+      const res = await fetch(TOKEN_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: c.id,
+          client_secret: c.secret,
+          code: 'diagnostic-probe',
+          grant_type: 'authorization_code',
+          redirect_uri: redirectUri
+        }).toString()
+      });
+      const j = await res.json().catch(() => ({}));
+      out.secretProbe = { status: res.status, error: j.error || '', description: j.error_description || '' };
+    } catch (e) {
+      out.secretProbe = { status: 0, network: true, error: String((e && e.message) || e).slice(0, 200) };
+    }
+
+    const ip = out.idProbe || {};
+    const sp = out.secretProbe || {};
+    if (ip.clientNotFound) {
+      out.verdict = 'client_id_not_found';
+      out.advice = 'Google لا يعرف هذا الـClient ID: إمّا اتشال من Google Cloud، أو من مشروع تاني، أو القيمة في Vercel مختلفة عن اللي في Google Cloud ← Clients. انسخ الـClient ID من نفس الـOAuth client اللي معاك سرّه.';
+    } else if (ip.redirectUriMismatch) {
+      out.verdict = 'redirect_uri_mismatch';
+      out.advice = 'المفاتيح سليمة لكن رابط الإرجاع غير مسجّل. أضف بالحرف في Google Cloud ← Clients ← Authorized redirect URIs: ' + redirectUri;
+    } else if (sp.error === 'invalid_client') {
+      out.verdict = 'bad_client_secret';
+      out.advice = 'الـClient ID صحيح لكن الـClient Secret لا يطابق. خد السر الحالي من Google Cloud ← Clients ← Client secret (أو أنشئ سر جديد) وحدّث GOOGLE_CLIENT_SECRET واعمل Redeploy.';
+    } else if (sp.error === 'invalid_grant' || sp.error === 'invalid_request' || ip.redirected) {
+      out.verdict = 'keys_ok';
+      out.advice = 'المفاتيح صحيحة ومطابقة لـ Google. لو الربط لسه بيفشل، المشكلة في رابط الإرجاع أو في حساب Google نفسه (Test user / consent screen).';
+    } else if (sp.error) {
+      out.verdict = 'google_error';
+      out.advice = 'Google رد بخطأ: ' + sp.error + (sp.description ? ' — ' + sp.description : '');
+    } else {
+      out.verdict = 'unknown';
+      out.advice = 'ما قدرناش نحدّد السبب — جرّب تعمل Redeploy وتتأكد إن المتغيّرين في Production.';
+    }
+    return json(out, 200);
   }
 
   if (!configured(env)) {
@@ -557,10 +717,40 @@ async function handleApi(request, env, pathname) {
 
   /* بدء الربط */
   if (pathname === '/api/google/login') {
+    const creds = googleCreds(env);
+    const redirectUri = originFor(request, env) + '/api/google/callback';
+
+    /* ما نبعتش المستخدم لصفحة خطأ جوجل: نفحص الـclient_id الأول */
+    var early = '';
+    if (!creds.idValid) {
+      early = 'GOOGLE_CLIENT_ID في Vercel غير صالح — لازم ينتهي بـ .apps.googleusercontent.com (طوله الحالي ' +
+        creds.id.length + ' حرف). انسخه كامل من Google Cloud ← Clients ثم أعد النشر.';
+    } else {
+      try {
+        const probe = new URL(AUTH_URL);
+        probe.searchParams.set('client_id', creds.id);
+        probe.searchParams.set('redirect_uri', redirectUri);
+        probe.searchParams.set('response_type', 'code');
+        probe.searchParams.set('scope', 'openid email');
+        probe.searchParams.set('prompt', 'none');
+        const pr = await fetch(probe.toString(), { redirect: 'manual' });
+        const ploc = pr.headers.get('location') || '';
+        let pbody = '';
+        if (!ploc && pr.status >= 400) pbody = (await pr.text().catch(() => '')).slice(0, 6000);
+        if (/invalid_client/i.test(pbody) || /OAuth client was not found/i.test(pbody) || /deleted_client/i.test(pbody)) {
+          early = 'Google لا يعرف الـClient ID الموجود في Vercel (' +
+            creds.id.slice(-10) + ') — إمّا محذوف أو من مشروع تاني. راجع Google Cloud ← Clients وانسخ الـClient ID والسر من نفس العميل.';
+        } else if (/redirect_uri_mismatch/i.test(ploc) || /redirect_uri_mismatch/i.test(pbody)) {
+          early = 'رابط الإرجاع غير مسجّل في Google Cloud. أضف: ' + redirectUri;
+        }
+      } catch (e) { /* فحص الشبكة فشل — نكمل عادي */ }
+    }
+    if (early) return redirect('/?g=err&m=' + encodeURIComponent(early), []);
+
     const state = crypto.randomUUID();
     const url = new URL(AUTH_URL);
-    url.searchParams.set('client_id', env.GOOGLE_CLIENT_ID);
-    url.searchParams.set('redirect_uri', origin + '/api/google/callback');
+    url.searchParams.set('client_id', creds.id);
+    url.searchParams.set('redirect_uri', redirectUri);
     url.searchParams.set('response_type', 'code');
     url.searchParams.set('scope', SCOPES);
     url.searchParams.set('access_type', 'offline');
@@ -577,7 +767,13 @@ async function handleApi(request, env, pathname) {
     const state = u.searchParams.get('state');
     const saved = readCookie(request, 'gstate');
 
-    if (err) return redirect('/?g=err&m=' + encodeURIComponent(err), [cookie('gstate', '', -1)]);
+    if (err) {
+      const desc = u.searchParams.get('error_description') || '';
+      const errText = err === 'access_denied'
+        ? 'تم إلغاء منح الإذن من حساب Google (access_denied) — جرّب تختار حسابك وتضغط «السماح».'
+        : 'Google رد بخطأ: ' + err + (desc ? ' — ' + desc : '');
+      return redirect('/?g=err&m=' + encodeURIComponent(errText), [cookie('gstate', '', -1)]);
+    }
     if (!code) return redirect('/?g=err&m=' + encodeURIComponent('لم يصل رمز التفويض'), [cookie('gstate', '', -1)]);
     if (!saved || !state || saved !== state) {
       return redirect('/?g=err&m=' + encodeURIComponent('تحقّق الحالة غير صالح، حاول مرة أخرى'),
@@ -585,7 +781,7 @@ async function handleApi(request, env, pathname) {
     }
 
     try {
-      const tok = await exchangeCode(env, code, origin + '/api/google/callback');
+      const tok = await exchangeCode(env, code, originFor(request, env) + '/api/google/callback');
       const receivedRefresh = !!tok.refresh_token;
       const email = await fetchProfile(tok.access_token);
       let clientToken = crypto.randomUUID();

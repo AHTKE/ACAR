@@ -907,3 +907,22 @@ label.btn{cursor:pointer;user-select:none}
   #viewerDriveBar span{font-size:11.5px}
   #viewerDriveBtn{width:100%;padding:8px 12px}
 }
+
+/* ===== صندوق تشخيص ربط Google ===== */
+.drive-diag{
+  margin:12px 0;
+  padding:14px 16px;
+  border-radius:14px;
+  border:1px solid var(--line-strong, #33415a);
+  background:rgba(15,23,42,.6);
+  color:var(--text, #e2e8f0);
+  font-size:13px;
+  line-height:2;
+  word-break:break-word;
+}
+.drive-diag b{color:#fff}
+.drive-diag .diag-step{display:block;margin-top:6px;color:var(--muted,#9fadc2)}
+.drive-diag.is-ok{border-color:rgba(16,185,129,.55);background:rgba(16,185,129,.10)}
+.drive-diag.is-bad{border-color:rgba(248,113,113,.55);background:rgba(248,113,113,.10)}
+.drive-diag.is-warn{border-color:rgba(245,158,11,.55);background:rgba(245,158,11,.10)}
+.drive-diag code{background:rgba(79,140,255,.14);padding:2px 6px;border-radius:6px;font-family:inherit}

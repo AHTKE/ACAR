@@ -199,6 +199,43 @@
     startAutoPull();
   }
 
+  /* ---------- رسالة فشل الربط + فحص المفاتيح على شاشة البدء ---------- */
+  (function () {
+    var qs = String((typeof location !== 'undefined' && location.search) || '');
+    var mm = qs.match(/[?&]m=([^&]*)/);
+    var box = document.getElementById('gateError');
+    var saved = (typeof window !== 'undefined' && window.__googleOAuth) ? window.__googleOAuth : null;
+    var msg = mm ? mm[1] : '';
+    if (msg) { try { msg = decodeURIComponent(msg.replace(/\+/g, ' ')); } catch (e) {} }
+    else if (saved && saved.g === 'err' && saved.m) msg = String(saved.m);
+    if (box && msg) {
+      box.textContent = msg;
+      box.style.display = 'block';
+    }
+    var diagBtn = document.getElementById('gateDiag');
+    var diagBox = document.getElementById('gateDiagBox');
+    if (diagBtn && diagBox) {
+      diagBtn.addEventListener('click', function () {
+        if (typeof window.runGoogleCheck === 'function') {
+          window.runGoogleCheck(diagBtn, diagBox);
+          return;
+        }
+        diagBox.style.display = 'block';
+        diagBox.textContent = 'جارٍ الفحص…';
+        fetch('/api/google/check', { credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            diagBox.innerHTML = typeof window.renderGoogleDiag === 'function'
+              ? window.renderGoogleDiag(j)
+              : ('نتيجة الفحص: ' + (j && j.verdict ? j.verdict : 'غير معروفة'));
+          })
+          .catch(function () {
+            diagBox.textContent = 'تعذّر الوصول لمسار الفحص /api/google/check — تأكد إن مجلد api/ منشور على نفس الدومين.';
+          });
+      });
+    }
+  })();
+
   /* ---------- رابط المجلد العام ---------- */
   var input = document.getElementById('forceFolderUrl');
   try {
