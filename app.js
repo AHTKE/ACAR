@@ -969,12 +969,13 @@
     if ((c.notes || []).length) (c.notes || []).forEach(function (t) { noteRows.push([t]); });
     else noteRows.push(['لا توجد ملاحظات لهذا العميل']);
 
+    var who = c.name || '';
     return [
-      { name: 'البيانات الشخصية', rows: info, widths: [34, 44] },
-      { name: 'ملخص مالي', rows: moneyRows, widths: [42, 22] },
-      { name: 'التحصيل', rows: pays, widths: [18, 20, 16, 10, 18, 30] },
-      { name: 'المرسل من موارد', rows: sends, widths: [26, 16, 34, 10, 14, 16, 28] },
-      { name: 'الملاحظات', rows: noteRows, widths: [60] }
+      { name: 'البيانات الشخصية', title: 'بيانات العميل', subtitle: who, rows: info, widths: [34, 44] },
+      { name: 'ملخص مالي', title: 'الملخص المالي', subtitle: who, rows: moneyRows, widths: [42, 22], moneyCols: [1], totalRow: false },
+      { name: 'التحصيل', title: 'سجل التحصيل', subtitle: who + ' — ' + d.pays.length + ' دفعة', rows: pays, widths: [18, 20, 16, 10, 18, 30], moneyCols: [1, 2, 4], totalRow: false },
+      { name: 'المرسل من موارد', title: 'المرسل من موارد', subtitle: who, rows: sends, widths: [26, 16, 34, 10, 14, 16, 28], moneyCols: [5], totalRow: false },
+      { name: 'الملاحظات', title: 'ملاحظات العميل', subtitle: who, rows: noteRows, widths: [60], totalRow: false }
     ];
   }
 
@@ -985,6 +986,7 @@
       subtitle: 'نظام الإدارة المتكامل — ' + new Date().toLocaleDateString('ar-EG'),
       columns: ['البند', 'القيمة'],
       moneyCols: [1],
+      totalRow: false,
       rows: [
         ['اسم العميل', c.name || ''],
         ['الحالة', c.status || ''],
@@ -2251,10 +2253,11 @@
       tx.push([formatDate(o.date), '', o.desc || 'حركة من الدواخل والخوارج', '', '',
         o.type === 'in' ? amt : 0, o.type === 'out' ? amt : 0, running, 'الدواخل والخوارج']);
     });
+    var who = s.name || '';
     return [
-      { name: 'بيانات المورد', rows: info, widths: [28, 46] },
-      { name: 'الملخص', rows: sum, widths: [40, 22] },
-      { name: 'الحركات', rows: tx, widths: [16, 12, 34, 22, 24, 16, 16, 16, 30] }
+      { name: 'بيانات المورد', title: 'بيانات المورد', subtitle: who, rows: info, widths: [28, 46] },
+      { name: 'الملخص', title: 'الملخص المالي', subtitle: who, rows: sum, widths: [40, 22], moneyCols: [1], totalRow: false },
+      { name: 'الحركات', title: 'كشف حركات المورد', subtitle: who + ' — ' + d.tx.length + ' حركة', rows: tx, widths: [16, 12, 34, 22, 24, 16, 16, 16, 30], moneyCols: [5, 6, 7], totalRow: false }
     ];
   }
 
@@ -2278,6 +2281,7 @@
       subtitle: 'نظام الإدارة المتكامل — ' + new Date().toLocaleDateString('ar-EG'),
       columns: ['البند', 'الوارد', 'المدفوع'],
       moneyCols: [1, 2],
+      totalRow: false,
       rows: rows,
       summary: [
         { label: 'الوارد', value: money(d.incoming) },
@@ -3842,6 +3846,7 @@
       subtitle: 'عدد الدفعات المسجّلة: ' + count,
       columns: ['العميل', 'التاريخ', 'المبلغ قبل الدفعة', 'المدفوع', 'المرة', 'المتبقي بعد الدفعة', 'ملاحظة'],
       moneyCols: [2, 3, 5],
+      totalCols: [3],
       rows: rows,
       summary: [
         { label: 'عدد الدفعات', value: String(count) },
@@ -3868,6 +3873,7 @@
       subtitle: 'عدد الحركات: ' + list.length,
       columns: ['#', 'التاريخ', 'البيان', 'النوع', 'المبلغ', 'ملاحظة'],
       moneyCols: [4],
+      totalRow: false,   /* الدخل والخرج بيتجمّعوا في بطاقات الملخص لا في صف واحد */
       rows: rows,
       summary: [
         { label: 'عدد الحركات', value: String(list.length) },
@@ -3891,6 +3897,7 @@
       subtitle: 'عدد الشركاء: ' + list.length,
       columns: ['#', 'الشريك', 'الصفة', 'الحصة %', 'رأس المال', 'نصيبه من الأرباح', 'مسحوبات', 'الصافي المستحق'],
       moneyCols: [4, 5, 6, 7],
+      totalCols: [4, 5, 6, 7],
       rows: rows,
       summary: [
         { label: 'رأس المال', value: money(tc) },
@@ -3925,6 +3932,11 @@
     };
   }
 
+  function numOrText(v) {
+    var n = Number(String(v == null ? '' : v).replace(/,/g, ''));
+    return isFinite(n) ? n : (v == null ? '' : v);
+  }
+
   function reportAll() {
     var cust = reportCustomers(), sup = reportSuppliers(), col = reportCollection();
     var led = reportLedger(), par = reportPartners(), asc = reportAssociations();
@@ -3936,10 +3948,16 @@
       ['الشركاء', getPartners().length, par.summary[0].value, par.summary[3].value],
       ['الجمعيات', getMembers().length, asc.summary[2].value, asc.summary[4].value]
     ];
+    /* قيم رقمية حقيقية عشان Excel ينسّقها بالفواصل تلقائياً */
+    rows = rows.map(function (r) {
+      return [r[0], r[1], numOrText(r[2]), numOrText(r[3])];
+    });
     return {
       title: 'ملخّص التطبيق',
       subtitle: 'نظام الإدارة المتكامل — ' + new Date().toLocaleDateString('ar-EG'),
       columns: ['القسم', 'العدد', 'الإجمالي / المستحق', 'المتبقي / الصافي'],
+      moneyCols: [2, 3],
+      totalRow: false,
       rows: rows,
       summary: [
         { label: 'الأقسام', value: String(EXPORT_SECTIONS.length) },
@@ -3985,13 +4003,22 @@
   function reportToSheet(report) {
     return {
       name: report.title,
-      rows: [report.columns].concat(report.rows),
-      widths: reportWidths(report)
+      title: report.title,
+      subtitle: report.subtitle || '',
+      columns: report.columns,
+      rows: report.rows,
+      widths: reportWidths(report),
+      moneyCols: report.moneyCols || [],
+      summary: report.summary || [],
+      totalRow: true
     };
   }
 
+  /* ملف «كامل» = ورقة ملخص + ورقة لكل قسم */
   function allSheets() {
-    return EXPORT_SECTIONS.map(function (s) { return reportToSheet(buildReport(s.key)); });
+    var sheets = [reportToSheet(reportAll())];
+    EXPORT_SECTIONS.forEach(function (s) { sheets.push(reportToSheet(buildReport(s.key))); });
+    return sheets;
   }
 
   /* ---------- تنفيذ التصدير ---------- */

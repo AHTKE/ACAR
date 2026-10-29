@@ -109,11 +109,59 @@
   var STYLES_XML =
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
-    '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>' +
-    '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>' +
-    '<borders count="1"><border/></borders>' +
+    '<fonts count="6">' +
+      '<font><sz val="11"/><color rgb="FF0F172A"/><name val="Calibri"/></font>' +
+      '<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>' +
+      '<font><i/><sz val="10"/><color rgb="FF475569"/><name val="Calibri"/></font>' +
+      '<font><b/><sz val="17"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>' +
+      '<font><b/><sz val="11"/><color rgb="FF312E81"/><name val="Calibri"/></font>' +
+      '<font><b/><sz val="11"/><color rgb="FF0F172A"/><name val="Calibri"/></font>' +
+    '</fonts>' +
+    '<fills count="6">' +
+      '<fill><patternFill patternType="none"/></fill>' +
+      '<fill><patternFill patternType="gray125"/></fill>' +
+      '<fill><patternFill patternType="solid"><fgColor rgb="FF4F46E5"/><bgColor indexed="64"/></patternFill></fill>' +
+      '<fill><patternFill patternType="solid"><fgColor rgb="FFEEF2FF"/><bgColor indexed="64"/></patternFill></fill>' +
+      '<fill><patternFill patternType="solid"><fgColor rgb="FFF8FAFC"/><bgColor indexed="64"/></patternFill></fill>' +
+      '<fill><patternFill patternType="solid"><fgColor rgb="FFE0E7FF"/><bgColor indexed="64"/></patternFill></fill>' +
+    '</fills>' +
+    '<borders count="3">' +
+      '<border><left/><right/><top/><bottom/><diagonal/></border>' +
+      '<border><left style="thin"><color rgb="FFD1D5DB"/></left><right style="thin"><color rgb="FFD1D5DB"/></right>' +
+        '<top style="thin"><color rgb="FFD1D5DB"/></top><bottom style="thin"><color rgb="FFD1D5DB"/></bottom><diagonal/></border>' +
+      '<border><left style="thin"><color rgb="FFC7D2FE"/></left><right style="thin"><color rgb="FFC7D2FE"/></right>' +
+        '<top style="medium"><color rgb="FF4F46E5"/></top><bottom style="thin"><color rgb="FFC7D2FE"/></bottom><diagonal/></border>' +
+    '</borders>' +
     '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-    '<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>' +
+    '<cellXfs count="14">' +
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+      '<xf numFmtId="0" fontId="3" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1">' +
+        '<alignment horizontal="center" vertical="center" readingOrder="2"/></xf>' +
+      '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1">' +
+        '<alignment horizontal="center" vertical="center" readingOrder="2"/></xf>' +
+      '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">' +
+        '<alignment horizontal="center" vertical="center" wrapText="1" readingOrder="2"/></xf>' +
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1">' +
+        '<alignment horizontal="right" vertical="center" wrapText="1" readingOrder="2"/></xf>' +
+      '<xf numFmtId="4" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyBorder="1" applyAlignment="1">' +
+        '<alignment horizontal="right" vertical="center" readingOrder="2"/></xf>' +
+      '<xf numFmtId="0" fontId="0" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">' +
+        '<alignment horizontal="right" vertical="center" wrapText="1" readingOrder="2"/></xf>' +
+      '<xf numFmtId="4" fontId="0" fillId="4" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">' +
+        '<alignment horizontal="right" vertical="center" readingOrder="2"/></xf>' +
+      '<xf numFmtId="0" fontId="5" fillId="5" borderId="2" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">' +
+        '<alignment horizontal="right" vertical="center" readingOrder="2"/></xf>' +
+      '<xf numFmtId="4" fontId="5" fillId="5" borderId="2" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">' +
+        '<alignment horizontal="right" vertical="center" readingOrder="2"/></xf>' +
+      '<xf numFmtId="0" fontId="4" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">' +
+        '<alignment horizontal="right" vertical="center" readingOrder="2"/></xf>' +
+      '<xf numFmtId="0" fontId="5" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1">' +
+        '<alignment horizontal="right" vertical="center" readingOrder="2"/></xf>' +
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1">' +
+        '<alignment horizontal="right" vertical="center" readingOrder="2"/></xf>' +
+      '<xf numFmtId="0" fontId="0" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">' +
+        '<alignment horizontal="right" vertical="center" readingOrder="2"/></xf>' +
+    '</cellXfs>' +
     '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
     '</styleSheet>';
 
@@ -138,35 +186,159 @@
     return s;
   }
 
-  function sheetXml(rows, widths) {
-    var out = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
-      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'];
+  /**
+   * ورقة Excel منسّقة بالكامل:
+   *   { name, title?, subtitle?, columns?, rows, widths?, moneyCols?, summary?, totalRow? }
+   *   • columns موجودة  → صف رأس ملوّن + صفوف متبادلة + إجمالي + ملخص
+   *   • columns غير موجودة → أول صف في rows يُعتبر رأساً (توافق النسخ القديمة)
+   */
+  function sheetXml(sheet) {
+    var all = sheet.rows || [];
+    var hasCols = !!(sheet.columns && sheet.columns.length);
+    var header = hasCols ? sheet.columns.slice() : (all[0] ? all[0].slice() : []);
+    var data = hasCols ? all.slice() : all.slice(1);
+    var money = (sheet.moneyCols || []).slice();
+    var totalCols = (sheet.totalCols || money).slice();
 
-    if (widths && widths.length) {
-      out.push('<cols>');
-      widths.forEach(function (w, i) {
-        out.push('<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + Number(w) + '" customWidth="1"/>');
-      });
-      out.push('</cols>');
+    var colCount = header.length;
+    data.forEach(function (r) { if (r && r.length > colCount) colCount = r.length; });
+    (sheet.summary || []).forEach(function () { if (colCount < 2) colCount = 2; });
+    if (!colCount) colCount = 1;
+    var lastCol = colName(colCount);
+
+    var out = [];
+    var merges = [];
+    var r = 0;
+
+    function cellXml(ref, value, style) {
+      if (typeof value === 'number' && isFinite(value)) {
+        return '<c r="' + ref + '" s="' + style + '"><v>' + value + '</v></c>';
+      }
+      var str = value == null ? '' : String(value);
+      if (!str) return '<c r="' + ref + '" s="' + style + '"/>';
+      return '<c r="' + ref + '" s="' + style + '" t="inlineStr"><is><t xml:space="preserve">' +
+        xmlEsc(str) + '</t></is></c>';
     }
 
-    out.push('<sheetData>');
-    (rows || []).forEach(function (row, ri) {
-      var r = ri + 1;
-      out.push('<row r="' + r + '">');
-      (row || []).forEach(function (cell, ci) {
-        var ref = colName(ci + 1) + r;
-        if (typeof cell === 'number' && isFinite(cell)) {
-          out.push('<c r="' + ref + '"><v>' + cell + '</v></c>');
-        } else {
-          out.push('<c r="' + ref + '" t="inlineStr"><is><t xml:space="preserve">' +
-            xmlEsc(cell == null ? '' : cell) + '</t></is></c>');
-        }
-      });
-      out.push('</row>');
+    function pushRow(cellsArr, height) {
+      r++;
+      out.push('<row r="' + r + '"' + (height ? ' ht="' + height + '" customHeight="1"' : '') + '>' +
+        cellsArr.join('') + '</row>');
+      return r;
+    }
+
+    function blankRow(height) { pushRow([], height || 6); }
+
+    function mergedRow(text, style, height) {
+      var rr = r + 1;
+      pushRow([cellXml('A' + rr, text, style)], height);
+      if (colCount > 1) merges.push('A' + rr + ':' + lastCol + rr);
+      return rr;
+    }
+
+    /* ---------- رأس الورقة ---------- */
+    if (sheet.title) mergedRow(sheet.title, 1, 42);
+    if (sheet.subtitle) mergedRow(sheet.subtitle, 2, 24);
+    mergedRow('نظام الإدارة المتكامل — تاريخ الإصدار: ' + new Date().toLocaleString('ar-EG'), 2, 22);
+    blankRow(8);
+
+    /* ---------- رأس الجدول ---------- */
+    var headerRow = 0, firstDataRow = 0, lastDataRow = 0;
+    if (header.length) {
+      var hCells = [];
+      for (var i = 0; i < colCount; i++) {
+        hCells.push(cellXml(colName(i + 1) + (r + 1), header[i] == null ? '' : header[i], 3));
+      }
+      headerRow = pushRow(hCells, 30);
+      firstDataRow = headerRow + 1;
+    }
+
+    /* ---------- الصفوف ---------- */
+    data.forEach(function (row, ri) {
+      var alt = ri % 2 === 1;
+      var cells = [];
+      for (var ci = 0; ci < colCount; ci++) {
+        var v = row ? row[ci] : '';
+        var numeric = typeof v === 'number' && isFinite(v);
+        var isMoney = money.indexOf(ci) !== -1;
+        var style = numeric
+          ? (isMoney ? (alt ? 7 : 5) : (alt ? 13 : 12))
+          : (alt ? 6 : 4);
+        cells.push(cellXml(colName(ci + 1) + (r + 1), v, style));
+      }
+      lastDataRow = pushRow(cells, 24);
     });
-    out.push('</sheetData></worksheet>');
-    return out.join('');
+
+    /* ---------- صف الإجمالي ---------- */
+    if (sheet.totalRow !== false && data.length && totalCols.length) {
+      var sums = {};
+      totalCols.forEach(function (ci) {
+        var s = 0, any = false;
+        data.forEach(function (row) {
+          var v = row ? row[ci] : null;
+          if (typeof v === 'number' && isFinite(v)) { s += v; any = true; }
+        });
+        if (any) sums[ci] = Math.round(s * 100) / 100;
+      });
+      if (Object.keys(sums).length) {
+        blankRow(6);
+        var tRow = r + 1;
+        var tCells = [];
+        var labelDone = false;
+        for (var cj = 0; cj < colCount; cj++) {
+          var isSum = sums.hasOwnProperty(cj);
+          var val = isSum ? sums[cj] : '';
+          var st = isSum ? 9 : 8;
+          if (!labelDone) { val = 'الإجمالي'; st = 8; labelDone = true; }
+          tCells.push(cellXml(colName(cj + 1) + tRow, val, st));
+        }
+        pushRow(tCells, 28);
+      }
+    }
+
+    /* ---------- بطاقات الملخص ---------- */
+    if (sheet.summary && sheet.summary.length) {
+      blankRow(10);
+      var sumRow = r + 1;
+      pushRow([cellXml('A' + sumRow, 'ملخّص التقرير', 10), cellXml('B' + sumRow, '', 10)], 24);
+      if (colCount > 1) merges.push('A' + sumRow + ':B' + sumRow);
+      (sheet.summary || []).forEach(function (s) {
+        var rr = r + 1;
+        pushRow([
+          cellXml('A' + rr, s.label || '', 10),
+          cellXml('B' + rr, s.value == null ? '' : s.value, 11)
+        ], 22);
+      });
+    }
+
+    /* ---------- تجميع ورقة العمل ---------- */
+    var sheetPr = '<sheetPr><tabColor rgb="FF4F46E5"/></sheetPr>';
+    var sheetViews = '<sheetViews><sheetView rightToLeft="1" workbookViewId="0" showGridLines="0">' +
+      (headerRow ? '<pane ySplit="' + headerRow + '" topLeftCell="A' + (headerRow + 1) +
+        '" activePane="bottomLeft" state="frozen"/>' : '') +
+      '</sheetView></sheetViews>';
+    var formatPr = '<sheetFormatPr defaultRowHeight="22" baseColWidth="12"/>';
+    var colsXml = '';
+    if (sheet.widths && sheet.widths.length) {
+      colsXml = '<cols>' + sheet.widths.map(function (w, i) {
+        return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + Number(w) +
+          '" customWidth="1"/>';
+      }).join('') + '</cols>';
+    }
+    var autoFilter = (headerRow && lastDataRow >= firstDataRow)
+      ? '<autoFilter ref="A' + headerRow + ':' + lastCol + lastDataRow + '"/>' : '';
+    var mergesXml = merges.length
+      ? '<mergeCells count="' + merges.length + '">' +
+        merges.map(function (m) { return '<mergeCell ref="' + m + '"/>'; }).join('') +
+        '</mergeCells>'
+      : '';
+
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      sheetPr + sheetViews + formatPr + colsXml +
+      '<sheetData>' + out.join('') + '</sheetData>' +
+      autoFilter + mergesXml +
+      '</worksheet>';
   }
 
   /**
@@ -222,7 +394,7 @@
     list.forEach(function (s, k) {
       files.push({
         name: 'xl/worksheets/sheet' + (k + 1) + '.xml',
-        bytes: utf8(sheetXml(s.rows, s.widths))
+        bytes: utf8(sheetXml(s))
       });
     });
 
@@ -377,14 +549,24 @@
   function drawReportPages(report) {
     if (!report || !hasCanvas()) return null;
 
-    var W = CANVAS_W, H = 1755, M = 64;
+    var W = CANVAS_W, H = 1755, M = 56;
     var pages = [];
     var canvas = null, ctx = null, y = 0;
     var cols = report.columns || [];
     var grid = buildGrid(report);
-    var headerH = 62, rowH = 46;
+    var moneyIdx = report.moneyCols || [];
+    var totalIdx = report.totalCols || moneyIdx;
+    var showTotals = report.totalRow !== false;
+    var headerH = 58, rowH = 44;
 
-    /* نقيس العرض المطلوك لكل عمود — كل خلية في سطر واحد كامل بدون تقسيم */
+    var C = {
+      ink: '#0f172a', body: '#1f2937', soft: '#475569', muted: '#94a3b8',
+      line: '#e2e8f0', brand: '#4f46e5', brand2: '#312e81', brandSoft: '#eef2ff',
+      zebra: '#f8fafc', white: '#ffffff', green: '#047857', red: '#b91c1c',
+      cardBg: '#f8faff', cardLine: '#dfe5ff'
+    };
+
+    /* ---------- قياس الأعمدة ---------- */
     var probe = document.createElement('canvas');
     probe.width = 4; probe.height = 4;
     var pctx = probe.getContext('2d');
@@ -399,11 +581,11 @@
           if (w > max) max = w;
         }
         pctx.font = fHead;
-        return max + 24;
+        return max + 26;
       });
     }
 
-    var MAX_W = 4600; /* أقصى عرض للصفحة — بعدها نصغّر الخط بدل تقسيم النص */
+    var MAX_W = 4600;
     var fHeader = HEADER_FONT, fBody = BODY_FONT;
     var widths = measureWidths(fHeader, fBody);
     var sum = 0;
@@ -417,86 +599,203 @@
       sum = 0;
       widths.forEach(function (w) { sum += w; });
     }
-
-    /* الصفحة تتّسع لعرض المحتوى بدل قصّه */
     if (sum + 2 * M > W) W = Math.ceil(sum + 2 * M);
 
-    /* محاذاة الأعمدة من اليمين لليسار (عربي) */
     var rightEdges = [];
     (function () {
       var acc = W - M;
       for (var i = 0; i < widths.length; i++) { rightEdges.push(acc); acc -= widths[i]; }
     })();
+    var tableW = W - 2 * M;
 
-    function newPage(isFirst) {
-      canvas = document.createElement('canvas');
-      canvas.width = W; canvas.height = H;
-      ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, W, H);
-      pages.push(canvas);
-      y = M;
+    var stamp = new Date().toLocaleString('ar-EG');
+    var totals = (function () {
+      var sums = {}, has = false;
+      totalIdx.forEach(function (ci) {
+        var s = 0, any = false;
+        (report.rows || []).forEach(function (row) {
+          var v = row ? row[ci] : null;
+          if (typeof v === 'number' && isFinite(v)) { s += v; any = true; }
+        });
+        if (any) { sums[ci] = s; has = true; }
+      });
+      return has ? sums : null;
+    })();
+
+    function roundRect(c, x0, y0, w0, h0, rr) {
+      c.beginPath();
+      c.moveTo(x0 + rr, y0);
+      c.lineTo(x0 + w0 - rr, y0);
+      c.quadraticCurveTo(x0 + w0, y0, x0 + w0, y0 + rr);
+      c.lineTo(x0 + w0, y0 + h0 - rr);
+      c.quadraticCurveTo(x0 + w0, y0 + h0, x0 + w0 - rr, y0 + h0);
+      c.lineTo(x0 + rr, y0 + h0);
+      c.quadraticCurveTo(x0, y0 + h0, x0, y0 + h0 - rr);
+      c.lineTo(x0, y0 + rr);
+      c.quadraticCurveTo(x0, y0, x0 + rr, y0);
+      c.closePath();
+    }
+
+    /* ---------- رأس الصفحة (هوية التطبيق) ---------- */
+    function drawBand(isFirst) {
+      var bh = isFirst ? 134 : 88;
+      var g = ctx.createLinearGradient(0, 0, W, bh);
+      g.addColorStop(0, C.brand2);
+      g.addColorStop(1, C.brand);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, bh);
+
+      /* شريط تمييز سفلي */
+      ctx.fillStyle = '#a5b4fc';
+      ctx.fillRect(0, bh - 5, W, 5);
 
       ctx.textAlign = 'right';
       ctx.direction = 'rtl';
+      if (isFirst) {
+        ctx.fillStyle = 'rgba(255,255,255,.78)';
+        ctx.font = '600 20px ' + FONT;
+        ctx.fillText('نظام الإدارة المتكامل', W - M, 38);
 
-      ctx.fillStyle = '#111827';
-      ctx.font = '800 40px ' + FONT;
-      ctx.fillText(report.title || '', W - M, y + 40);
-      y += 54;
+        ctx.fillStyle = C.white;
+        ctx.font = '800 40px ' + FONT;
+        ctx.fillText(report.title || '', W - M, 88);
 
-      if (report.subtitle) {
-        ctx.fillStyle = '#6b7280';
-        ctx.font = '400 22px ' + FONT;
-        ctx.fillText(report.subtitle, W - M, y + 24);
-        y += 40;
+        ctx.textAlign = 'left';
+        ctx.fillStyle = 'rgba(255,255,255,.82)';
+        ctx.font = '400 18px ' + FONT;
+        ctx.fillText(stamp, M, 40);
+        if (report.subtitle) {
+          ctx.fillStyle = 'rgba(255,255,255,.92)';
+          ctx.font = '400 19px ' + FONT;
+          ctx.fillText(report.subtitle, M, 76);
+        }
+      } else {
+        ctx.fillStyle = C.white;
+        ctx.font = '800 28px ' + FONT;
+        ctx.fillText((report.title || '') + ' — تكملة', W - M, 56);
+
+        ctx.textAlign = 'left';
+        ctx.fillStyle = 'rgba(255,255,255,.8)';
+        ctx.font = '400 16px ' + FONT;
+        ctx.fillText(stamp, M, 56);
       }
+      ctx.textAlign = 'right';
+      y = bh + 30;
+    }
 
-      if (isFirst && report.summary && report.summary.length) {
-        var boxW = Math.floor((W - 2 * M - (report.summary.length - 1) * 14) / report.summary.length);
-        var boxX = W - M;
-        report.summary.forEach(function (s) {
-          var x0 = boxX - boxW;
-          ctx.fillStyle = '#f3f4f6';
-          ctx.fillRect(x0, y, boxW, 84);
-          ctx.fillStyle = '#6b7280';
-          ctx.font = '400 18px ' + FONT;
-          ctx.fillText(String(s.label), boxX - 16, y + 30);
-          ctx.fillStyle = '#111827';
-          ctx.font = '800 26px ' + FONT;
-          ctx.fillText(String(s.value), boxX - 16, y + 66);
-          boxX = x0 - 14;
-        });
-        y += 100;
-      }
+    /* ---------- بطاقات الملخص ---------- */
+    function drawCards() {
+      var list = report.summary || [];
+      if (!list.length) return;
+      var gap = 14;
+      var gapW = tableW - gap * (list.length - 1);
+      var cw = Math.floor(gapW / list.length);
+      var ch = 96;
+      var xRight = W - M;
+      var accents = [C.brand, C.green, C.red, C.brand2, C.soft, C.green];
+      list.forEach(function (s, i) {
+        var x0 = xRight - cw;
+        roundRect(ctx, x0, y, cw, ch, 14);
+        ctx.fillStyle = C.cardBg;
+        ctx.fill();
+        ctx.strokeStyle = C.cardLine;
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
 
-      ctx.fillStyle = '#4f46e5';
-      ctx.fillRect(M, y, W - 2 * M, headerH);
-      ctx.fillStyle = '#ffffff';
+        /* شريط لوني أعلى البطاقة */
+        ctx.fillStyle = accents[i % accents.length];
+        roundRect(ctx, x0 + 1.5, y + 1.5, cw - 3, 5, 3);
+        ctx.fill();
+
+        ctx.textAlign = 'right';
+        ctx.fillStyle = C.soft;
+        ctx.font = '400 17px ' + FONT;
+        ctx.fillText(String(s.label || ''), x0 + cw - 14, y + 34);
+
+        ctx.fillStyle = (i === 1 ? C.green : i === 2 ? C.red : C.ink);
+        ctx.font = '800 25px ' + FONT;
+        ctx.fillText(String(s.value == null ? '' : s.value), x0 + cw - 14, y + 72);
+
+        xRight = x0 - gap;
+      });
+      y += ch + 26;
+    }
+
+    /* ---------- رأس جدول البيانات ---------- */
+    function drawTableHead() {
+      roundRect(ctx, M, y, tableW, headerH, 12);
+      ctx.fillStyle = C.brand;
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(255,255,255,.16)';
+      ctx.fillRect(M + 12, y + headerH - 6, tableW - 24, 3);
+
+      ctx.fillStyle = C.white;
       ctx.font = fHeader;
+      ctx.textAlign = 'right';
       cols.forEach(function (label, i) {
-        ctx.fillText(String(label == null ? '' : label), rightEdges[i] - 11, y + headerH / 2 + 7);
+        ctx.fillText(String(label == null ? '' : label), rightEdges[i] - 12, y + headerH / 2 + 7);
       });
       y += headerH;
     }
 
+    /* ---------- صف الإجمالي ---------- */
+    function drawTotals() {
+      if (!totals || !showTotals) return;
+      if (y + 52 > H - 84) newPage(false);
+      ctx.fillStyle = C.brandSoft;
+      ctx.fillRect(M, y, tableW, 46);
+      ctx.fillStyle = C.brand;
+      ctx.fillRect(M, y, tableW, 3);
+
+      ctx.font = '700 19px ' + FONT;
+      ctx.textAlign = 'right';
+      ctx.fillStyle = C.brand2;
+      ctx.fillText('الإجمالي', rightEdges[0] - 12, y + 31);
+
+      cols.forEach(function (label, i) {
+        if (!totals.hasOwnProperty(i)) return;
+        ctx.fillStyle = C.brand2;
+        ctx.font = '700 19px ' + FONT;
+        ctx.fillText(totals[i].toLocaleString('en-US', { maximumFractionDigits: 2 }),
+          rightEdges[i] - 12, y + 31);
+      });
+      y += 46;
+    }
+
+    /* ---------- صفحة جديدة ---------- */
+    function newPage(isFirst) {
+      canvas = document.createElement('canvas');
+      canvas.width = W; canvas.height = H;
+      ctx = canvas.getContext('2d');
+      ctx.fillStyle = C.white;
+      ctx.fillRect(0, 0, W, H);
+      pages.push(canvas);
+
+      ctx.textAlign = 'right';
+      ctx.direction = 'rtl';
+      drawBand(isFirst);
+      if (isFirst) drawCards();
+      drawTableHead();
+    }
+
     newPage(true);
 
+    /* ---------- الصفوف ---------- */
     grid.forEach(function (row, ri) {
-      if (y + rowH > H - M) newPage(false);
-
+      if (y + rowH > H - 96) newPage(false);
       if (ri % 2 === 1) {
-        ctx.fillStyle = '#f9fafb';
-        ctx.fillRect(M, y, W - 2 * M, rowH);
+        ctx.fillStyle = C.zebra;
+        ctx.fillRect(M, y, tableW, rowH);
       }
-
       ctx.font = fBody;
+      ctx.fillStyle = C.body;
+      ctx.textAlign = 'right';
       cols.forEach(function (label, i) {
-        ctx.fillStyle = '#111827';
-        ctx.fillText(row[i], rightEdges[i] - 11, y + rowH / 2 + 7);
+        ctx.fillText(row[i], rightEdges[i] - 12, y + rowH / 2 + 7);
       });
 
-      ctx.strokeStyle = '#e5e7eb';
+      ctx.strokeStyle = C.line;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(M, y + rowH + 0.5);
@@ -507,21 +806,45 @@
     });
 
     if (!grid.length) {
-      ctx.fillStyle = '#6b7280';
+      ctx.fillStyle = C.muted;
       ctx.font = '400 22px ' + FONT;
       ctx.textAlign = 'center';
-      ctx.fillText('لا توجد بيانات', W / 2, y + 40);
+      ctx.fillText('لا توجد بيانات مسجّلة في هذا القسم', W / 2, y + 46);
+      y += 70;
+    } else {
+      drawTotals();
     }
 
-    /* تذييل: رقم الصفحة */
+    /* ---------- تذييل كل صفحة ---------- */
     pages.forEach(function (cv, i) {
       var c2 = cv.getContext('2d');
-      c2.fillStyle = '#9ca3af';
-      c2.font = '400 18px ' + FONT;
-      c2.textAlign = 'left';
-      c2.fillText('صفحة ' + (i + 1) + ' من ' + pages.length, M, cv.height - 34);
+      var fy = cv.height - 52;
+      c2.strokeStyle = C.line;
+      c2.lineWidth = 1;
+      c2.beginPath();
+      c2.moveTo(M, fy - 18.5);
+      c2.lineTo(cv.width - M, fy - 18.5);
+      c2.stroke();
+
+      c2.fillStyle = C.muted;
+      c2.font = '400 16px ' + FONT;
       c2.textAlign = 'right';
-      c2.fillText(report.title || '', cv.width - M, cv.height - 34);
+      c2.fillText('نظام الإدارة المتكامل — ' + (report.title || ''), cv.width - M, fy);
+
+      c2.textAlign = 'center';
+      c2.fillStyle = C.soft;
+      c2.fillText(stamp, cv.width / 2, fy);
+
+      /* شارة رقم الصفحة */
+      var lbl = 'صفحة ' + (i + 1) + ' من ' + pages.length;
+      c2.font = '700 15px ' + FONT;
+      var lw = c2.measureText(lbl).width + 24;
+      roundRect(c2, M, fy - 20, lw, 26, 8);
+      c2.fillStyle = C.brandSoft;
+      c2.fill();
+      c2.fillStyle = C.brand2;
+      c2.textAlign = 'center';
+      c2.fillText(lbl, M + lw / 2, fy - 1);
     });
 
     return pages;
