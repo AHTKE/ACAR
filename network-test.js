@@ -90,10 +90,29 @@ async function unlock(sel) {
     f.incoming.value = '3000';
     f.paid.value = '0';
     f.to.value = 'أحمد محمد علي';
+    f.work.value = 'بلاط محارة';
     $('#supTxForm').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await wait(120);
     ok('حقل «ورّد إلى» اتسجل في صف الجدول',
        ($('#supTxTable tbody').textContent || '').indexOf('أحمد محمد علي') > -1);
+    ok('الشغلانة اتسجلت مع التوريد',
+       ($('#supTxTable tbody').textContent || '').indexOf('بلاط محارة') > -1);
+
+    /* الشغلانة إجبارية مع العميل: من غيرها الرفض */
+    const f1b = $('#supTxForm').elements;
+    f1b.date.value = '2026-10-27';
+    f1b.desc.value = 'توريد بدون شغلانة';
+    f1b.incoming.value = '500';
+    f1b.paid.value = '0';
+    f1b.to.value = 'أحمد محمد علي';
+    f1b.work.value = '';
+    $('#supTxForm').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await wait(120);
+    ok('الشغلانة الإجبارية رفضت الحفظ',
+       !$('#supTxError').hidden && ($('#supTxError').textContent || '').indexOf('الشغلانة') > -1,
+       $('#supTxError').textContent);
+    ok('الحركة الناقصة ما اتضافتش',
+       (($('#supTxTable tbody').textContent || '').match(/توريد بدون شغلانة/g) || []).length === 0);
 
     await openDetails();
     ok('الخارج لم يزيد من التوريد (غير نقدي)', box('إجمالي المبلغ الخارج') === out0,

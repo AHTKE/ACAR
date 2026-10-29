@@ -835,3 +835,75 @@ label.btn{cursor:pointer;user-select:none}
 .auth-gate__status{min-height:20px;font-size:13px;color:var(--muted)}
 .auth-gate__status.is-error{color:#fca5a5}
 .auth-gate__status.is-ok{color:#7aa8ff}
+
+/* ===== اقتراحات الشغلانات (أثناء الكتابة + درج الشغلانات) ===== */
+.field{position:relative}
+.suggest-pop{
+  position:absolute;inset-inline:0;top:100%;margin-top:6px;z-index:70;
+  background:#111826;border:1px solid rgba(79,140,255,.4);border-radius:14px;
+  box-shadow:0 18px 40px rgba(0,0,0,.5);max-height:236px;overflow:auto;padding:6px;
+}
+.suggest-pop--tools{inset-inline-end:0;inset-inline-start:auto;top:calc(100% + 8px);width:min(340px,84vw)}
+.suggest-pop button{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  width:100%;padding:10px 12px;background:transparent;border:0;border-radius:10px;
+  color:#e6edf7;font-size:14px;text-align:right;cursor:pointer;
+}
+.suggest-pop button:hover,.suggest-pop button:focus-visible{background:rgba(79,140,255,.18);outline:none}
+.suggest-pop button small{color:#8b98ab;font-size:11.5px;white-space:nowrap}
+.suggest-pop button.is-active{background:rgba(79,140,255,.22)}
+.suggest-pop .suggest-empty{padding:10px 12px;color:#8b98ab;font-size:13px}
+.suggest-pop .suggest-add{color:#7aa8ff;font-weight:700}
+
+/* ===== الحقول المخصّصة (بيانات إضافية) ===== */
+.custom-fields{display:flex;flex-wrap:wrap;gap:8px}
+.custom-fields:empty{display:none}
+.custom-fields .cf-input{min-width:190px;flex:1 1 220px;gap:6px}
+.custom-fields .cf-input span{font-size:12.5px;color:#8b98ab}
+.custom-fields .cf-input span i{font-style:normal;color:#fcd34d;font-size:11px}
+.cf-chip{display:inline-flex;align-items:center;gap:8px;padding:7px 11px;border-radius:12px;border:1px dashed rgba(79,140,255,.45);background:rgba(79,140,255,.08);font-size:13px;color:#e6edf7}
+.cf-chip i{font-style:normal;color:#fcd34d;font-size:11px}
+.cf-chip button{background:transparent;border:0;color:#f87171;font-size:16px;cursor:pointer;line-height:1;padding:0 2px}
+
+/* ===== شريط وضع المشاهد (زر جوجل درايف في وسط الشاشة) ===== */
+#viewerDriveBar{
+  display:none;
+  position:fixed;
+  top:14px;
+  left:50%;
+  transform:translateX(-50%);
+  z-index:99998;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+  justify-content:center;
+  max-width:min(94vw,720px);
+  padding:10px 16px;
+  border-radius:16px;
+  border:1px solid rgba(79,140,255,.55);
+  background:linear-gradient(180deg,rgba(21,27,38,.98),rgba(10,14,21,.98));
+  box-shadow:0 10px 30px rgba(0,0,0,.45);
+}
+#viewerDriveBar span{
+  color:#cfe0f7;
+  font-size:13px;
+  line-height:1.6;
+}
+#viewerDriveBtn{
+  padding:9px 18px;
+  border:none;
+  border-radius:10px;
+  background:linear-gradient(90deg,#4f8cff,#7aa8ff);
+  color:#fff;
+  font-family:inherit;
+  font-weight:700;
+  font-size:13px;
+  cursor:pointer;
+  white-space:nowrap;
+}
+#viewerDriveBtn:hover{filter:brightness(1.08)}
+@media (max-width:520px){
+  #viewerDriveBar{top:8px;padding:8px 12px;gap:8px}
+  #viewerDriveBar span{font-size:11.5px}
+  #viewerDriveBtn{width:100%;padding:8px 12px}
+}

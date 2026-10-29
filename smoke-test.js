@@ -169,6 +169,17 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   ok('شاشة الدواخل والخوارج فتحت', $('#view-ledger').classList.contains('is-active'));
   ok('لا خطأ عند فتحها', errors.length === 0, errors.join(' | '));
 
+  /* العمليات التلقائية مفعّلة افتراضياً — نطفيها الأول لفحوص الحركات اليدوية */
+  const autoTg = $('#ledgerAutoToggle');
+  ok('مبدّل العمليات التلقائية موجود', !!autoTg);
+  if (autoTg && autoTg.checked) {
+    autoTg.checked = false;
+    autoTg.dispatchEvent(new window.Event('change', { bubbles: true }));
+    await wait(40);
+  }
+  ok('لما يتقفل بيتخفى جدول التلقائي', $$('#ledgerTbody tr[data-ledger-auto]').length === 0,
+     'auto=' + $$('#ledgerTbody tr[data-ledger-auto]').length);
+
   const ledTotals = () => $$('#ledgerSummary b').map((b) => b.textContent);
   ok('إجمالي الدواخل محسوب من الحركات', ledTotals()[0] === '2,420,000', ledTotals()[0]);
   ok('إجمالي الخوارج محسوب من الحركات', ledTotals()[1] === '1,200,000', ledTotals()[1]);
@@ -231,6 +242,24 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   ok('العدّاد رجع 5', $('#ledgerCount').textContent === '5 حركة', $('#ledgerCount').textContent);
   ok('اتحفظ في localStorage بعد الحذف', JSON.parse(window.localStorage.getItem('app_ledger')).length === 5);
   ok('لا أخطاء في كل قسم الدواخل والخوارج', errors.length === 0, errors.join(' | '));
+
+  /* العمليات التلقائية: كل دفع/قبض فعلي يظهر هنا */
+  const manualTotals = ledTotals().slice();
+  const manualRows = $$('#ledgerTbody tr').length;
+  autoTg.checked = true;
+  autoTg.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await wait(40);
+  const autoRows = $$('#ledgerTbody tr[data-ledger-auto]');
+  ok('العمليات التلقائية ظهرت في الجدول', autoRows.length > 0, 'auto=' + autoRows.length);
+  ok('فيها صفوف تحصيل من عملاء', Array.from(autoRows).some((r) => r.textContent.indexOf('تحصيل من العميل') > -1));
+  ok('فيها صفوف مدفوع للموردين', Array.from(autoRows).some((r) => r.textContent.indexOf('مدفوع للمورد') > -1));
+  ok('الصفوف التلقائية بدون تعديل/حذف (من مصدرها)',
+     Array.from(autoRows).every((r) => !r.querySelector('[data-edit-ledger]') && !r.querySelector('[data-del-ledger]')));
+  ok('العدّاد زاد بعدد التلقائيات', $$('#ledgerTbody tr').length === manualRows + autoRows.length,
+     $$('#ledgerTbody tr').length + ' vs ' + (manualRows + autoRows.length));
+  ok('إجمالي الدواخل كبر بعد التفعيل', ledTotals()[0] !== manualTotals[0] || ledTotals()[1] !== manualTotals[1],
+     ledTotals().join(' | '));
+  ok('الشارة «تلقائي» موجودة في الصفوف', autoRows[0] && autoRows[0].textContent.indexOf('تلقائي') > -1);
 
   console.log('\n[14] الشركاء');
   click($('[data-go="partners"]'));
@@ -1023,7 +1052,20 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   ok('ملف العميل فتح', $('#view-profile').classList.contains('is-active'));
   ok('زر تعديل العميل موجود', !!$('#profileEditBtn'));
   ok('زر حذف العميل موجود', !!$('#profileDeleteBtn'));
+  ok('أزرار تحميل الملف موجودة (Excel + PDF)', !!$('#profileExcelBtn') && !!$('#profilePdfBtn'));
+  const nameBeforeEdit = $('#profileTitle').textContent;
   click($('#profileEditBtn'));
+  await wait(40);
+  ok('نافذة تأكيد التعديل انفتحت', $('#confirmModal').classList.contains('is-open'));
+  ok('الرسالة فيها اسم العميل', $('#confirmMsg').textContent.indexOf(nameBeforeEdit) > -1,
+     $('#confirmMsg').textContent);
+  click($('#confirmNo'));
+  await wait(20);
+  ok('«تراجع» قفل النافذة بدون تعديل', !$('#confirmModal').classList.contains('is-open') &&
+     $('#view-profile').classList.contains('is-active'));
+  click($('#profileEditBtn'));
+  await wait(40);
+  click($('#confirmYes'));
   await wait(40);
   ok('راح لشاشة الإضافة', $('#view-add-customer').classList.contains('is-active'));
   ok('العنوان اتغيّر لـ تعديل عميل', $('#view-add-customer h2').textContent.indexOf('تعديل') > -1,
@@ -1050,6 +1092,36 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   ok('العنوان رجع لـ إضافة عميل', $('#view-add-customer h2').textContent.indexOf('إضافة') > -1,
      $('#view-add-customer h2').textContent);
 
+  /* اقتراحات الشغلانات أثناء الكتابة + درج الشغلانات */
+  const sw = $('#sendWork');
+  ok('حقل الشغلانة موجود', !!sw);
+  if (sw) {
+    sw.value = 'بلاط';
+    sw.dispatchEvent(new window.Event('input', { bubbles: true }));
+    await wait(30);
+    const sugN = $('#workSuggest').querySelectorAll('button[data-suggest]').length;
+    ok('اقتراحات الشغلانات ظهرت أثناء الكتابة', $('#workSuggest').hidden === false && sugN > 0,
+       'n=' + sugN);
+    const firstSug = $('#workSuggest').querySelector('button[data-suggest]');
+    if (firstSug) { click(firstSug); await wait(20); }
+    ok('اختيار الاقتراح ملأ الحقل', sw.value.length > 0, sw.value);
+  }
+  click($('#worksDrawerBtn'));
+  await wait(30);
+  const drN = $('#worksDrawer').querySelectorAll('button[data-suggest]').length;
+  ok('درج الشغلانات فتح ومحتواه شغلانات', $('#worksDrawer').hidden === false && drN > 0, 'n=' + drN);
+  click($('#worksDrawerBtn'));
+  await wait(20);
+  ok('درج الشغلانات اتقفل', $('#worksDrawer').hidden === true);
+
+  const sfEl = $('#sendFilter');
+  sfEl.dispatchEvent(new window.Event('focus'));
+  await wait(30);
+  const flN = $('#filterSuggest').querySelectorAll('button[data-suggest]').length;
+  ok('اقتراحات «اعرض عمليات شغلانة» انفتحت', $('#filterSuggest').hidden === false, 'n=' + flN);
+  sfEl.dispatchEvent(new window.Event('blur'));
+  await wait(220);
+
   /* حذف حركات الدواخل — زر التعديل موجود */
   click($('[data-go="home"]'));
   click($('[data-go="ledger"]'));
@@ -1073,7 +1145,164 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   ok('زر حذف في جدول تحصيل الملف', $$('#collectTable [data-del-pay]').length > 0,
      'n=' + $$('#collectTable [data-del-pay]').length);
 
+  /* تأكيد الحذف + كلمة المرور 2468 */
+  var custAll = JSON.parse(window.localStorage.getItem('app_customers') || '[]');
+  custAll.push({ name: 'عميل مؤقت للحذف', phone: '0770000999', status: 'جاري العمل', payments: [], sends: [] });
+  window.localStorage.setItem('app_customers', JSON.stringify(custAll));
+  const totalBefore = custAll.length;
+  click($('[data-go="customers"]'));
+  await wait(60);
+  const rowsN = $$('#customersTable tbody tr[data-idx]').length;
+  click($$('#customersTable tbody tr[data-idx]')[rowsN - 1]);
+  await wait(60);
+  ok('ملف العميل المؤقت فتح', $('#profileTitle').textContent === 'عميل مؤقت للحذف',
+     $('#profileTitle').textContent);
+  click($('#profileDeleteBtn'));
+  await wait(40);
+  ok('نافذة تأكيد الحذف انفتحت', $('#confirmModal').classList.contains('is-open'));
+  ok('الرسالة فيها «حذف نهائي» واسم العميل', $('#confirmMsg').textContent.indexOf('نهائي') > -1 &&
+     $('#confirmMsg').textContent.indexOf('عميل مؤقت للحذف') > -1, $('#confirmMsg').textContent);
+  ok('حقل كلمة المرور ظهر', $('#confirmPwdWrap').hidden === false);
+  $('#confirmPwd').value = '0000';
+  click($('#confirmYes'));
+  await wait(30);
+  ok('كلمة المرور الغلط رفضت الحذف', $('#confirmError').hidden === false &&
+     $('#confirmModal').classList.contains('is-open'));
+  ok('العميل لسه موجود بعد الرفض',
+     JSON.parse(window.localStorage.getItem('app_customers') || '[]').length === totalBefore);
+  $('#confirmPwd').value = '2468';
+  click($('#confirmYes'));
+  await wait(60);
+  ok('كلمة المرور 2468 نفّذت الحذف',
+     JSON.parse(window.localStorage.getItem('app_customers') || '[]').length === totalBefore - 1,
+     String(JSON.parse(window.localStorage.getItem('app_customers') || '[]').length) + ' vs ' + totalBefore);
+  ok('رجع لقائمة العملاء بعد الحذف', $('#view-customers').classList.contains('is-active'));
+
   ok('لا أخطاء في الإضافات الجديدة', errors.length === 0, errors.join(' | '));
+
+  /* ===== حقول مخصّصة + اقتراح الطرف + تأكيدات المورد وتصديره ===== */
+  console.log('\n[16] حقل مخصّص في ملف العميل');
+  click($('[data-go="home"]'));
+  click($('[data-go="customers"]'));
+  await wait(60);
+  click($('#customersTable tbody tr[data-idx]'));
+  await wait(60);
+  const custName16 = $('#profileTitle').textContent;
+  click($('#profileEditBtn'));
+  await wait(30);
+  click($('#confirmYes'));
+  await wait(60);
+  $('#cfName').value = 'رقم العقد';
+  doc.querySelectorAll('input[name="cfRequired"]')[0].checked = true;
+  click($('#cfAddBtn'));
+  await wait(30);
+  ok('حقل العميل المخصّص اتضاف', !!doc.querySelector('[data-cf-input="رقم العقد"]'));
+  ok('تعريفه مسجّل في localStorage',
+     (JSON.parse(window.localStorage.getItem('app_custom_fields')).customers || []).some((c) => c.name === 'رقم العقد'));
+  doc.querySelector('[data-cf-input="رقم العقد"]').value = 'ع-555';
+  $('#customerForm').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  await wait(80);
+  const custSaved = (JSON.parse(window.localStorage.getItem('app_customers')) || [])[0];
+  ok('القيمة اتحفظت مع العميل', custSaved && custSaved.custom && custSaved.custom['رقم العقد'] === 'ع-555',
+     JSON.stringify(custSaved && custSaved.custom));
+  ok('البروفايل بيعرض الحقل المخصّص', $('#profileInfo').textContent.indexOf('رقم العقد') > -1,
+     $('#profileInfo').textContent.slice(0, 200));
+
+  console.log('\n[17] حقل مخصّص إجباري في الدواخل والخوارج');
+  click($('[data-go="home"]'));
+  click($('[data-go="ledger"]'));
+  await wait(50);
+  $('#lfName').value = 'رقم السند';
+  doc.querySelectorAll('input[name="lfRequired"]')[1].checked = true;
+  click($('#lfAddBtn'));
+  await wait(30);
+  ok('حقل السند اتضاف', !!doc.querySelector('[data-cf-input="رقم السند"]'));
+  const lf2 = $('#ledgerForm');
+  lf2.elements.date.value = '2026-10-28';
+  lf2.elements.type.value = 'in';
+  lf2.elements.amount.value = '1234';
+  lf2.elements.desc.value = 'تجربة الحقل المخصّص';
+  lf2.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  await wait(30);
+  ok('الحقل الإجباري منع الحفظ', !$('#ledgerError').hidden && $('#ledgerError').textContent.indexOf('رقم السند') > -1,
+     $('#ledgerError').textContent);
+  doc.querySelector('[data-cf-input="رقم السند"]').value = 'سند-77';
+  lf2.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  await wait(40);
+  ok('الحركة اتحفظت بالحقل المخصّص',
+     (JSON.parse(window.localStorage.getItem('app_ledger')) || []).some((t) =>
+       t.desc === 'تجربة الحقل المخصّص' && t.custom && t.custom['رقم السند'] === 'سند-77'));
+  ok('شارة الحقل ظهرت في الجدول', $('#ledgerTbody').textContent.indexOf('رقم السند: سند-77') > -1);
+  ok('زر حذف تعريف الحقل موجود', !!doc.querySelector('[data-cf-del="رقم السند"]'));
+  click(doc.querySelector('[data-cf-del="رقم السند"]'));
+  await wait(30);
+  ok('تعريف الحقل اتحذف', !(JSON.parse(window.localStorage.getItem('app_custom_fields')).ledger || [])
+     .some((c) => c.name === 'رقم السند'));
+  ok('زر النموذج مكتوب «حفظ» و«تفريغ الحقول» مش موجود',
+     $('#ledgerForm button[type="submit"]').textContent.indexOf('حفظ') > -1 && !$('#ledgerClear'));
+
+  console.log('\n[18] اقتراح اسم الطرف حسب النوع');
+  const pType = $('#ledgerPartyType');
+  pType.value = 'customer';
+  pType.dispatchEvent(new window.Event('change', { bubbles: true }));
+  const pIn = $('#ledgerPartyName');
+  pIn.value = '';
+  pIn.dispatchEvent(new window.Event('focus'));
+  await wait(40);
+  const pn = $('#partySuggest').querySelectorAll('button[data-suggest]').length;
+  ok('اقتراحات اسم الطرف ظهرت وأسماء عملاء', $('#partySuggest').hidden === false && pn > 0, 'n=' + pn);
+  pIn.dispatchEvent(new window.Event('blur'));
+  await wait(230);
+  ok('قفلت بعد الخروج', $('#partySuggest').hidden === true);
+
+  console.log('\n[19] المورد: تأكيد + تصدير + حذف بكلمة المرور');
+  click($('[data-go="suppliers"]'));
+  await wait(60);
+  click($('#suppliersTable tbody tr[data-sup-idx]'));
+  await wait(60);
+  ok('كشف حساب المورد فتح', $('#supProfileTitle').textContent.indexOf('كشف حساب') > -1,
+     $('#supProfileTitle').textContent);
+  click($('#supEditBtn'));
+  await wait(30);
+  ok('تأكيد تعديل المورد ظهر باسمه', $('#confirmModal').classList.contains('is-open') &&
+     $('#confirmMsg').textContent.indexOf('مورد') > -1, $('#confirmMsg').textContent);
+  click($('#confirmNo'));
+  await wait(20);
+  click($('#supExcelBtn'));
+  await wait(250);
+  ok('تصدير Excel للمورد فتح نافذة الوجهة', $('#exportModal').classList.contains('is-open') &&
+     /^supplier-.*\.xlsx$/.test($('#exportFileName').textContent), $('#exportFileName').textContent);
+  click($('#exportModal [data-close]'));
+  await wait(60);
+
+  const supAll = JSON.parse(window.localStorage.getItem('app_suppliers') || '[]');
+  supAll.push({ name: 'مورد مؤقت للحذف', job: 'تجربة', phone: '0770000000', tx: [] });
+  window.localStorage.setItem('app_suppliers', JSON.stringify(supAll));
+  const supTotal = supAll.length;
+  click($('[data-go="suppliers"]'));
+  await wait(60);
+  const supRows = $$('#suppliersTable tbody tr[data-sup-idx]');
+  click(supRows[supRows.length - 1]);
+  await wait(60);
+  ok('ملف المورد المؤقت فتح', $('#supProfileTitle').textContent.indexOf('مورد مؤقت للحذف') > -1,
+     $('#supProfileTitle').textContent);
+  click($('#supDeleteBtn'));
+  await wait(30);
+  ok('تأكيد الحذف يطلب كلمة المرور', $('#confirmModal').classList.contains('is-open') &&
+     $('#confirmPwdWrap').hidden === false);
+  $('#confirmPwd').value = '0000';
+  click($('#confirmYes'));
+  await wait(30);
+  ok('كلمة المرور الغلط رفضت', $('#confirmError').hidden === false &&
+     JSON.parse(window.localStorage.getItem('app_suppliers')).length === supTotal);
+  $('#confirmPwd').value = '2468';
+  click($('#confirmYes'));
+  await wait(60);
+  ok('كلمة المرور 2468 حذفت المورد',
+     JSON.parse(window.localStorage.getItem('app_suppliers')).length === supTotal - 1,
+     String(JSON.parse(window.localStorage.getItem('app_suppliers')).length) + ' vs ' + supTotal);
+
+  ok('لا أخطاء بعد كل الإضافات الجديدة', errors.length === 0, errors.join(' | '));
 
   console.log('\n==================================================');
   console.log('  PASS: ' + pass + '   FAIL: ' + fail);

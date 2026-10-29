@@ -30,7 +30,7 @@
   ].join(',');
 
   var BLOCK_ATTR = ['data-add', 'data-del', 'data-edit', 'data-delete',
-    'data-del-profit', 'data-save', 'data-new', 'data-push', 'data-export', 'data-upload'];
+    'data-del-profit', 'data-save', 'data-new', 'data-push', 'data-export', 'data-upload', 'data-cf-del'];
 
   var SEL_ALLOW_ATTR = ['data-key', 'data-close', 'data-partner-profile', 'data-profile'];
 
@@ -55,6 +55,9 @@
   /* أزرار مسموح بها للمشاهد (تصفح فقط: تنقّل، توسيع، رجوع) */
   function allowed(el) {
     if (!el) return false;
+    /* أزرار الربط بجوجل (شاشة البدء ولوحة الإعدادات) تبقى ظاهرة وعملياً للجميع */
+    if (el.id === 'gateConnect' || el.id === 'driveConnect' || el.id === 'viewerDriveBtn') return true;
+    if (el.tagName === 'A' && String(el.getAttribute('href') || '').indexOf('/api/google/login') === 0) return true;
     if (el.classList && (el.classList.contains('chev') || el.classList.contains('back-btn'))) return true;
     for (var i = 0; i < SEL_ALLOW_ATTR.length; i++) {
       if (el.hasAttribute && el.hasAttribute(SEL_ALLOW_ATTR[i])) return true;
@@ -100,6 +103,8 @@
     var els = document.querySelectorAll(SEL_BLOCK);
     for (var i = 0; i < els.length; i++) {
       var el = els[i];
+      // Keep drive connect buttons visible for all users (gate + settings)
+      if (el.id && (el.id === 'driveConnect' || el.id === 'gateConnect')) continue;
       if (sensitive(el)) continue;
       if (el.style.display !== 'none') el.style.display = 'none';
     }
@@ -140,8 +145,42 @@
   }, true);
 
   /* ---------- تفعيل وضع المشاهد ---------- */
-  function applyViewer() {
-    if (VIEWER) return;
+  /* ---------- تطبيق أحدث نسخة تلقائياً للمشاهد ---------- */
+  var autoPullTimer = null;
+  function startAutoPull() {
+    try { localStorage.setItem('app_sync_policy', 'auto'); } catch (e) {}
+    if (autoPullTimer) return;
+    autoPullTimer = setInterval(function () {
+      try { if (typeof window.syncCheck === 'function') window.syncCheck(true); } catch (e) {}
+    }, 60 * 1000);
+    setTimeout(function () {
+      try { if (typeof window.syncCheck === 'function') window.syncCheck(true); } catch (e) {}
+    }, 1200);
+  }
+
+  var driveConnected = false;
+  function renderViewerBar() {
+    var bar = document.getElementById('viewerDriveBar');
+    if (bar) bar.style.display = 'flex';
+    var btn = document.getElementById('viewerDriveBtn');
+    if (btn) {
+      btn.textContent = driveConnected ? 'تحديث البيانات الآن من جوجل درايف' : 'ربط حساب Google Drive';
+      btn.onclick = function () {
+        if (!driveConnected) { window.location.href = '/api/google/login'; return; }
+        try { if (typeof window.syncCheck === 'function') window.syncCheck(false); } catch (e) {}
+      };
+    }
+    var txt = document.getElementById('viewerDriveText');
+    if (txt) {
+      txt.textContent = driveConnected
+        ? 'وضع المشاهد — أحدث نسخة تُطبَّق تلقائياً كل دقيقة'
+        : 'وضع المشاهد — اربط حساب Google لعرض البيانات ومتابعة أحدث نسخة';
+    }
+  }
+
+  function applyViewer(connected) {
+    driveConnected = !!connected;
+    if (VIEWER) { renderViewerBar(); return; }
     VIEWER = true;
     document.documentElement.setAttribute('data-viewer-mode', '1');
     try { localStorage.setItem('app_user_role', 'viewer'); } catch (e) {}
@@ -156,6 +195,8 @@
     setTimeout(function () {
       toastMsg('أنت داخل بحساب مشاهد — تصفح فقط بدون إضافة أو تعديل');
     }, 900);
+    renderViewerBar();
+    startAutoPull();
   }
 
   /* ---------- رابط المجلد العام ---------- */
@@ -201,15 +242,15 @@
           localStorage.setItem('app_user_email', email);
           localStorage.setItem('app_user_role', isAdmin ? 'admin' : 'viewer');
         } catch (e) {}
-        if (!isAdmin) applyViewer();   /* غير المصرح له أو مفصول الربط = مشاهد */
+        if (!isAdmin) applyViewer(connected);   /* غير المصرح له أو مفصول الربط = مشاهد */
         if (connected && /[?&]g=ok/.test(location.search)) setTimeout(pullShared, 700);
       })
-      .catch(function () { applyViewer(); });   /* تعذّر التأكد = مشاهد */
+      .catch(function () { applyViewer(false); });   /* تعذّر التأكد = مشاهد */
   }
 
   /* فصل الربط أثناء الجلسة → يبقى مشاهداً فوراً */
   document.addEventListener('click', function (e) {
     var d = e.target && e.target.closest && e.target.closest('#driveDisconnect');
-    if (d) applyViewer();
+    if (d) applyViewer(false);
   }, true);
 })();

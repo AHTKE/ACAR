@@ -242,6 +242,13 @@ function isPermError(e) {
   return /permission|sufficient|403|forbidden|insufficient/i.test(String((e && e.message) || e || ''));
 }
 
+/* رفض بسبب الفولدر نفسه: غير موجود، محذوف، أو بدون صلاحية كتابة */
+function isFolderError(info, status) {
+  const msg = String((info && info.error && info.error.message) || '');
+  return status === 403 || status === 404 || isPermError({ message: msg }) ||
+    /not found|notFound|parent|badRequest|unable to resolve/i.test(msg);
+}
+
 /* رسالة عربية واضحة: مين الحساب، مين صاحب المجلد، وإيه الحل */
 function permErrorMessage(conn, access, raw) {
   const acct = String((conn && conn.email) || '').trim() || 'الحساب المربوط';
@@ -267,10 +274,12 @@ function readErrorMessage(conn, access) {
     '. تأكد إن المجلد مشترك مع هذا الحساب (على الأقل بصلاحية «قارئ») أو اربط الحساب صاحب المجلد.';
 }
 
-/* فولدر تصدير Excel/PDF — يتكوّن مرة واحدة ويُحفظ معرّفه */
-async function getOrCreateExportFolder(env, at) {
-  const cached = await settingGet(env.DB, 'export_folder_id');
-  if (cached) return cached;
+/* فولدر تصدير Excel/PDF — يتكوّن مرة واحدة ويُحفظ معرّفه (force = تجاهل الكاش وإعادة التحقق) */
+async function getOrCreateExportFolder(env, at, force) {
+  if (!force) {
+    const cached = await settingGet(env.DB, 'export_folder_id');
+    if (cached) return cached;
+  }
 
   const q = "mimeType='application/vnd.google-apps.folder' and name='" +
     escQuery(EXPORT_FOLDER_NAME) + "' and trashed=false";
@@ -657,49 +666,59 @@ async function handleApi(request, env, pathname) {
     }
 
     const boundary = '-------gdrive' + crypto.randomUUID().replace(/-/g, '');
-    const meta = JSON.stringify(parentId
-      ? { name: String(name), mimeType: mime, parents: [parentId] }
-      : { name: String(name), mimeType: mime });
-    const head = '--' + boundary + '\r\n' +
-      'Content-Type: application/json; charset=UTF-8\r\n\r\n' + meta + '\r\n' +
+    const headFor = (m) => '--' + boundary + '\r\n' +
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n' + m + '\r\n' +
       '--' + boundary + '\r\n' +
       'Content-Type: ' + mime + '\r\n\r\n';
     const tail = '\r\n--' + boundary + '--';
-
-    const payload = new Blob([head, bytes, tail], { type: 'multipart/related; boundary=' + boundary });
-
-    let res;
-    try {
-      res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true', {
+    const metaOf = (p) => JSON.stringify(p
+      ? { name: String(name), mimeType: mime, parents: [p] }
+      : { name: String(name), mimeType: mime });
+    const drivePost = async (m) => {
+      const r = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true', {
         method: 'POST',
         headers: {
           Authorization: 'Bearer ' + at,
           'Content-Type': 'multipart/related; boundary=' + boundary
         },
-        body: payload
+        body: new Blob([headFor(m), bytes, tail], { type: 'multipart/related; boundary=' + boundary })
       });
+      const j = await r.json().catch(() => ({}));
+      return { r: r, j: j };
+    };
+
+    let res;
+    let info;
+    let inFolder = true;
+    try {
+      const first = await drivePost(metaOf(parentId));
+      res = first.r;
+      info = first.j;
     } catch (e) {
       return json({ ok: false, error: 'تعذّر الوصول إلى Google Drive' }, 502);
     }
 
-    let info = await res.json().catch(() => ({}));
-    let inFolder = true;
-
-    /* المجلد المحدد مرفوض للكتابة → نرفع الملف للحساب نفسه ونرجّع رابطه بدل الفشل */
-    if ((!res.ok || !info.id) && parentId &&
-        isPermError({ message: (info.error && info.error.message) || '' })) {
+    /* الفولدر مش موجود أو بدون صلاحية → نمسح الكاش ونبحث/نعمله من جديد ونعيد الرفع فيه */
+    if ((!res.ok || !info.id) && parentId && isFolderError(info, res.status)) {
       try {
-        const metaNoParent = JSON.stringify({ name: String(name), mimeType: mime });
-        res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true', {
-          method: 'POST',
-          headers: {
-            Authorization: 'Bearer ' + at,
-            'Content-Type': 'multipart/related; boundary=' + boundary
-          },
-          body: new Blob([head.replace(meta, metaNoParent), bytes, tail],
-            { type: 'multipart/related; boundary=' + boundary })
-        });
-        info = await res.json().catch(() => ({}));
+        await settingSet(env.DB, 'export_folder_id', '');
+        const fresh = await getOrCreateExportFolder(env, at, true);
+        if (fresh && fresh !== parentId) {
+          parentId = fresh;
+          const again = await drivePost(metaOf(parentId));
+          res = again.r;
+          info = again.j;
+          inFolder = !!(res.ok && info.id);
+        }
+      } catch (e) { /* نكمل الفحص تحت */ }
+    }
+
+    /* لسه مرفوض → نرفع الملف للحساب نفسه ونرجّع رابطه بدل ما نرمي خطأ */
+    if ((!res.ok || !info.id) && parentId && isFolderError(info, res.status)) {
+      try {
+        const again = await drivePost(metaOf(''));
+        res = again.r;
+        info = again.j;
         inFolder = false;
       } catch (e) { /* يبقى الخطأ الأصلي تحت */ }
     }

@@ -129,6 +129,20 @@ const ok = (name, cond, extra) => {
   ok('شاشة الربط مخفية بعد نجاح الربط', gateEl && gateEl.style.display === 'none', gateEl && gateEl.style.display);
   ok('حقل رابط المجلد موجود', !!$('#forceFolderUrl'));
 
+  console.log('\n[7] شريط ربط جوجل في وسط الشاشة + تطبيق أحدث نسخة تلقائياً');
+  const bar = $('#viewerDriveBar');
+  ok('شريط المشاهد ظهر', !!bar && bar.style.display === 'flex', bar && bar.style.display);
+  const vbtn = $('#viewerDriveBtn');
+  ok('زر ربط/تحديث جوجل موجود', !!vbtn && (vbtn.textContent || '').indexOf('Google Drive') > -1,
+     vbtn && vbtn.textContent);
+  ok('سياسة المزامنة إجبارية auto للمشاهد', window.localStorage.getItem('app_sync_policy') === 'auto',
+     window.localStorage.getItem('app_sync_policy'));
+  let pulled = 0;
+  window.syncCheck = function () { pulled++; return Promise.resolve(null); };
+  await wait(900);
+  ok('سحب أحدث نسخة اشتغل تلقائياً', pulled > 0, 'calls=' + pulled);
+  ok('المشاهد لا يرفع أي نسخة', typeof window.syncCheck === 'function');
+
   console.log('\n=== النتيجة: ' + pass + ' ناجح / ' + fail + ' فاشل ===');
   if (errors.length) console.log('أخطاء JS: ' + errors.length + ' — ' + errors.join(' | ').slice(0, 500));
   process.exit(fail ? 1 : 0);

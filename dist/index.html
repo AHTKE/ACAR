@@ -28,8 +28,14 @@
     <p style="color:#9fadc2;margin-bottom:30px;">يجب ربط حساب Google Drive للدخول إلى التطبيق</p>
     <label style="display:block;text-align:right;color:#f2f6fb;margin-bottom:8px;">رابط المجلد العام</label>
     <input type="text" id="forceFolderUrl" style="width:100%;padding:12px;background:#0a0e15;border:1px solid #4f8cff;border-radius:12px;color:#f2f6fb;margin-bottom:20px;" placeholder="https://drive.google.com/drive/folders/...">
-    <button onclick="window.location.href='/api/google/login';localStorage.setItem('app_shared_folder_url',document.getElementById('forceFolderUrl').value);" style="width:100%;padding:14px;background:linear-gradient(90deg,#4f8cff,#7aa8ff);color:#fff;border:none;border-radius:12px;font-weight:700;cursor:pointer;">ربط حساب Google Drive</button>
+    <button type="button" id="gateConnect" onclick="window.location.href='/api/google/login';localStorage.setItem('app_shared_folder_url',document.getElementById('forceFolderUrl').value);" style="width:100%;padding:14px;background:linear-gradient(90deg,#4f8cff,#7aa8ff);color:#fff;border:none;border-radius:12px;font-weight:700;cursor:pointer;">ربط حساب Google Drive</button>
   </div>
+</div>
+
+<!-- شريط وضع المشاهد: زر ربط جوجل درايف في وسط الشاشة -->
+<div id="viewerDriveBar">
+  <span id="viewerDriveText">وضع المشاهد — تُطبَّق أحدث نسخة من المجلد العام تلقائياً</span>
+  <button type="button" id="viewerDriveBtn">ربط حساب Google Drive</button>
 </div>
 
 <!-- ===== أيقونات SVG ===== -->
@@ -376,6 +382,27 @@
             <label class="field"><span>تاريخ الانتهاء</span><input type="date" name="endDate" /></label>
           </div>
 
+          <!-- حقول مخصّصة: أضف أي خاصية بنفسك وتظهر في بيانات العميل والبروفايل -->
+          <div class="form__row">
+            <div class="field field--full">
+              <span>بيانات إضافية مخصّصة</span>
+              <div class="custom-fields" id="customerCustomFields" data-section="customers"></div>
+              <p class="panel__hint" id="customerCustomEmpty" style="margin:0">مفيش حقول مخصّصة لسه — اكتب اسم الحقل بالأسفل واضغط «إضافة الحقل».</p>
+            </div>
+          </div>
+          <div class="form__row">
+            <label class="field"><span>اسم الحقل الجديد</span><input type="text" id="cfName" placeholder="مثال: رقم العقد" autocomplete="off" /></label>
+            <div class="field"><span>هل هو إجباري عند إضافة العميل؟</span>
+              <div class="segmented">
+                <label><input type="radio" name="cfRequired" value="0" checked /><span>اختياري</span></label>
+                <label><input type="radio" name="cfRequired" value="1" /><span>إجباري</span></label>
+              </div>
+            </div>
+          </div>
+          <div class="form__actions" style="margin-top:0">
+            <button type="button" class="btn btn--ghost btn--sm" id="cfAddBtn">＋ إضافة الحقل إلى بيانات العميل</button>
+          </div>
+
           <div class="form__actions">
             <button type="submit" class="btn btn--primary"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-check"/></svg> حفظ العميل</button>
             <button type="button" class="btn btn--ghost" data-go="home">إلغاء</button>
@@ -459,6 +486,8 @@
         </div>
         <span class="status-pill" id="supProfilePhone">—</span>
         <div class="form__actions" style="margin:0;gap:8px">
+          <button type="button" class="btn btn--ghost btn--sm" id="supExcelBtn" title="تحميل كشف حساب المورد في Excel">⬇ Excel</button>
+          <button type="button" class="btn btn--ghost btn--sm" id="supPdfBtn" title="تحميل كشف حساب المورد في PDF">⬇ PDF</button>
           <button type="button" class="btn btn--ghost btn--sm" id="supEditBtn">تعديل بيانات المورد</button>
           <button type="button" class="btn btn--ghost btn--sm btn--danger" id="supDeleteBtn">حذف المورد</button>
         </div>
@@ -488,9 +517,13 @@
             <div class="calc-box calc-box--accent"><span>الباقي بعد هذه الحركة</span><input type="text" name="tRest" readonly tabindex="-1" value="0" /></div>
           </div>
           <div class="form__row">
-            <label class="field field--full"><span>ورّد إلى (اسم عميل أو أي بيان — اختياري)</span>
-              <input type="text" name="to" list="linkedNames" placeholder="اختر اسم عميل من القائمة أو اكتب أي حاجة…" />
+            <label class="field"><span>ورّد إلى (اسم عميل — اختياري)</span>
+              <input type="text" name="to" id="supToInput" list="linkedNames" autocomplete="off" placeholder="اختر اسم عميل من القائمة…" />
               <datalist id="linkedNames"></datalist>
+            </label>
+            <label class="field"><span>الشغلانة <i style="font-style:normal;color:#fcd34d;font-size:11px">* إجبارية مع العميل</i></span>
+              <input type="text" name="work" id="supWorkInput" autocomplete="off" placeholder="اختر شغلانة هذا العميل أو اكتب شغلانة جديدة…" />
+              <div class="suggest-pop" id="supWorkSuggest" hidden></div>
             </label>
           </div>
           <div class="form__row">
@@ -502,12 +535,53 @@
           </div>
         </form>
 
+        <div class="form__actions" id="supTxFilter" style="margin:18px 0 4px;gap:8px">
+          <button type="button" class="btn btn--primary btn--sm" data-sup-filter="all">الكل</button>
+          <button type="button" class="btn btn--ghost btn--sm" data-sup-filter="work">الشغل / التوريد</button>
+          <button type="button" class="btn btn--ghost btn--sm" data-sup-filter="pay">الدفعات</button>
+        </div>
+
         <div class="table-wrap" style="margin-top:18px">
           <table class="table" id="supTxTable">
-            <thead><tr><th>#</th><th>التاريخ</th><th>رقم الإيصال</th><th>البيان</th><th>ورّد إلى</th><th>الوارد</th><th>المدفوع</th><th>الباقي</th><th>ملاحظات</th><th style="width:64px"><span class="sr-only">حذف</span></th></tr></thead>
+            <thead><tr><th>#</th><th>التاريخ</th><th>رقم الإيصال</th><th>البيان</th><th>ورّد إلى</th><th>الشغلانة</th><th>الوارد</th><th>المدفوع</th><th>الباقي</th><th>ملاحظات</th><th style="width:64px"><span class="sr-only">حذف</span></th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
+      </div>
+
+      <!-- دفع للمورد: حركة دفع نقدية فقط بدون أي توريد -->
+      <div class="panel" id="supPayPanel">
+        <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-coins"/></svg> دفع للمورد (دفعة بدون توريد)</h3>
+        <p class="panel__hint">سجّل مبلغاً نقدياً دفعته للمورد بدون أي توريد — تختار التاريخ والمبلغ والملاحظة، ويُخصم تلقائياً من الباقي ويظهر في «الدواخل والخوارج» كخارج.</p>
+        <form id="supPayForm" class="form" novalidate>
+          <div class="form__row form__row--3">
+            <label class="field"><span>التاريخ *</span><input type="date" name="date" required /></label>
+            <label class="field"><span>المبلغ المدفوع *</span><input type="number" name="amount" min="0" step="any" required placeholder="0" /></label>
+            <label class="field"><span>رقم الإيصال</span><input type="text" name="no" placeholder="اختياري" /></label>
+          </div>
+          <div class="form__row">
+            <label class="field field--full"><span>الملاحظة / البيان</span><input type="text" name="note" placeholder="مثال: دفعة من حساب سابق…" /></label>
+          </div>
+          <div class="calc-grid">
+            <div class="calc-box"><span>الباقي الحالي للمورد</span><input type="text" name="pRest" readonly tabindex="-1" value="0" /></div>
+            <div class="calc-box"><span>إجمالي المدفوع بعد الدفعة</span><input type="text" name="pPaid" readonly tabindex="-1" value="0" /></div>
+            <div class="calc-box calc-box--accent"><span>الباقي بعد الدفعة</span><input type="text" name="pAfter" readonly tabindex="-1" value="0" /></div>
+          </div>
+          <p class="form__error" id="supPayError" hidden></p>
+          <div class="form__actions">
+            <button type="submit" class="btn btn--primary"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-check"/></svg> حفظ الدفعة</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- حركات «الدواخل والخوارج» المرتبطة بهذا المورد -->
+      <div class="panel" id="supLedgerPanel">
+        <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-exchange"/></svg> حركات الدواخل والخوارج المرتبطة بهذا المورد</h3>
+        <div id="supLedgerBody"></div>
+      </div>
+    </section>
+
+    <!-- الدواخل والخوارج -->        </div>
       </div>
     </section>
 
@@ -562,18 +636,40 @@
               </select>
             </label>
             <label class="field"><span>اسم الطرف</span>
-              <input type="text" name="partyName" id="ledgerPartyName" list="ledgerPartyNames" placeholder="اختر أو اكتب الاسم…" />
+              <input type="text" name="partyName" id="ledgerPartyName" autocomplete="off" placeholder="اكتب وستظهر الأسماء المسجّلة للنوع المحدد…" />
               <datalist id="ledgerPartyNames"></datalist>
+              <div class="suggest-pop" id="partySuggest" hidden></div>
             </label>
           </div>
           <div class="form__row">
             <label class="field field--full"><span>ملاحظة (اختياري)</span><input type="text" name="note" placeholder="تفاصيل إضافية عن الحركة…" /></label>
           </div>
           <p class="form__error" id="ledgerError" hidden></p>
+          <!-- حقول مخصّصة لحركة الدواخل والخوارج -->
+          <div class="form__row">
+            <div class="field field--full">
+              <span>بيانات إضافية مخصّصة</span>
+              <div class="custom-fields" id="ledgerCustomFields" data-section="ledger"></div>
+              <p class="panel__hint" id="ledgerCustomEmpty" style="margin:0">مفيش حقول مخصّصة لسه — اكتب اسم الحقل بالأسفل واضغط «إضافة الحقل».</p>
+            </div>
+          </div>
+          <div class="form__row">
+            <label class="field"><span>اسم الحقل الجديد</span><input type="text" id="lfName" placeholder="مثال: رقم السند" autocomplete="off" /></label>
+            <div class="field"><span>هل هو إجباري عند الحفظ؟</span>
+              <div class="segmented">
+                <label><input type="radio" name="lfRequired" value="0" checked /><span>اختياري</span></label>
+                <label><input type="radio" name="lfRequired" value="1" /><span>إجباري</span></label>
+              </div>
+            </div>
+          </div>
+          <div class="form__actions" style="margin-top:0">
+            <button type="button" class="btn btn--ghost btn--sm" id="lfAddBtn">＋ إضافة الحقل إلى الحركات</button>
+          </div>
+
           <div class="form__actions">
-            <button type="submit" class="btn btn--primary"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-plus"/></svg> إضافة حركة</button>
+            <button type="submit" class="btn btn--primary"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-check"/></svg> حفظ</button>
             <button type="button" class="btn btn--ghost" id="ledgerCancelEdit" hidden>إلغاء التعديل</button>
-            <button type="button" class="btn btn--ghost" id="ledgerClear">تفريغ الحقول</button>
+            <label class="switch-row" style="margin:0"><input type="checkbox" id="ledgerAutoToggle" checked /><span class="switch"></span><em>إظهار العمليات التلقائية (تحصيل ومدفوعات فعلية)</em></label>
           </div>
         </form>
 
@@ -828,6 +924,8 @@
         </div>
         <span class="status-pill" id="profileStatus">—</span>
         <div class="form__actions" style="margin:0;gap:8px">
+          <button type="button" class="btn btn--ghost btn--sm" id="profileExcelBtn" title="تحميل كل بيانات العميل في ملف Excel">⬇ Excel</button>
+          <button type="button" class="btn btn--ghost btn--sm" id="profilePdfBtn" title="تحميل كل بيانات العميل في ملف PDF منظّم">⬇ PDF</button>
           <button type="button" class="btn btn--ghost btn--sm" id="profileEditBtn">تعديل البيانات</button>
           <button type="button" class="btn btn--ghost btn--sm btn--danger" id="profileDeleteBtn">حذف العميل</button>
         </div>
@@ -862,13 +960,14 @@
           <div class="form__row">
             <label class="field field--full" data-field="work">
               <span>الشغلانة *</span>
-              <input type="text" name="work" list="workTypes" required placeholder="اختر شغلانة موجودة أو اكتب شغلانة جديدة… مثال: بلاط محارة" />
+              <input type="text" name="work" id="sendWork" list="workTypes" autocomplete="off" required placeholder="اكتب وستظهر الشغلانات المشابهة، أو اختر من «درج الشغلانات»… مثال: بلاط محارة" />
               <datalist id="workTypes"></datalist>
+              <div class="suggest-pop" id="workSuggest" hidden></div>
             </label>
           </div>
           <div class="form__row">
             <label class="field"><span>التاريخ *</span><input type="date" name="date" required /></label>
-            <label class="field"><span>المرسل / البيان *</span><input type="text" name="desc" required placeholder="مثال: عرافة رمية" /></label>
+            <label class="field"><span>المرسل / البيان *</span>              <input type="text" name="desc" required placeholder="مثال: توريد 10 متر بلاط للمشروع" /></label>
           </div>
           <div class="form__row">
             <label class="field"><span>الكمية *</span><input type="number" name="qty" min="0" step="any" required placeholder="0" /></label>
@@ -885,9 +984,12 @@
           <p class="form__error" id="sendError" hidden></p>
           <div class="form__actions">
             <button type="submit" class="btn btn--primary"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-plus"/></svg> إضافة مرسل</button>
-            <div class="send-tools">
-              <input type="text" id="sendFilter" list="filterTypes" placeholder="اعرض عمليات شغلانة معينة…" title="اكتب أو اختر شغلانة لعرض عملياتها فقط" />
+            <div class="send-tools" style="position:relative">
+              <button type="button" class="btn btn--ghost" id="worksDrawerBtn" title="كل الشغلانات المسجّلة — اختر منها">▾ درج الشغلانات</button>
+              <div class="suggest-pop suggest-pop--tools" id="worksDrawer" hidden></div>
+              <input type="text" id="sendFilter" list="filterTypes" autocomplete="off" placeholder="اعرض عمليات شغلانة معينة…" title="اكتب أو اختر شغلانة لعرض عملياتها فقط" />
               <datalist id="filterTypes"></datalist>
+              <div class="suggest-pop suggest-pop--tools" id="filterSuggest" hidden></div>
               <button type="button" class="btn btn--ghost" id="groupAllBtn">فرز الكل</button>
             </div>
           </div>
@@ -1254,6 +1356,26 @@
     </div>
     <p class="panel__note" id="exportDriveHint" hidden></p>
     <button class="btn btn--ghost btn--block" data-close>إلغاء</button>
+  </div>
+</div>
+
+<!-- ===== نافذة التأكيد (نعم / تراجع) ===== -->
+<div class="modal" id="confirmModal" aria-hidden="true">
+  <div class="modal__backdrop" data-close></div>
+  <div class="modal__box" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <div class="modal__icon"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-check"/></svg></div>
+    <h3 id="confirmTitle">تأكيد</h3>
+    <p class="modal__sub" id="confirmMsg">هل أنت متأكد؟</p>
+    <div id="confirmPwdWrap" hidden>
+      <label class="field"><span>كلمة المرور *</span>
+        <input type="password" id="confirmPwd" inputmode="numeric" autocomplete="off" placeholder="••••" />
+      </label>
+      <p class="pwd-error" id="confirmError" hidden>كلمة المرور غير صحيحة، حاول مجدداً</p>
+    </div>
+    <div class="form__actions" style="flex-direction:column;gap:10px;margin-top:14px">
+      <button type="button" class="btn btn--primary btn--block" id="confirmYes">نعم، متابعة</button>
+      <button type="button" class="btn btn--ghost btn--block" id="confirmNo">تراجع</button>
+    </div>
   </div>
 </div>
 
