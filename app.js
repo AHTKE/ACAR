@@ -7152,8 +7152,10 @@
     showView('home');
   } catch (e) {
     try { console.error('فشل فتح الرئيسية: ' + (e && e.message ? e.message : e)); } catch (e2) {}
-    $('.view').forEach(function (v) { v.classList.toggle('is-active', v.id === 'view-home'); });
+    $$('.view').forEach(function (v) { v.classList.toggle('is-active', v.id === 'view-home'); });
   }
+  /* علامة للمراقب: الإقلاع وصل للنهاية */
+  try { window.__appBooted = true; } catch (e) {}
   if (bootFailed.length) {
     toast('تعذّر تحميل: ' + bootFailed.join('، ') + ' — بياناتك سليمة، أعد تشغيل التطبيق.', true);
   }
