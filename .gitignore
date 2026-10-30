@@ -9,3 +9,7 @@ node_modules/
 artifacts/
 preview.log
 preview.pid
+data/
+release/
+app.js.orig
+*.db

@@ -1,0 +1,66 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.amw.nizam'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.amw.nizam"
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    flavorDimensions = ["power"]
+
+    /* نسختان حسب الجهاز: ضعيفة (32 بت / موارد قليلة) وقوية (64 بت) */
+    productFlavors {
+        weak {
+            dimension "power"
+            applicationIdSuffix ".weak"
+            versionNameSuffix "-weak"
+            minSdk 21
+            ndk { abiFilters 'armeabi-v7a', 'x86' }
+            resValue "string", "app_flavor", "نسخة الأجهزة الضعيفة"
+        }
+        strong {
+            dimension "power"
+            applicationIdSuffix ".strong"
+            versionNameSuffix "-strong"
+            minSdk 24
+            ndk { abiFilters 'arm64-v8a', 'armeabi-v7a' }
+            resValue "string", "app_flavor", "نسخة الأجهزة القوية"
+        }
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+        }
+        release {
+            /* توقيع debug مؤقتاً عشان يتبني APK من غير مفتاح توقيع خاص */
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            outputFileName = "nizam-${variant.flavorName}-${variant.buildType.name}.apk"
+        }
+    }
+}
+
+/* التطبيق بلا مكتبات خارجية — WebView فقط */
+dependencies {
+}

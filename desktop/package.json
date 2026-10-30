@@ -1,0 +1,73 @@
+{
+  "name": "nizam-al-idara-desktop",
+  "productName": "Nizam Al-Idara",
+  "version": "1.0.0",
+  "private": true,
+  "description": "نسخة سطح المكتب — Windows 32/64 (Setup + Portable) مع حفظ SQLite",
+  "main": "main.js",
+  "scripts": {
+    "serve": "node server.js",
+    "start": "electron .",
+    "dist:win64": "electron-builder --win nsis --x64",
+    "dist:win32": "electron-builder --win nsis --ia32",
+    "dist:win-portable64": "electron-builder --win portable --x64",
+    "dist:win-portable32": "electron-builder --win portable --ia32",
+    "dist:win-all": "electron-builder --win nsis portable --x64 --ia32",
+    "dist:linux": "electron-builder --linux AppImage deb --x64",
+    "dist:mac": "electron-builder --mac dmg --x64 --arm64"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.amw.nizam-idara",
+    "productName": "Nizam Al-Idara",
+    "directories": {
+      "output": "../release"
+    },
+    "files": [
+      "main.js",
+      "server.js",
+      {
+        "from": "../dist",
+        "to": "dist",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../icons",
+        "to": "icons",
+        "filter": ["**/*"]
+      }
+    ],
+    "win": {
+      "icon": "../icons/icon-512.png",
+      "target": [
+        { "target": "nsis", "arch": ["x64", "ia32"] },
+        { "target": "portable", "arch": ["x64", "ia32"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Nizam Al-Idara",
+      "artifactName": "nizam-setup-${arch}.${ext}",
+      "license": null
+    },
+    "portable": {
+      "artifactName": "nizam-portable-${arch}.${ext}"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "arch": ["x64", "ia32"],
+      "category": "Office"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "category": "public.app-category.business"
+    }
+  }
+}

@@ -26,11 +26,13 @@
     'label.btn',
     '[data-add]', '[data-del]', '[data-edit]', '[data-delete]',
     '[data-del-profit]', '[data-save]', '[data-new]', '[data-push]',
-    '[data-export]', '[data-upload]', '.switch-row'
+    '[data-export]', '[data-upload]', '.switch-row',
+    '#opsUndoLast', '#opsClear'
   ].join(',');
 
   var BLOCK_ATTR = ['data-add', 'data-del', 'data-edit', 'data-delete',
-    'data-del-profit', 'data-save', 'data-new', 'data-push', 'data-export', 'data-upload', 'data-cf-del'];
+    'data-del-profit', 'data-save', 'data-new', 'data-push', 'data-export', 'data-upload', 'data-cf-del',
+    'data-undo-op', 'data-clear-ops'];
 
   var SEL_ALLOW_ATTR = ['data-key', 'data-close', 'data-partner-profile', 'data-profile'];
 
@@ -166,7 +168,10 @@
     if (btn) {
       btn.textContent = driveConnected ? 'تحديث البيانات الآن من جوجل درايف' : 'ربط حساب Google Drive';
       btn.onclick = function () {
-        if (!driveConnected) { window.location.href = '/api/google/login'; return; }
+        if (!driveConnected) {
+          if (typeof window.startGoogleLogin === 'function') { window.startGoogleLogin(); return; }
+          window.location.href = '/api/google/login'; return;
+        }
         try { if (typeof window.syncCheck === 'function') window.syncCheck(false); } catch (e) {}
       };
     }

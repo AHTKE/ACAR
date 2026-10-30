@@ -12,7 +12,8 @@
   var PROTECTED = {
     collection: 'التحصيل',
     partners: 'الشركاء',
-    associations: 'جمعيات'
+    associations: 'جمعيات',
+    operations: 'العمليات'
   };
 
   var SECTION_NAMES = {
@@ -29,7 +30,9 @@
     'add-supplier': 'إضافة مورد',
     'supplier-profile': 'كشف حساب مورد',
     details: 'التفاصيل',
-    'partner-profile': 'بروفايل شريك'
+    'partner-profile': 'بروفايل شريك',
+    'member-profile': 'بروفايل عضو الجمعية',
+    operations: 'العمليات'
   };
 
   var DEFAULT_CUSTOMERS = [
@@ -54,12 +57,43 @@
   function setPassword(p) {
     try { localStorage.setItem(KEY_PASSWORD, p); } catch (e) {}
   }
+  /* قراءة قائمة سليمة من التخزين:
+     - لو المحتوى مش مصفوفة نرجع الافتراضي بدل ما يقع الرسم كله
+     - ولو فيه عناصر مش كائنات نتجاهلها، عشان أي عنصر تالف
+       ما يوقّع الشاشة ويسيبها فاضية. */
+  /* تنفيذ آمن لأي استدعاء رسم أثناء تحميل السكربت:
+     لو أي رسم فشل برمجياً يتسجّل الخطأ بدل ما يقطع بقية السكربت
+     (قطع السكربت كان بيمنع الإقلاع فتظهر الشاشة فاضية). */
+  function safeRun(run, label) {
+    try { run(); } catch (e) {
+      try { console.error('فشل «' + label + '»: ' + (e && e.message ? e.message : e)); } catch (e2) {}
+    }
+  }
+
+  function safeList(v, fallback) {
+    if (!Array.isArray(v)) return JSON.parse(JSON.stringify(fallback));
+    var out = [];
+    for (var i = 0; i < v.length; i++) if (v[i] && typeof v[i] === 'object') out.push(v[i]);
+    return out;
+  }
+
+  /* تطبيع حقول مصفوفة العميل: لو التخزين اتخزن فيه نص بدل مصفوفة
+     نرجّعه مصفوفة فاضية بدل ما يقطع الرسم كله */
+  function normClient(c) {
+    if (c && typeof c === 'object') {
+      if (c.payments != null && !Array.isArray(c.payments)) c.payments = [];
+      if (c.sends != null && !Array.isArray(c.sends)) c.sends = [];
+      if (c.notes != null && !Array.isArray(c.notes)) c.notes = [];
+    }
+    return c;
+  }
+
   function getCustomers() {
     try {
       var raw = localStorage.getItem(KEY_CUSTOMERS);
-      if (raw) return JSON.parse(raw);
+      if (raw) return safeList(JSON.parse(raw), DEFAULT_CUSTOMERS).map(normClient);
     } catch (e) {}
-    return DEFAULT_CUSTOMERS.slice();
+    return DEFAULT_CUSTOMERS.slice().map(normClient);
   }
   function saveCustomers(list) {
     try { localStorage.setItem(KEY_CUSTOMERS, JSON.stringify(list)); } catch (e) {}
@@ -73,26 +107,50 @@
     var status = $('#statusSection');
     if (status) status.textContent = SECTION_NAMES[id] || '';
     document.title = (SECTION_NAMES[id] ? SECTION_NAMES[id] + ' — ' : '') + 'نظام الإدارة المتكامل';
-    if (id === 'customers') renderCustomers();
-    if (id === 'home') renderHomeStats();
-    if (id === 'collection') { renderCollection(colFilter()); renderCollectionSummary(); }
-    if (id === 'ledger') { renderLedger(); renderLedgerSummary(); }
-    if (id === 'partners') renderPartners();
-    if (id === 'associations') renderAssociations();
-    if (id === 'details') renderDetails();
-    if (id === 'partner-profile') renderPartnerProfile();
-    if (id === 'ledger') fillPartyLists();
-    if (id === 'supplier-profile') fillPartyLists();
-    if (id === 'settings') { renderExportGrid(); refreshDriveStatus(); loadSyncFolder(); renderNetworkToggle(); }
-    if (id === 'suppliers' && typeof renderSuppliers === 'function') {
-      renderSuppliers($('#supplierSearch') ? $('#supplierSearch').value : '');
+    /* كل عملية رسم مُغلّفة بـ try: لو قسم واحد فشل لأي سبب (بيانات تالفة مثلاً)
+       باقي الأقسام بتتعرض عادي وبيظهر تنبيه بدل الشاشة الفاضية. */
+    var renderFailed = [];
+    function step(run, label) {
+      try { run(); } catch (e) {
+        renderFailed.push(label);
+        try { console.error('فشل رسم «' + label + '»: ' + (e && e.message ? e.message : e)); } catch (e2) {}
+      }
     }
-    if (id === 'profile' && typeof renderProfile === 'function') renderProfile();
-    if (id === 'profile' && typeof renderProfileLinks === 'function') renderProfileLinks();
-    if (id === 'add-customer' && typeof prepareCustomerView === 'function') prepareCustomerView();
-    if (id === 'add-supplier' && typeof prepareSupplierView === 'function') prepareSupplierView();
-    if (id === 'supplier-profile' && typeof renderSupplierProfile === 'function') renderSupplierProfile();
-    if (id === 'add-customer' && typeof hideAlert === 'function') hideAlert();
+    if (id === 'customers') step(function () { renderCustomers(); }, 'العملاء');
+    if (id === 'home') step(function () { renderHomeStats(); }, 'الرئيسية');
+    if (id === 'collection') step(function () { renderCollection(colFilter()); renderCollectionSummary(); }, 'التحصيل');
+    if (id === 'collection') step(function () { renderWaPanel(); }, 'رسائل واتساب');
+    if (id === 'ledger') step(function () { renderLedger(); renderLedgerSummary(); fillPartyLists(); }, 'الدواخل والخوارج');
+    if (id === 'partners') step(function () { renderPartners(); }, 'الشركاء');
+    if (id === 'associations') step(function () { renderAssociations(); }, 'الجمعيات');
+    if (id === 'details') step(function () { renderDetails(); }, 'التفاصيل');
+    if (id === 'partner-profile') step(function () { renderPartnerProfile(); }, 'ملف الشريك');
+    if (id === 'member-profile') step(function () { renderMemberProfile(); }, 'ملف العضو');
+    if (id === 'operations') step(function () { renderOperations(); }, 'العمليات');
+    if (id === 'settings') step(function () { renderDataSafety(); }, 'سلامة البيانات');
+    if (id === 'supplier-profile') step(function () { fillPartyLists(); }, 'قوائم الأطراف');
+    if (id === 'settings') step(function () { renderExportGrid(); refreshDriveStatus(); loadSyncFolder(); renderNetworkToggle(); }, 'الإعدادات');
+    if (id === 'suppliers') step(function () {
+      if (typeof renderSuppliers === 'function') renderSuppliers($('#supplierSearch') ? $('#supplierSearch').value : '');
+    }, 'الموردين');
+    if (id === 'profile') step(function () {
+      if (typeof renderProfile === 'function') renderProfile();
+      if (typeof renderProfileLinks === 'function') renderProfileLinks();
+    }, 'ملف العميل');
+    if (id === 'add-customer') step(function () {
+      if (typeof prepareCustomerView === 'function') prepareCustomerView();
+      if (typeof hideAlert === 'function') hideAlert();
+    }, 'إضافة عميل');
+    if (id === 'add-supplier') step(function () {
+      if (typeof prepareSupplierView === 'function') prepareSupplierView();
+    }, 'إضافة مورد');
+    if (id === 'supplier-profile') step(function () {
+      if (typeof renderSupplierProfile === 'function') renderSupplierProfile();
+    }, 'ملف المورد');
+    if (renderFailed.length) {
+      toast('تعذّر عرض جزء من «' + (SECTION_NAMES[id] || id) + '»: ' + renderFailed.join('، ') +
+        ' — باقي الأقسام شغالة، أعد فتح القسم.', true);
+    }
   }
 
   function navigate(id) {
@@ -762,7 +820,7 @@
     var down = Number(c.down || 0);
     var due = c.due != null ? Number(c.due) : Math.max(total - down, 0);
     var later = Number(c.later || 0);
-    var pays = c.payments || [];
+    var pays = Array.isArray(c.payments) ? c.payments : [];
     var paidPays = 0;
     pays.forEach(function (p) { paidPays += Number(p.amount || 0); });
     var led = partyLedger('customer', c.name);
@@ -774,7 +832,7 @@
     var n = m ? parseFloat(m[0]) : 0;
     var u = String(c.duration || '').match(/[^\d\s]+/);
     var unit = u ? u[0] : '';
-    var sends = c.sends || [];
+    var sends = Array.isArray(c.sends) ? c.sends : [];
     var sendSum = 0;
     sends.forEach(function (s) {
       sendSum += Number(s.total != null ? s.total : (Number(s.qty || 0) * Number(s.price || 0)));
@@ -1693,7 +1751,7 @@
   function getSuppliers() {
     try {
       var raw = localStorage.getItem(KEY_SUPPLIERS);
-      if (raw) return JSON.parse(raw);
+      if (raw) return safeList(JSON.parse(raw), DEFAULT_SUPPLIERS);
     } catch (e) {}
     return JSON.parse(JSON.stringify(DEFAULT_SUPPLIERS));
   }
@@ -2690,8 +2748,7 @@
     });
   }
 
-  renderCollection('');
-  renderCollectionSummary();
+  safeRun(function () { renderCollection(''); renderCollectionSummary(); }, 'التحصيل');
 
   /* ============================================================
      الدواخل والخوارج — حركة مالية حقيقية محفوظة في localStorage
@@ -2709,7 +2766,7 @@
   function getLedger() {
     try {
       var raw = localStorage.getItem(KEY_LEDGER);
-      if (raw) return JSON.parse(raw);
+      if (raw) return safeList(JSON.parse(raw), DEFAULT_LEDGER);
     } catch (e) {}
     return JSON.parse(JSON.stringify(DEFAULT_LEDGER));
   }
@@ -3044,7 +3101,7 @@
   function getPartners() {
     try {
       var raw = localStorage.getItem(KEY_PARTNERS);
-      if (raw) return JSON.parse(raw);
+      if (raw) return safeList(JSON.parse(raw), DEFAULT_PARTNERS);
     } catch (e) {}
     return JSON.parse(JSON.stringify(DEFAULT_PARTNERS));
   }
@@ -3168,8 +3225,14 @@
     var t = partnerTotals();
     var pill = $('#sharePill');
     if (pill) {
-      var sharesOk = Math.abs(t.share - 100) < 0.001;
-      pill.textContent = sharesOk ? 'مجموع الحصص 100%' : ('مجموع الحصص ' + money(t.share) + '% — لازم 100%');
+      var withShare = getPartners().filter(function (p) { return Number(p.share) > 0; }).length;
+      var noShare = getPartners().length - withShare;
+      var over = t.share > 100.0001;
+      var incomplete = noShare === 0 && Math.abs(t.share - 100) >= 0.001;
+      var sharesOk = !over && !incomplete;
+      pill.textContent = over ? ('مجموع الحصص ' + money(t.share) + '% — تجاوز 100%')
+        : (incomplete ? ('مجموع الحصص ' + money(t.share) + '% — لازم 100%')
+        : (noShare ? ('مجموع الحصص المحدَّدة ' + money(t.share) + '% — الحصة اختيارية') : 'مجموع الحصص 100%'));
       pill.className = 'count-pill ' + (sharesOk ? 'count-pill--ok' : 'count-pill--warn');
     }
 
@@ -3317,7 +3380,7 @@
   });
 
   if (profitForm) profitForm.elements.profit.value = getPartnerProfit();
-  renderPartners();
+  safeRun(renderPartners, 'الشركاء');
 
   /* ============================================================
      الجمعيات — الجمعيات والأعضاء والاشتراكات
@@ -3344,19 +3407,41 @@
   function getAssociations() {
     try {
       var raw = localStorage.getItem(KEY_ASSOCIATIONS);
-      if (raw) return JSON.parse(raw);
+      if (raw) return safeList(JSON.parse(raw), DEFAULT_ASSOCIATIONS);
     } catch (e) {}
     return JSON.parse(JSON.stringify(DEFAULT_ASSOCIATIONS));
   }
   function saveAssociations(list) {
     try { localStorage.setItem(KEY_ASSOCIATIONS, JSON.stringify(list)); } catch (e) {}
   }
+  /* يضمن أن مجموع الدفعات = المدفوع (المدفوع هو المصدر الصحيح) */
+  function normalizeMember(m) {
+    if (!m || typeof m !== 'object') return m;
+    if (!Array.isArray(m.payments)) m.payments = [];
+    var sum = 0;
+    m.payments.forEach(function (p) { sum += Number(p.amount || 0); });
+    var diff = Math.round((Number(m.paid || 0) - sum) * 100) / 100;
+    if (diff > 0.004) {
+      m.payments.push({ month: currentMonthKey(), amount: diff, date: todayISO(), note: 'رصيد مُرحّل' });
+    } else if (diff < -0.004) {
+      for (var i = m.payments.length - 1; i >= 0 && diff < -0.004; i--) {
+        var a = Number(m.payments[i].amount || 0);
+        if (a <= -diff) { m.payments[i].amount = Math.round((a + diff) * 100) / 100; diff = 0; }
+        else { diff = Math.round((diff + a) * 100) / 100; m.payments.splice(i, 1); }
+      }
+      if (diff < -0.004) m.payments.push({ month: currentMonthKey(), amount: diff, date: todayISO(), note: 'تسوية' });
+    }
+    return m;
+  }
   function getMembers() {
+    var list = null;
     try {
       var raw = localStorage.getItem(KEY_MEMBERS);
-      if (raw) return JSON.parse(raw);
+      if (raw) list = JSON.parse(raw);
     } catch (e) {}
-    return JSON.parse(JSON.stringify(DEFAULT_MEMBERS));
+    if (!Array.isArray(list)) list = JSON.parse(JSON.stringify(DEFAULT_MEMBERS));
+    list.forEach(normalizeMember);
+    return list;
   }
   function saveMembers(list) {
     try { localStorage.setItem(KEY_MEMBERS, JSON.stringify(list)); } catch (e) {}
@@ -3371,6 +3456,154 @@
 
   function assocStatusTag(status) {
     return status === 'مسدّد' ? 'tag--in' : (status === 'معلّق' ? 'tag--warn' : 'tag--out');
+  }
+
+  /* ----------------------------------------------------------
+     نظام الدور: الجمعية تاخد وتبدي فلوس
+     • كل عضو يدفع قيمة السهم كل شهر
+     • حصيلة الشهر = قيمة السهم × عدد الأعضاء وتُقبض لصاحب الدور
+     • الدور يُحدَّد من ترتيب الأعضاء وشهر بداية الدورة
+     ---------------------------------------------------------- */
+  var AR_MONTH_NAMES = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+    'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+
+  function currentMonthKey() {
+    var d = new Date();
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1);
+  }
+
+  function monthKeyParts(key) {
+    var m = /^(\d{4})-(\d{2})$/.exec(String(key || ''));
+    return m ? { y: Number(m[1]), m: Number(m[2]) } : null;
+  }
+
+  function monthLabel(key) {
+    var p = monthKeyParts(key);
+    if (!p || p.m < 1 || p.m > 12) return '—';
+    return AR_MONTH_NAMES[p.m - 1] + ' ' + p.y;
+  }
+
+  function monthLabelShort(key) {
+    var p = monthKeyParts(key);
+    if (!p || p.m < 1 || p.m > 12) return '—';
+    return AR_MONTH_NAMES[p.m - 1] + ' ' + String(p.y).slice(2);
+  }
+
+  function shiftMonth(key, delta) {
+    var p = monthKeyParts(key);
+    if (!p) { p = monthKeyParts(currentMonthKey()); }
+    var total = (p.y * 12) + (p.m - 1) + Number(delta || 0);
+    if (total < 0) total = 0;
+    return Math.floor(total / 12) + '-' + pad((total % 12) + 1);
+  }
+
+  function monthsBetween(fromKey, toKey) {
+    var a = monthKeyParts(fromKey), b = monthKeyParts(toKey);
+    if (!a || !b) return 0;
+    return ((b.y * 12 + b.m) - (a.y * 12 + a.m));
+  }
+
+  function assocMonths(a) {
+    var n = parseInt(a && a.months, 10);
+    return (isFinite(n) && n >= 1) ? Math.min(n, 120) : 12;
+  }
+  function assocPayoutDay(a) {
+    var n = parseInt(a && a.payoutDay, 10);
+    return (isFinite(n) && n >= 1 && n <= 30) ? n : 1;
+  }
+  function assocStart(a) {
+    return (a && monthKeyParts(a.startMonth)) ? a.startMonth : currentMonthKey();
+  }
+  function assocByName(name) {
+    var found = null;
+    getAssociations().forEach(function (a) { if (String(a.name) === String(name)) found = a; });
+    return found;
+  }
+  /* مؤشرات الأعضاء (بالفهرس العام) تابعين لجمعية */
+  function assocMemberIdxs(name) {
+    var list = getMembers(), out = [];
+    for (var i = 0; i < list.length; i++) {
+      if (String(list[i].assoc || '') === String(name)) out.push(i);
+    }
+    return out;
+  }
+  /* رقم الدور = ترتيب الإضافة داخل الجمعية (أو القيمة المحفوظة صراحة) */
+  function memberOrderByIdx(globalIdx) {
+    var list = getMembers();
+    var m = list[globalIdx];
+    if (!m) return 0;
+    if (m.order != null && m.order !== '' && isFinite(Number(m.order))) return Number(m.order);
+    var name = String(m.assoc || ''), pos = 0;
+    for (var i = 0; i < list.length; i++) {
+      if (i === globalIdx) return pos;
+      if (String(list[i].assoc || '') === name) pos++;
+    }
+    return pos;
+  }
+  function nextOrderFor(assocName) {
+    var idxs = assocMemberIdxs(assocName), max = -1;
+    idxs.forEach(function (i) {
+      var o = memberOrderByIdx(i);
+      if (o > max) max = o;
+    });
+    return max + 1;
+  }
+  /* الحصيلة الشهرية = قيمة السهم × عدد الأعضاء (اللي بتقبضه الجمعية) */
+  function assocPot(a) {
+    if (!a) return 0;
+    return Math.round(Number(a.fee || 0) * assocMemberIdxs(a.name).length);
+  }
+  /* مَن يقبض في رقم الدور index */
+  function collectorAt(a, index) {
+    var idxs = assocMemberIdxs(a.name);
+    if (!idxs.length) return null;
+    var M = assocMonths(a);
+    var want = ((Number(index) % M) + M) % M;
+    var list = getMembers();
+    for (var i = 0; i < idxs.length; i++) {
+      if (memberOrderByIdx(idxs[i]) === want) return list[idxs[i]];
+    }
+    return list[idxs[0]];
+  }
+  /* مَن يقبض في شهر معيّن */
+  function collectorForMonth(a, monthKey) {
+    if (!a) return null;
+    var idx = monthsBetween(assocStart(a), monthKey);
+    if (idx < 0) return null;
+    return collectorAt(a, idx);
+  }
+  /* الشهر الذي يقع فيه دور العضو */
+  function memberTurnMonth(globalIdx) {
+    var m = getMembers()[globalIdx];
+    if (!m) return null;
+    var a = assocByName(m.assoc);
+    if (!a) return null;
+    return shiftMonth(assocStart(a), memberOrderByIdx(globalIdx));
+  }
+  /* مدة الدورة: بالأشهر والسنين */
+  function cycleText(a) {
+    var M = assocMonths(a);
+    var y = Math.floor(M / 12), r = M % 12, parts = [];
+    if (y) parts.push(y === 1 ? 'سنة' : (y === 2 ? 'سنتان' : y + ' سنوات'));
+    if (r) parts.push(r === 1 ? 'شهر' : (r === 2 ? 'شهران' : r + ' أشهر'));
+    return M + ' شهر (' + (parts.join(' و ') || '—') + ')';
+  }
+  /* دفعات العضو في شهر معيّن */
+  function paidInMonth(m, monthKey) {
+    var sum = 0;
+    (m.payments || []).forEach(function (p) {
+      if (String(p.month || '') === String(monthKey)) sum += Number(p.amount || 0);
+    });
+    return sum;
+  }
+  /* حالة العضو في شهر: مستقبلي = لم يحن، وإلّا مسدّد / معلّق / متأخر */
+  function statusInMonth(m, monthKey, required) {
+    if (String(monthKey) > currentMonthKey()) return 'لم يحن';
+    var paid = paidInMonth(m, monthKey);
+    if (required <= 0) return 'مسدّد';
+    if (paid >= required) return 'مسدّد';
+    if (paid > 0) return 'معلّق';
+    return 'متأخر';
   }
 
   function assocTotals() {
@@ -3416,7 +3649,13 @@
         '<div class="mini-card__top"><span class="card__icon ' + ASSOC_ICON_COLORS[i % 3] + ' sm">' +
         '<svg viewBox="0 0 24 24" class="ico"><use href="#ic-group"></use></svg></span>' +
         '<div><b>' + esc(a.name) + '</b><small>' + mine.length + ' عضو</small></div></div>' +
-        '<div class="mini-card__row"><span>اشتراك سنوي</span><b>' + money(a.fee) + '</b></div>' +
+        '<div class="mini-card__row"><span>قيمة السهم / شهر</span><b>' + money(a.fee) + '</b></div>' +
+        '<div class="mini-card__row"><span>الحصيلة الشهرية</span><b class="pos">' + money(assocPot(a)) + '</b></div>' +
+        '<div class="mini-card__row"><span>مدّة الدورة</span><b>' + cycleText(a) + '</b></div>' +
+        '<div class="mini-card__row"><span>يوم القبض</span><b>يوم ' + assocPayoutDay(a) + ' من كل شهر</b></div>' +
+        '<div class="mini-card__row"><span>أول شهر</span><b>' + monthLabel(assocStart(a)) + '</b></div>' +
+        '<div class="mini-card__row"><span>دور الشهر الحالي</span><b>' +
+          esc((function () { var c = collectorForMonth(a, currentMonthKey()); return c ? (c.name || '—') : '—'; })()) + '</b></div>' +
         '<div class="mini-card__row"><span>المحصّل</span><b class="pos">' + money(paidSum) + '</b></div>' +
         '<div class="mini-card__row"><span>المتبقي</span><b class="neg">' + money(Math.max(feeSum - paidSum, 0)) + '</b></div>' +
         '<div class="bar"><i style="width:' + pct + '%"></i></div>' +
@@ -3482,14 +3721,16 @@
           '<td class="amount pos">' + money(d.paid) + '</td>' +
           '<td class="amount ' + (d.rest > 0 ? 'neg' : 'pos') + '">' + money(d.rest) + '</td>' +
           '<td><span class="tag ' + assocStatusTag(d.status) + '">' + d.status + '</span></td>' +
+          '<td>' + esc((function () { var t = memberTurnMonth(entry.i); return t ? monthLabel(t) : '—'; })()) + '</td>' +
           '<td><span class="p-actions">' +
+            '<button type="button" class="btn btn--primary btn--sm" data-member-profile="' + entry.i + '" title="فتح بروفايل العضو">البروفايل</button>' +
             '<button type="button" class="btn btn--ghost btn--sm" data-edit-member="' + entry.i + '">تعديل</button>' +
             '<button type="button" class="btn btn--ghost btn--sm btn--danger" data-del-member="' + entry.i + '">حذف</button>' +
           '</span></td>' +
           '</tr>';
       });
       if (!list.length) {
-        html = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:26px">' +
+        html = '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:26px">' +
           ((q || af) ? 'لا يوجد عضو مطابق' : 'لا يوجد أعضاء بعد — أضف أول عضو من النموذج أعلاه') + '</td></tr>';
       }
       tbody.innerHTML = html;
@@ -3502,6 +3743,67 @@
 
     renderAssocCards();
     renderAssocSummary();
+    renderAssocMatrix();
+  }
+
+  /* ---------- جدول الأدوار الشهرية (مين بيقبض فين) ---------- */
+  function assocStatusClass(st) {
+    return st === 'مسدّد' ? 'tag--in' : (st === 'معلّق' ? 'tag--warn' : (st === 'متأخر' ? 'tag--out' : ''));
+  }
+
+  function renderAssocMatrix() {
+    var head = $('#matrixHead'), body = $('#matrixTbody'), wrap = $('#matrixWrap');
+    var hint = $('#matrixHint'), note = $('#matrixNote');
+    if (!head || !body || !wrap) return;
+    var af = $('#assocFilter');
+    var selName = af ? af.value : '';
+    var assocs = getAssociations();
+    var a = selName ? assocByName(selName) : (assocs[0] || null);
+    if (!a) {
+      wrap.hidden = true;
+      if (note) note.hidden = true;
+      if (hint) { hint.hidden = false; hint.textContent = 'لا توجد جمعيات بعد — أضف جمعية أولاً.'; }
+      return;
+    }
+    if (hint) hint.hidden = true;
+
+    var M = assocMonths(a), shown = Math.min(M, 14), start = assocStart(a);
+    var idxs = assocMemberIdxs(a.name), list = getMembers();
+    var cols = [];
+    for (var c = 0; c < shown; c++) cols.push(shiftMonth(start, c));
+
+    head.innerHTML = '<tr><th style="width:52px">#</th><th>العضو</th>' +
+      cols.map(function (k) {
+        var col = collectorForMonth(a, k);
+        return '<th style="min-width:118px">' + monthLabelShort(k) +
+          '<br><span class="cell-sub">' + esc(col ? (col.name || '—') : '—') + '</span></th>';
+      }).join('') + '</tr>';
+
+    body.innerHTML = idxs.map(function (gi, n) {
+      var m = list[gi];
+      var required = Number(m.fee || 0);
+      var turn = memberTurnMonth(gi);
+      var cells = cols.map(function (k) {
+        var st = statusInMonth(m, k, required);
+        return '<td><span class="tag ' + assocStatusClass(st) + '">' + st +
+          (turn && k === turn ? ' ★' : '') + '</span></td>';
+      }).join('');
+      return '<tr><td>' + (n + 1) + '</td><td><b>' + esc(m.name || '—') + '</b></td>' + cells + '</tr>';
+    }).join('') ||
+      '<tr><td colspan="' + (shown + 2) + '" style="text-align:center;color:var(--muted);padding:20px">' +
+      'لا يوجد أعضاء في هذه الجمعية</td></tr>';
+
+    wrap.hidden = false;
+    if (note) {
+      var now = collectorForMonth(a, currentMonthKey());
+      note.hidden = false;
+      note.innerHTML = '<b>' + esc(a.name) + '</b> — الحصيلة الشهرية <b>' + money(assocPot(a)) +
+        '</b> • يوم القبض <b>يوم ' + assocPayoutDay(a) + '</b> • الدورة <b>' + cycleText(a) +
+        '</b> • أول شهر <b>' + monthLabel(start) + '</b> • دور الشهر الحالي <b>' +
+        esc(now ? (now.name || '—') : '—') + '</b>' +
+        (M > shown ? ' — الجدول معروض لأول ' + shown + ' شهر من ' + M + ' شهر' : '') +
+        ' — ★ تعني الشهر الذي يقبض فيه العضو.';
+    }
   }
 
   /* ---------- إضافة / تعديل جمعية ---------- */
@@ -3526,6 +3828,9 @@
     f.idx.value = String(i);
     f.name.value = a.name || '';
     f.fee.value = a.fee != null ? a.fee : '';
+    if (f.months) f.months.value = a.months != null ? a.months : '';
+    if (f.payoutDay) f.payoutDay.value = a.payoutDay != null ? a.payoutDay : '';
+    if (f.startMonth) f.startMonth.value = a.startMonth || '';
     var btn = $('#assocSubmitBtn');
     if (btn) btn.innerHTML = '<svg viewBox="0 0 24 24" class="ico"><use href="#ic-check"></use></svg> حفظ التعديل';
     var cancel = $('#assocCancelBtn');
@@ -3544,11 +3849,21 @@
       var f = assocForm.elements;
       var name = String(f.name.value || '').trim();
       var fee = parseFloat(f.fee.value);
+      var monthsRaw = f.months ? parseInt(f.months.value, 10) : NaN;
+      var dayRaw = f.payoutDay ? parseInt(f.payoutDay.value, 10) : NaN;
+      var startRaw = f.startMonth ? String(f.startMonth.value || '').trim() : '';
 
       var miss = [];
       if (!name) miss.push('اسم الجمعية');
       if (!(fee >= 0)) miss.push('قيمة الاشتراك السنوي');
+      if (f.months && f.months.value !== '' && !(monthsRaw >= 1)) miss.push('عدد شهور الدورة (1 على الأقل)');
+      if (f.payoutDay && f.payoutDay.value !== '' && !(dayRaw >= 1 && dayRaw <= 30)) miss.push('يوم القبض بين 1 و30');
+      if (startRaw && !monthKeyParts(startRaw)) miss.push('أول شهر بصيغة سنة-شهر مثال 2026-11');
       if (miss.length) return fail('الرجاء إدخال: ' + miss.join('، '));
+
+      var months = isFinite(monthsRaw) && monthsRaw >= 1 ? Math.min(monthsRaw, 120) : 12;
+      var payoutDay = isFinite(dayRaw) && dayRaw >= 1 && dayRaw <= 30 ? dayRaw : 1;
+      var startMonth = monthKeyParts(startRaw) ? startRaw : currentMonthKey();
 
       var list = getAssociations();
       var idx = parseInt(f.idx.value, 10);
@@ -3558,7 +3873,7 @@
           return fail('فيه جمعية بنفس الاسم');
         }
         var oldName = list[idx].name;
-        list[idx] = { name: name, fee: fee };
+        list[idx] = { name: name, fee: fee, months: months, payoutDay: payoutDay, startMonth: startMonth };
         saveAssociations(list);
         if (oldName !== name) {
           var mem = getMembers();
@@ -3568,7 +3883,7 @@
         }
       } else {
         if (list.some(function (a) { return a.name === name; })) return fail('فيه جمعية بنفس الاسم');
-        list.push({ name: name, fee: fee });
+        list.push({ name: name, fee: fee, months: months, payoutDay: payoutDay, startMonth: startMonth });
         saveAssociations(list);
       }
       if (errEl) errEl.hidden = true;
@@ -3658,7 +3973,12 @@
       var list = getMembers();
       var idx = parseInt(f.idx.value, 10);
       var editing = idx >= 0 && !!list[idx];
-      var rec = { assoc: assoc, name: name, type: type, fee: fee, paid: paid, note: note };
+      var rec = {
+        assoc: assoc, name: name, type: type, fee: fee, paid: paid, note: note,
+        order: (editing && list[idx].assoc === assoc) ? list[idx].order : nextOrderFor(assoc),
+        payments: (editing && list[idx].payments) ? list[idx].payments : []
+      };
+      normalizeMember(rec);
       if (editing) list[idx] = rec; else list.push(rec);
       saveMembers(list);
       resetMemberForm();
@@ -3748,7 +4068,7 @@
     if (em) startEditMember(Number(em.getAttribute('data-edit-member')));
   });
 
-  renderAssociations();
+  safeRun(renderAssociations, 'الجمعيات');
 
   /* ============================================================
      التصدير (Excel / PDF) + ربط Google Drive
@@ -3914,13 +4234,20 @@
     members.forEach(function (m, i) {
       var d = deriveMember(m);
       fee += d.fee; paid += d.paid; rest += d.rest;
-      rows.push([i + 1, m.assoc || '', m.name || '', m.type || '', d.fee, d.paid, d.rest, d.status, m.note || '']);
+      var turn = memberTurnMonth(i);
+      var asc = assocByName(m.assoc);
+      rows.push([i + 1, m.assoc || '', m.name || '', m.type || '', d.fee, d.paid, d.rest, d.status,
+        turn ? monthLabel(turn) : '—',
+        asc ? assocPot(asc) : 0,
+        asc ? ('يوم ' + assocPayoutDay(asc) + ' من كل شهر') : '—',
+        m.note || '']);
     });
     return {
       title: 'الجمعيات',
       subtitle: 'عدد الجمعيات: ' + getAssociations().length + ' — عدد الأعضاء: ' + members.length,
-      columns: ['#', 'الجمعية', 'العضو', 'نوع الاشتراك', 'المستحق', 'المدفوع', 'المتبقي', 'الحالة', 'ملاحظة'],
-      moneyCols: [4, 5, 6],
+      columns: ['#', 'الجمعية', 'العضو', 'نوع الاشتراك', 'المستحق', 'المدفوع', 'المتبقي', 'الحالة',
+        'موعد قبضه', 'الحصيلة الشهرية', 'يوم القبض', 'ملاحظة'],
+      moneyCols: [4, 5, 6, 9],
       rows: rows,
       summary: [
         { label: 'الجمعيات', value: String(getAssociations().length) },
@@ -4410,9 +4737,27 @@
     });
   }
 
+  /* نجرّب مسار الربط الأول — لو مش موجود (استضافة ثابتة بلا خادم) نقولها بدل صفحة 404 */
+  function startGoogleLogin(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    var go = function () { if (typeof location !== 'undefined') location.href = '/api/google/login'; };
+    if (typeof fetch !== 'function') { go(); return; }
+    fetch('/api/google/status', { credentials: 'same-origin' })
+      .then(function (r) {
+        if (!r || r.status === 404 || r.status === 501) throw new Error('NOAPI');
+        if (typeof r.clone !== 'function') return null;
+        return r.clone().json().catch(function () { throw new Error('NOAPI'); });
+      })
+      .then(function () { go(); })
+      .catch(function () {
+        toast('مسار ربط Google غير متاح على هذه الصفحة — شغّل المعاينة الكاملة (preview-local.mjs) أو افتح الموقع المنشور.', true);
+      });
+  }
+  window.startGoogleLogin = startGoogleLogin;
+
   var driveConnectBtn = $('#driveConnect');
   if (driveConnectBtn) driveConnectBtn.addEventListener('click', function () {
-    if (typeof location !== 'undefined') location.href = '/api/google/login';
+    startGoogleLogin();
   });
 
   var driveDisconnectBtn = $('#driveDisconnect');
@@ -4481,8 +4826,7 @@
     if (notifyEl) notifyEl.value = localStorage.getItem('app_drive_notify_to') || '';
   } catch (e) {}
 
-  renderExportGrid();
-  refreshDriveStatus();
+  safeRun(function () { renderExportGrid(); refreshDriveStatus(); }, 'التصدير والربط');
 
   /* ============================================================
      المزامنة السحابية (Google Drive)
@@ -4495,7 +4839,9 @@
     app_partners: 'الشركاء',
     app_partner_profit: 'أرباح الشركاء',
     app_associations: 'الجمعيات',
-    app_members: 'أعضاء الجمعيات'
+    app_members: 'أعضاء الجمعيات',
+    app_wa_settings: 'رسائل التحصيل (واتساب) — الإعدادات',
+    app_wa_log: 'رسائل التحصيل (واتساب) — سجل الإرسال'
   };
   var SYNC_KEYS = Object.keys(SYNC_LABELS);
   var SYNC_PUSH_MS = 60 * 60 * 1000;    /* رفع تلقائي كل ساعة */
@@ -4586,12 +4932,32 @@
     } catch (e) { return false; }
   }
 
+  /* هل القيمة الخام تمثّل بيانات فارغة؟ — لمنع استبدال بيانات ببيانات فاضية */
+  function isEmptyPayload(raw) {
+    if (raw == null || raw === '') return true;
+    try {
+      var v = JSON.parse(raw);
+      if (Array.isArray(v)) return v.length === 0;
+      if (v !== null && typeof v === 'object') return Object.keys(v).length === 0;
+      if (v === null) return true;
+      return false;
+    } catch (e) { return false; }
+  }
+  function readRawKey(k) {
+    try { return localStorage.getItem(k); } catch (e) { return null; }
+  }
+  var lastApplySkipped = 0;
+
   function applySnapshot(snap) {
     backupLocal('قبل استبدال المزامنة');
     var secs = (snap && snap.sections) || {};
     var applied = 0;
+    lastApplySkipped = 0;
     SYNC_KEYS.forEach(function (k) {
-      if (typeof secs[k] === 'string') { localStorage.setItem(k, secs[k]); applied++; }
+      if (typeof secs[k] !== 'string') return;
+      /* الحماية: ما نستبدلش بيانات موجودة على الجهاز ببيانات فارغة من بُعد */
+      if (isEmptyPayload(secs[k]) && !isEmptyPayload(readRawKey(k))) { lastApplySkipped++; return; }
+      localStorage.setItem(k, secs[k]); applied++;
     });
     try {
       localStorage.setItem('app_sync_meta', JSON.stringify({
@@ -4789,8 +5155,11 @@
     if (rb) rb.hidden = false;
     syncSetState('is-ok', 'اتطبّقت نسخة ' + (snap.updatedAt ? new Date(snap.updatedAt).toLocaleString('ar-EG') : 'الدرايف') +
       ' — ' + applied + ' أقسام');
-    syncShowNote('اتحفظت نسخة احتياطية من بياناتك القديمة. لو رجعت غلط، اضغط «تراجع عن آخر استبدال».', false);
-    toast('تم تحديث البيانات من الدرايف ✓');
+    syncShowNote('اتحفظت نسخة احتياطية من بياناتك القديمة. لو رجعت غلط، اضغط «تراجع عن آخر استبدال».' +
+      (lastApplySkipped ? ' — تم تجاهل ' + lastApplySkipped + ' قسم فارغ في النسخة البعيدة عشان ما نمسحش بياناتك.' : ''), false);
+    toast(lastApplySkipped
+      ? 'تم تحديث البيانات ✓ (وتم حماية ' + lastApplySkipped + ' قسم من المسح)'
+      : 'تم تحديث البيانات من الدرايف ✓');
     /* نعيد بناء الأقسام المعروضة */
     try {
       renderHomeStats();
@@ -5024,7 +5393,7 @@
         if (localUrl) showCustomFolder(localUrl);
       });
   }
-  loadSyncFolder();
+  safeRun(loadSyncFolder, 'مجلد المزامنة');
 
   var syncFolderSave = $('#syncFolderSave');
   if (syncFolderSave) {
@@ -5627,6 +5996,134 @@
     }
   }
 
+  function partnerProfileReport(p) {
+    var d = derivePartner(p);
+    var profits = p.profits || [];
+    var profitSum = 0;
+    profits.forEach(function (f) { profitSum += Number(f.amount || 0); });
+    var base = [
+      ['اسم الشريك', p.name || ''],
+      ['الصفة', p.role || ''],
+      ['الحصة %', d.share],
+      ['رأس المال (المستثمر)', d.capital],
+      ['نصيبه من أرباح السنة', d.cut],
+      ['المسحوبات', d.withdrawals],
+      ['الصافي المستحق', d.net],
+      ['أرباح مسجّلة يدوياً', profitSum],
+      ['ملاحظات', p.note || '']
+    ];
+    base.push(['', '']);
+    base.push(['سجل الأرباح (التاريخ — المبلغ)', '']);
+    profits.forEach(function (f) { base.push([formatDate(f.date), Number(f.amount || 0)]); });
+    return {
+      title: 'بروفايل شريك: ' + (p.name || ''),
+      subtitle: (p.role || 'شريك') + ' — صافي أرباح السنة ' + money(getPartnerProfit()),
+      columns: ['البند', 'القيمة'],
+      moneyCols: [1],
+      totalRow: false,
+      rows: base,
+      summary: [
+        { label: 'رأس المال', value: money(d.capital) },
+        { label: 'الحصة', value: money(d.share) + '%' },
+        { label: 'المسحوبات', value: money(d.withdrawals) },
+        { label: 'الصافي المستحق', value: money(d.net) }
+      ]
+    };
+  }
+
+  function partnerProfileSheets(p) {
+    var d = derivePartner(p);
+    var profits = p.profits || [];
+    var profitSum = 0;
+    profits.forEach(function (f) { profitSum += Number(f.amount || 0); });
+    var info = [
+      ['البيان', 'القيمة'],
+      ['اسم الشريك', p.name || ''],
+      ['الصفة', p.role || ''],
+      ['الحصة %', d.share],
+      ['ملاحظات', p.note || '']
+    ];
+    var moneyRows = [
+      ['البند', 'المبلغ'],
+      ['رأس المال (المستثمر)', d.capital],
+      ['صافي أرباح السنة (الشركة)', getPartnerProfit()],
+      ['نصيبه من الأرباح', d.cut],
+      ['أرباح مسجّلة يدوياً', profitSum],
+      ['المسحوبات', d.withdrawals],
+      ['الصافي المستحق', d.net]
+    ];
+    var prof = [['التاريخ', 'الربح', 'ملاحظة']];
+    profits.forEach(function (f) {
+      prof.push([formatDate(f.date), Number(f.amount || 0), f.note || '']);
+    });
+    return [
+      { name: 'البيانات', title: 'بيانات الشريك', subtitle: p.name || '', rows: info, widths: [34, 46] },
+      { name: 'الملخص المالي', title: 'الملخص المالي', subtitle: p.name || '', rows: moneyRows, widths: [44, 24], moneyCols: [1], totalRow: false },
+      { name: 'الأرباح', title: 'سجل الأرباح', subtitle: p.name || '', rows: prof, widths: [22, 22, 40], moneyCols: [1], totalRow: false }
+    ];
+  }
+
+  var pfpExcelBtn = $('#pfpExcelBtn');
+  if (pfpExcelBtn) pfpExcelBtn.addEventListener('click', function () {
+    var p = getPartners()[currentPartnerIdx];
+    if (!p) { toast('الشريك غير موجود', true); return; }
+    if (typeof ExportKit === 'undefined') { toast('محرك التصدير غير محمّل', true); return; }
+    try {
+      var bytes = ExportKit.buildXlsx(partnerProfileSheets(p));
+      openExportModal('partner-' + safeFileName(p.name) + '-' + exportStamp() + '.xlsx', MIME_XLSX, bytes);
+    } catch (e) { toast('خطأ في التصدير: ' + (e && e.message ? e.message : e), true); }
+  });
+
+  var pfpPdfBtn = $('#pfpPdfBtn');
+  if (pfpPdfBtn) pfpPdfBtn.addEventListener('click', function () {
+    var p = getPartners()[currentPartnerIdx];
+    if (!p) { toast('الشريك غير موجود', true); return; }
+    if (typeof ExportKit === 'undefined') { toast('محرك التصدير غير محمّل', true); return; }
+    if (!ExportKit.hasCanvas()) { toast('تصدير PDF يحتاج متصفحاً حقيقياً', true); return; }
+    try {
+      var pdf = ExportKit.reportToPdf(partnerProfileReport(p));
+      if (!pdf) { toast('تعذّر إنشاء ملف PDF', true); return; }
+      openExportModal('partner-' + safeFileName(p.name) + '-' + exportStamp() + '.pdf', MIME_PDF, pdf);
+    } catch (e) { toast('خطأ في التصدير: ' + (e && e.message ? e.message : e), true); }
+  });
+
+  var pfpEditBtn = $('#pfpEditBtn');
+  if (pfpEditBtn) pfpEditBtn.addEventListener('click', function () {
+    var p = getPartners()[currentPartnerIdx];
+    if (!p) return;
+    openConfirm({
+      title: 'تعديل بيانات الشريك',
+      message: 'هل أنت متأكد من أنك تريد تعديل بيانات الشريك «' + (p.name || '') + '»؟',
+      yes: 'نعم، تعديل', no: 'تراجع',
+      onYes: function () {
+        startEditPartner(currentPartnerIdx);
+        showView('partners');
+      }
+    });
+  });
+
+  var pfpDeleteBtn = $('#pfpDeleteBtn');
+  if (pfpDeleteBtn) pfpDeleteBtn.addEventListener('click', function () {
+    var p = getPartners()[currentPartnerIdx];
+    if (!p) return;
+    openConfirm({
+      title: 'حذف الشريك',
+      message: 'هل تريد حذف الشريك «' + (p.name || '') + '»؟ الحذف نهائي — سيُطلب كلمة المرور.',
+      yes: 'نعم، حذف نهائي', no: 'تراجع', password: true,
+      onYes: function () {
+        var list = getPartners();
+        var target = list[currentPartnerIdx];
+        if (!target) { toast('الشريك غير موجود', true); return; }
+        var name = target.name || '';
+        list.splice(currentPartnerIdx, 1);
+        savePartners(list);
+        renderPartners();
+        showView('partners');
+        toast('تم حذف الشريك «' + name + '»');
+      }
+    });
+  });
+
   var pfpForm = $('#pfpForm');
   if (pfpForm) {
     pfpForm.addEventListener('submit', function (e) {
@@ -5680,13 +6177,994 @@
     }
   });
 
+  /* ---------- بروفايل عضو الجمعية ---------- */
+  var currentMemberIdx = -1;
+
+  function memberProfileReport(m) {
+    var a = assocByName(m.assoc);
+    var d = deriveMember(m);
+    var order = memberOrderByIdx(currentMemberIdx);
+    var turn = memberTurnMonth(currentMemberIdx);
+    var pot = a ? assocPot(a) : 0;
+    var M = a ? assocMonths(a) : 0;
+    var base = [
+        ['اسم العضو', m.name || ''],
+        ['الجمعية', m.assoc || ''],
+        ['نوع الاشتراك', m.type || ''],
+        ['رقم الدور', order + 1],
+        ['موعد قبضه', turn ? monthLabel(turn) : '—'],
+        ['قيمة السهم (يدفع كل شهر)', d.fee],
+        ['الحصيلة اللي هيقبضها', pot],
+        ['إجمالي اللي يدفعه في الدورة', d.fee * M],
+        ['مدّة الدورة', a ? cycleText(a) : '—'],
+        ['يوم القبض', a ? 'يوم ' + assocPayoutDay(a) + ' من كل شهر' : '—'],
+        ['المدفوع', d.paid],
+        ['المتبقي', d.rest],
+        ['الحالة', d.status],
+        ['ملاحظات', m.note || '']
+    ];
+    base.push(['', '']);
+    base.push(['سجل الدفعات (الشهر — المبلغ — التاريخ)', '']);
+    (m.payments || []).forEach(function (p) {
+      base.push([monthLabel(p.month), Number(p.amount || 0)]);
+    });
+    return {
+      title: 'بروفايل عضو الجمعية: ' + (m.name || ''),
+      subtitle: (m.assoc || '') + ' — دوره رقم ' + (order + 1),
+      columns: ['البند', 'القيمة'],
+      moneyCols: [1],
+      totalRow: false,
+      rows: base,
+      summary: [
+        { label: 'قيمة السهم', value: money(d.fee) },
+        { label: 'الحصيلة اللي يقبضها', value: money(pot) },
+        { label: 'المدفوع', value: money(d.paid) },
+        { label: 'المتبقي', value: money(d.rest) }
+      ]
+    };
+  }
+
+  function memberProfileSheets(m) {
+    var a = assocByName(m.assoc);
+    var d = deriveMember(m);
+    var order = memberOrderByIdx(currentMemberIdx);
+    var turn = memberTurnMonth(currentMemberIdx);
+    var pot = a ? assocPot(a) : 0;
+    var M = a ? assocMonths(a) : 0;
+    var info = [
+      ['البيان', 'القيمة'],
+      ['اسم العضو', m.name || ''],
+      ['الجمعية', m.assoc || ''],
+      ['نوع الاشتراك', m.type || ''],
+      ['رقم الدور', order + 1],
+      ['موعد قبضه', turn ? monthLabel(turn) : '—'],
+      ['يوم القبض', a ? 'يوم ' + assocPayoutDay(a) + ' من كل شهر' : '—'],
+      ['أول شهر في الدورة', a ? monthLabel(assocStart(a)) : '—'],
+      ['مدّة الدورة', a ? cycleText(a) : '—'],
+      ['ملاحظات', m.note || '']
+    ];
+    var moneyRows = [
+      ['البند', 'المبلغ'],
+      ['قيمة السهم (يدفع كل شهر)', d.fee],
+      ['الحصيلة الشهرية للجمعية (هيقبضها)', pot],
+      ['إجمالي اللي يدفعه في الدورة', d.fee * M],
+      ['المدفوع', d.paid],
+      ['المتبقي', d.rest]
+    ];
+    var pays = [['الشهر', 'المبلغ', 'التاريخ', 'ملاحظة']];
+    (m.payments || []).forEach(function (p) {
+      pays.push([monthLabel(p.month), Number(p.amount || 0), formatDate(p.date), p.note || '']);
+    });
+    var sched = [['#', 'الشهر', 'القبّاض', 'المطلوب', 'المدفوع', 'المتبقي', 'الحالة']];
+    if (a) {
+      for (var k = 0; k < M; k++) {
+        var key = shiftMonth(assocStart(a), k);
+        var col = collectorAt(a, k);
+        var paid = paidInMonth(m, key);
+        sched.push([k + 1, monthLabel(key), col ? (col.name || '—') : '—',
+          d.fee, paid, Math.max(d.fee - paid, 0), statusInMonth(m, key, d.fee)]);
+      }
+    }
+    return [
+      { name: 'البيانات', title: 'بيانات العضو', subtitle: m.name || '', rows: info, widths: [38, 46] },
+      { name: 'الملخص المالي', title: 'الملخص المالي', subtitle: m.name || '', rows: moneyRows, widths: [44, 24], moneyCols: [1], totalRow: false },
+      { name: 'الدفعات', title: 'سجل الدفعات', subtitle: m.name || '', rows: pays, widths: [22, 18, 20, 34], moneyCols: [1], totalRow: false },
+      { name: 'جدول الأقساط', title: 'جدول الأقساط شهراً بشهر', subtitle: m.name || '', rows: sched, widths: [8, 20, 26, 16, 16, 16, 14], moneyCols: [3, 4, 5], totalRow: false }
+    ];
+  }
+
+  function renderMemberProfile() {
+    var list = getMembers();
+    var m = list[currentMemberIdx];
+    if (!m) { showView('associations'); return; }
+    var a = assocByName(m.assoc);
+    var d = deriveMember(m);
+    var order = memberOrderByIdx(currentMemberIdx);
+    var turn = memberTurnMonth(currentMemberIdx);
+    var pot = a ? assocPot(a) : 0;
+    var M = a ? assocMonths(a) : 0;
+
+    var t = $('#mfpTitle'); if (t) t.textContent = m.name || 'عضو';
+    var s = $('#mfpSub'); if (s) s.textContent = (m.assoc || '—') + (m.note ? ' • ' + m.note : '');
+    var st = $('#mfpStatus'); if (st) st.textContent = d.status;
+
+    var sum = $('#mfpSummary');
+    if (sum) {
+      sum.innerHTML =
+        '<div class="summary-top">' +
+          '<div><h3>ملخص حساب العضو</h3><p>' + esc(m.name || '') + ' — دوره رقم ' + (order + 1) +
+          (turn ? ' • يقبض في ' + monthLabel(turn) : '') + '</p></div>' +
+          '<div class="stat"><b>' + money(pot) + '</b><small>الحصيلة اللي هيقبضها</small></div>' +
+        '</div>' +
+        '<div class="summary summary--4">' +
+          '<div class="summary__box summary__box--net"><small>قيمة السهم (يدفع كل شهر)</small><b>' + money(d.fee) + '</b></div>' +
+          '<div class="summary__box summary__box--in"><small>الحصيلة اللي هيقبضها</small><b>' + money(pot) + '</b></div>' +
+          '<div class="summary__box summary__box--net"><small>إجمالي اللي يدفعه في الدورة</small><b>' + money(d.fee * M) + '</b></div>' +
+          '<div class="summary__box summary__box--net"><small>مدّة الدورة</small><b>' + (a ? cycleText(a) : '—') + '</b></div>' +
+        '</div>' +
+        '<div class="summary summary--4">' +
+          '<div class="summary__box summary__box--in"><small>المدفوع</small><b>' + money(d.paid) + '</b></div>' +
+          '<div class="summary__box summary__box--out"><small>المتبقي</small><b>' + money(d.rest) + '</b></div>' +
+          '<div class="summary__box summary__box--net"><small>الحالة</small><b>' + d.status + '</b></div>' +
+          '<div class="summary__box summary__box--net"><small>يوم القبض</small><b>' + (a ? 'يوم ' + assocPayoutDay(a) : '—') + '</b></div>' +
+        '</div>';
+    }
+
+    var hint = $('#mfpCycleHint');
+    if (hint) {
+      hint.innerHTML = a
+        ? 'العضو بيدفع <b>' + money(d.fee) + '</b> كل شهر على <b>' + cycleText(a) +
+          '</b> — والجمعية بتقبض في <b>يوم ' + assocPayoutDay(a) + '</b> من كل شهر — أول شهر <b>' +
+          monthLabel(assocStart(a)) + '</b> — صاحب دور الشهر الحالي <b>' +
+          esc((function () { var c = collectorForMonth(a, currentMonthKey()); return c ? (c.name || '—') : '—'; })()) + '</b>.'
+        : 'هذا العضو غير مرتبط بجمعية — أضفه من نموذج الأعضاء داخل الجمعية.';
+    }
+
+    var tb = $('#mfpTable tbody');
+    if (tb) {
+      var rows = '';
+      for (var k = 0; k < M; k++) {
+        var key = shiftMonth(assocStart(a), k);
+        var col = collectorAt(a, k);
+        var paid = paidInMonth(m, key);
+        var ms = statusInMonth(m, key, d.fee);
+        rows += '<tr' + (key === turn ? ' style="background:rgba(79,70,255,.10)"' : '') + '>' +
+          '<td>' + (k + 1) + '</td>' +
+          '<td>' + monthLabel(key) + (key === currentMonthKey() ? ' <span class="tag tag--warn">الحالي</span>' : '') + '</td>' +
+          '<td>' + esc(col ? (col.name || '—') : '—') + '</td>' +
+          '<td class="amount">' + money(d.fee) + '</td>' +
+          '<td class="amount pos">' + money(paid) + '</td>' +
+          '<td class="amount ' + (d.fee - paid > 0 ? 'neg' : 'pos') + '">' + money(Math.max(d.fee - paid, 0)) + '</td>' +
+          '<td><span class="tag ' + assocStatusClass(ms) + '">' + ms + '</span></td>' +
+          '</tr>';
+      }
+      tb.innerHTML = rows || '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">لا توجد جمعية مرتبطة بهذا العضو</td></tr>';
+    }
+
+    var links = $('#mfpLinks');
+    if (links) {
+      var pays = (m.payments || []).slice().sort(function (x, y) {
+        return String(y.month || '').localeCompare(String(x.month || ''));
+      });
+      var pRows = pays.map(function (p, i) {
+        return '<tr><td>' + (i + 1) + '</td><td>' + monthLabel(p.month) + '</td>' +
+          '<td class="amount pos">' + money(p.amount) + '</td>' +
+          '<td>' + esc(formatDate(p.date)) + '</td>' +
+          '<td>' + (p.note ? esc(p.note) : '—') + '</td>' +
+          '<td class="col-cell"><button type="button" class="btn btn--ghost btn--sm btn--danger" data-del-mpay="' + i + '">حذف</button></td></tr>';
+      }).join('');
+      links.innerHTML = '<div class="table-wrap"><table class="table"><thead><tr>' +
+        '<th>#</th><th>الشهر</th><th>المبلغ</th><th>التاريخ</th><th>ملاحظة</th><th style="width:70px"><span class="sr-only">حذف</span></th>' +
+        '</tr></thead><tbody>' + (pRows ||
+        '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">لا توجد دفعات مسجّلة بعد</td></tr>') +
+        '</tbody></table></div>' +
+        '<p class="panel__note">إجمالي المدفوع <b>' + money(d.paid) + '</b> — المتبقي <b>' + money(d.rest) + '</b>.</p>';
+      /* ربط صفوف الجدول بالدفعات الأصلية (الترتيب مقلوب) */
+      var order2 = pays.map(function (p) { return (m.payments || []).indexOf(p); });
+      var delBtns = links.querySelectorAll('[data-del-mpay]');
+      for (var q = 0; q < delBtns.length; q++) {
+        delBtns[q].setAttribute('data-del-mpay', String(order2[q]));
+      }
+    }
+
+    var pf = $('#mfpPayForm');
+    if (pf) {
+      var sel = $('#mfpMonth');
+      if (sel) {
+        var opts = '';
+        for (var z = 0; z < M; z++) {
+          var mk = shiftMonth(assocStart(a), z);
+          opts += '<option value="' + mk + '">' + monthLabel(mk) + '</option>';
+        }
+        sel.innerHTML = opts || '<option value="' + currentMonthKey() + '">' + monthLabel(currentMonthKey()) + '</option>';
+        if (turn && M) sel.value = turn;
+        else if (currentMonthKey()) sel.value = currentMonthKey();
+      }
+      pf.elements.amount.value = '';
+      var pd = $('#mfpPayDate');
+      if (pd) pd.value = todayISO();
+      var er = $('#mfpError'); if (er) er.hidden = true;
+    }
+  }
+
+  var mfpPayForm = $('#mfpPayForm');
+  if (mfpPayForm) {
+    mfpPayForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var err = $('#mfpError');
+      var fail = function (msg) { if (err) { err.textContent = msg; err.hidden = false; } };
+      var f = mfpPayForm.elements;
+      var month = f.month.value;
+      var amt = parseFloat(f.amount.value);
+      var date = f.date.value || todayISO();
+      if (!monthKeyParts(month)) return fail('اختر الشهر أولاً');
+      if (!(amt > 0)) return fail('أدخل مبلغاً صحيحاً أكبر من صفر');
+      if (err) err.hidden = true;
+
+      var list = getMembers();
+      var m = list[currentMemberIdx];
+      if (!m) return;
+      if (!Array.isArray(m.payments)) m.payments = [];
+      m.payments.push({ month: month, amount: amt, date: date, note: '' });
+      m.paid = Math.round(m.payments.reduce(function (s, p) { return s + Number(p.amount || 0); }, 0) * 100) / 100;
+      saveMembers(list);
+      renderMemberProfile();
+      renderAssociations();
+      toast('تم تسجيل دفعة ' + money(amt) + ' لشهر ' + monthLabel(month) + ' ✓');
+    });
+    mfpPayForm.addEventListener('input', function () {
+      var er = $('#mfpError'); if (er) er.hidden = true;
+    });
+  }
+
+  var mfpExcelBtn = $('#mfpExcelBtn');
+  if (mfpExcelBtn) mfpExcelBtn.addEventListener('click', function () {
+    var m = getMembers()[currentMemberIdx];
+    if (!m) { toast('العضو غير موجود', true); return; }
+    if (typeof ExportKit === 'undefined') { toast('محرك التصدير غير محمّل', true); return; }
+    try {
+      var bytes = ExportKit.buildXlsx(memberProfileSheets(m));
+      openExportModal('member-' + safeFileName(m.name) + '-' + exportStamp() + '.xlsx', MIME_XLSX, bytes);
+    } catch (e) { toast('خطأ في التصدير: ' + (e && e.message ? e.message : e), true); }
+  });
+
+  var mfpPdfBtn = $('#mfpPdfBtn');
+  if (mfpPdfBtn) mfpPdfBtn.addEventListener('click', function () {
+    var m = getMembers()[currentMemberIdx];
+    if (!m) { toast('العضو غير موجود', true); return; }
+    if (typeof ExportKit === 'undefined') { toast('محرك التصدير غير محمّل', true); return; }
+    if (!ExportKit.hasCanvas()) { toast('تصدير PDF يحتاج متصفحاً حقيقياً', true); return; }
+    try {
+      var pdf = ExportKit.reportToPdf(memberProfileReport(m));
+      if (!pdf) { toast('تعذّر إنشاء ملف PDF', true); return; }
+      openExportModal('member-' + safeFileName(m.name) + '-' + exportStamp() + '.pdf', MIME_PDF, pdf);
+    } catch (e) { toast('خطأ في التصدير: ' + (e && e.message ? e.message : e), true); }
+  });
+
+  var mfpEditBtn = $('#mfpEditBtn');
+  if (mfpEditBtn) mfpEditBtn.addEventListener('click', function () {
+    var m = getMembers()[currentMemberIdx];
+    if (!m) return;
+    openConfirm({
+      title: 'تعديل بيانات العضو',
+      message: 'هل أنت متأكد من أنك تريد تعديل بيانات العضو «' + (m.name || '') + '»؟',
+      yes: 'نعم، تعديل', no: 'تراجع',
+      onYes: function () {
+        startEditMember(currentMemberIdx);
+        showView('associations');
+      }
+    });
+  });
+
+  var mfpDeleteBtn = $('#mfpDeleteBtn');
+  if (mfpDeleteBtn) mfpDeleteBtn.addEventListener('click', function () {
+    var m = getMembers()[currentMemberIdx];
+    if (!m) return;
+    openConfirm({
+      title: 'حذف العضو',
+      message: 'هل تريد حذف العضو «' + (m.name || '') + '» من الجمعية؟ الحذف نهائي — سيُطلب كلمة المرور.',
+      yes: 'نعم، حذف نهائي', no: 'تراجع', password: true,
+      onYes: function () {
+        var list = getMembers();
+        var target = list[currentMemberIdx];
+        if (!target) { toast('العضو غير موجود', true); return; }
+        var name = target.name || '';
+        list.splice(currentMemberIdx, 1);
+        saveMembers(list);
+        renderAssociations();
+        showView('associations');
+        toast('تم حذف العضو «' + name + '»');
+      }
+    });
+  });
+
+  /* فتح بروفايل العضو + حذف دفعة */
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+
+    var bp = t.closest('[data-member-profile]');
+    if (bp) {
+      currentMemberIdx = Number(bp.getAttribute('data-member-profile'));
+      navigate('member-profile');
+      return;
+    }
+
+    var dp = t.closest('[data-del-mpay]');
+    if (dp) {
+      var i = Number(dp.getAttribute('data-del-mpay'));
+      var list = getMembers();
+      var m = list[currentMemberIdx];
+      if (!m || !m.payments || !m.payments[i]) return;
+      var amt = Number(m.payments[i].amount || 0);
+      m.payments.splice(i, 1);
+      m.paid = Math.round(m.payments.reduce(function (s, p) { return s + Number(p.amount || 0); }, 0) * 100) / 100;
+      saveMembers(list);
+      renderMemberProfile();
+      renderAssociations();
+      toast('تم حذف دفعة بقيمة ' + money(amt) + ' — المدفوع الحالي ' + money(m.paid));
+    }
+  });
+
+
+  /* ============================================================
+     العمليات — سجل كل تغيير في البيانات + تراجع عن أي عملية
+     بيراقب كل كتابة في localStorage لأقسام البيانات المعروفة،
+     وينشئ سجلاً بالعملية والوقت والوصف + قيمة قبل/بعد للتراجع.
+     ============================================================ */
+  var KEY_OPS = 'app_operations';
+  var OPS_MAX = 100;              /* أقصى عدد عمليات نحتفظ بها */
+  var OPS_UNDO_MAX = 5;           /* آخر كام عملية نحتفظ بقيمهم الكاملة */
+  var OPS_MAX_BYTES = 200000;     /* أقصى حجم لقيمة تُحفظ للتراجع */
+  var opHooked = false;
+  var opBusy = false;
+  var rawSetItem = null;
+
+  function opsWatched(key) {
+    if (!key || key === KEY_OPS) return false;
+    if (key === 'app_sync_backup' || key.indexOf('app_sync_') === 0) return false;
+    if (typeof SYNC_LABELS === 'object' && SYNC_LABELS[key]) return true;
+    return key === 'app_password';
+  }
+
+  function getOps() {
+    try {
+      var raw = localStorage.getItem(KEY_OPS);
+      if (raw) {
+        var v = JSON.parse(raw);
+        if (Array.isArray(v)) return v;
+      }
+    } catch (e) {}
+    return [];
+  }
+
+  function saveOps(list) {
+    try { localStorage.setItem(KEY_OPS, JSON.stringify(list)); return true; }
+    catch (e) {
+      /* لو الحجم زاد عن حد التخزين: نشيل قيم التراجع من الأقدم ونحاول تاني */
+      try {
+        var slim = list.map(function (o, i) {
+          if (i < OPS_UNDO_MAX && o.undoable) return o;
+          var c = {};
+          for (var k in o) { if (Object.prototype.hasOwnProperty.call(o, k)) c[k] = o[k]; }
+          c.undoable = false; c.before = null; c.after = null;
+          return c;
+        });
+        localStorage.setItem(KEY_OPS, JSON.stringify(slim));
+        return true;
+      } catch (e2) { return false; }
+    }
+  }
+
+  function tryParse(raw) { try { return JSON.parse(raw); } catch (e) { return null; } }
+
+  function opNameOf(v) {
+    if (v && typeof v === 'object') return String(v.name || v.desc || v.title || v.label || '');
+    return '';
+  }
+
+  function formatOpsTime(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate() + ' ' +
+      pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
+  function opSummary(key, oldRaw, newRaw) {
+    if (key === 'app_password') return 'تغيير كلمة المرور';
+    var label = (typeof SYNC_LABELS === 'object' && SYNC_LABELS[key]) ? SYNC_LABELS[key] : 'الإعدادات';
+    var a = tryParse(oldRaw), b = tryParse(newRaw);
+    if (oldRaw === null && Array.isArray(b)) return label + ' — أول تسجيل (' + b.length + ' سجل)';
+    if (newRaw === null && Array.isArray(a)) return label + ' — مسح القسم';
+    if (Array.isArray(a) && Array.isArray(b)) {
+      if (a.length === b.length) {
+        var same = true;
+        for (var i = 0; i < a.length; i++) {
+          if (JSON.stringify(a[i]) !== JSON.stringify(b[i])) { same = false; break; }
+        }
+        if (same) return label + ' — بلا تغيير';
+        var changed = 0;
+        for (var j = 0; j < Math.min(a.length, b.length); j++) {
+          if (JSON.stringify(a[j]) !== JSON.stringify(b[j])) changed++;
+        }
+        return label + ' — تعديل بيانات' + (changed ? ' (' + changed + ' سجل)' : '');
+      }
+      var head = label + ': ' + a.length + ' ← ' + b.length;
+      var added = b.filter(function (x) {
+        return !a.some(function (y) { return JSON.stringify(y) === JSON.stringify(x); });
+      });
+      var removed = a.filter(function (x) {
+        return !b.some(function (y) { return JSON.stringify(y) === JSON.stringify(x); });
+      });
+      var det = [];
+      added.slice(0, 2).forEach(function (x) { det.push('+ ' + (opNameOf(x) || 'سجل')); });
+      removed.slice(0, 2).forEach(function (x) { det.push('− ' + (opNameOf(x) || 'سجل')); });
+      return head + (det.length ? ' — ' + det.join('، ') : '');
+    }
+    if (key === 'app_partner_profit') {
+      return 'صافي أرباح السنة: ' + (oldRaw || '—') + ' ← ' + (newRaw || '—');
+    }
+    if (Array.isArray(b) && a === null) return label + ' — استعادة/إصلاح من نسخة احتياطية';
+    if (a !== null && b !== null && typeof a === 'object') return label + ' — تعديل البيانات';
+    return label + ' — تغيير الإعداد';
+  }
+
+  function pushOp(key, oldRaw, newRaw) {
+    var entry = {
+      id: 'op_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7),
+      at: new Date().toISOString(),
+      key: key,
+      label: (typeof SYNC_LABELS === 'object' && SYNC_LABELS[key]) ? SYNC_LABELS[key] : 'الإعدادات',
+      desc: opSummary(key, oldRaw, newRaw),
+      undoable: false,
+      before: null,
+      after: null
+    };
+    if (key !== 'app_password' &&
+        typeof oldRaw === 'string' && typeof newRaw === 'string' &&
+        oldRaw.length <= OPS_MAX_BYTES && newRaw.length <= OPS_MAX_BYTES) {
+      entry.undoable = true;
+      entry.before = oldRaw;
+      entry.after = newRaw;
+    }
+    var list = getOps();
+    list.unshift(entry);
+    for (var i = OPS_UNDO_MAX; i < list.length; i++) {
+      if (list[i].undoable) { list[i].undoable = false; list[i].before = null; list[i].after = null; }
+    }
+    if (list.length > OPS_MAX) list.length = OPS_MAX;
+    saveOps(list);
+    return entry;
+  }
+
+  function installOpsHook() {
+    if (opHooked) return false;
+    var proto = null;
+    try { proto = window.Storage && window.Storage.prototype; } catch (e) {}
+    if (!proto || typeof proto.setItem !== 'function') return false;
+    var orig = proto.setItem;
+    try {
+      proto.setItem = function (k, v) {
+        var isLS = false;
+        try { isLS = (this === window.localStorage); } catch (e) {}
+        var before = null;
+        if (isLS) { try { before = this.getItem(k); } catch (e) {} }
+        orig.call(this, k, v);
+        if (!isLS || opBusy || !opsWatched(k)) return;
+        var after = String(v);
+        if (before === after) return;
+        try { pushOp(k, before, after); } catch (e) {}
+      };
+      rawSetItem = function (k, v) { orig.call(window.localStorage, k, v); };
+      opHooked = true;
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function undoOpById(id) {
+    var list = getOps(), op = null;
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) { op = list[i]; break; }
+    if (!op) { toast('العملية غير موجودة', true); return false; }
+    if (!op.undoable || op.before === null || op.before === undefined) {
+      toast('هذه العملية خارج حد التراجع — استخدم «تراجع عن آخر استبدال» من المزامنة', true);
+      return false;
+    }
+    var current = readRawKey(op.key);
+    try { backupLocal('قبل تراجع عن عملية'); } catch (e) {}
+    opBusy = true;
+    try { rawSetItem(op.key, op.before); }
+    finally { opBusy = false; }
+    if (current !== null && current !== op.before) pushOp(op.key, current, op.before);
+    refreshAllViews();
+    toast('تم التراجع ✓ — ' + (op.desc || 'عملية'));
+    return true;
+  }
+
+  function undoLastOp() {
+    var list = getOps();
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].undoable) return undoOpById(list[i].id);
+    }
+    toast('مفيش عملية قابلة للتراجع حالياً', true);
+    return false;
+  }
+
+  function refreshAllViews() {
+    try {
+      renderHomeStats();
+      if (typeof renderCustomers === 'function') renderCustomers($('#custSearch') ? $('#custSearch').value : '');
+      if (typeof renderSuppliers === 'function') renderSuppliers($('#supplierSearch') ? $('#supplierSearch').value : '');
+      renderLedger(); renderLedgerSummary();
+      renderPartners(); renderAssociations();
+      renderCollection(colFilter()); renderCollectionSummary();
+      if (typeof renderDetails === 'function') renderDetails();
+      if (typeof renderOperations === 'function') renderOperations();
+      if (typeof renderDataSafety === 'function') renderDataSafety();
+    } catch (e) { /* إعادة البناء تكمّلي */ }
+  }
+
+  /* ---------- شاشة العمليات ---------- */
+  function renderOperations() {
+    var list = getOps();
+    var cnt = $('#opsCount');
+    if (cnt) cnt.textContent = list.length + ' عملية';
+
+    var undoable = 0;
+    list.forEach(function (o) { if (o.undoable) undoable++; });
+    var last = list[0];
+
+    var sum = $('#opsSummary');
+    if (sum) {
+      sum.innerHTML =
+        '<div class="summary__box summary__box--net"><small>عدد العمليات المسجّلة</small><b>' + list.length + '</b></div>' +
+        '<div class="summary__box summary__box--in"><small>عمليات قابلة للتراجع</small><b>' + undoable + '</b></div>' +
+        '<div class="summary__box summary__box--net"><small>آخر قسم تغيّر</small><b style="font-size:14px">' +
+          esc(last ? (last.label || '—') : '—') + '</b></div>' +
+        '<div class="summary__box summary__box--out"><small>وقت آخر عملية</small><b style="font-size:14px">' +
+          esc(last ? formatOpsTime(last.at) : '—') + '</b></div>';
+    }
+
+    var tb = $('#opsTbody');
+    if (tb) {
+      var rows = list.map(function (o, i) {
+        return '<tr>' +
+          '<td>' + (i + 1) + '</td>' +
+          '<td>' + esc(formatOpsTime(o.at)) + '</td>' +
+          '<td>' + esc(o.label || o.key || '') + '</td>' +
+          '<td>' + esc(o.desc || '') + '</td>' +
+          '<td>' + (o.undoable
+            ? '<span class="tag tag--in">قابل للتراجع</span>'
+            : '<span class="tag tag--warn">سجل فقط</span>') + '</td>' +
+          '<td class="col-cell">' + (o.undoable
+            ? '<button type="button" class="btn btn--ghost btn--sm" data-undo-op="' + esc(o.id) + '">تراجع</button>'
+            : '—') + '</td>' +
+          '</tr>';
+      }).join('');
+      tb.innerHTML = rows ||
+        '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:26px">' +
+        'لا توجد عمليات بعد — كل تعديل أو إضافة أو حذف في التطبيق بيتسجّل هنا تلقائياً.</td></tr>';
+    }
+
+    var ub = $('#opsUndoLast');
+    if (ub) ub.disabled = !(last && last.undoable);
+  }
+
+  /* ---------- فحص سلامة التخزين ---------- */
+  function storageReport() {
+    var rows = [], bad = [], missing = [];
+    SYNC_KEYS.forEach(function (k) {
+      var raw = readRawKey(k);
+      var state = 'سليم', ok = true;
+      if (raw === null) { state = 'لم يُحفظ بعد'; ok = false; missing.push(k); }
+      else { try { JSON.parse(raw); } catch (e) { state = 'تالف'; ok = false; bad.push(k); } }
+      rows.push({ key: k, label: SYNC_LABELS[k] || k, state: state, ok: ok, bytes: raw ? raw.length : 0 });
+    });
+    return { rows: rows, bad: bad, missing: missing };
+  }
+
+  /* إصلاح القيم التالفة من النسخة الاحتياطية عند الإقلاع */
+  function repairStorage() {
+    var fixed = [];
+    var bak = tryParse(readRawKey('app_sync_backup'));
+    SYNC_KEYS.forEach(function (k) {
+      var raw = readRawKey(k);
+      if (raw === null) return;
+      try { JSON.parse(raw); return; } catch (e) {}
+      var cand = (bak && bak.sections) ? bak.sections[k] : null;
+      if (typeof cand !== 'string') return;
+      try { JSON.parse(cand); } catch (e2) { return; }
+      try { localStorage.setItem(k, cand); fixed.push(k); } catch (e3) {}
+    });
+    return fixed;
+  }
+
+  function renderDataSafety() {
+    var box = $('#dataSafetyBody');
+    if (!box) return;
+    var rep = storageReport();
+    var list = getOps();
+    var undoable = 0;
+    list.forEach(function (o) { if (o.undoable) undoable++; });
+
+    var rows = rep.rows.map(function (r) {
+      return '<tr><td>' + esc(r.label) + '</td>' +
+        '<td><span class="tag ' + (r.ok ? 'tag--in' : 'tag--warn') + '">' + esc(r.state) + '</span></td>' +
+        '<td class="amount">' + (r.bytes ? money(r.bytes) + ' بايت' : '—') + '</td></tr>';
+    }).join('');
+
+    box.innerHTML =
+      '<div class="summary summary--4">' +
+        '<div class="summary__box summary__box--in"><small>أقسام سليمة</small><b>' +
+          (rep.rows.length - rep.bad.length) + ' / ' + rep.rows.length + '</b></div>' +
+        '<div class="summary__box summary__box--net"><small>عمليات مسجّلة</small><b>' + list.length + '</b></div>' +
+        '<div class="summary__box summary__box--in"><small>قابلة للتراجع</small><b>' + undoable + '</b></div>' +
+        '<div class="summary__box summary__box--net"><small>آخر فحص</small><b style="font-size:14px">' +
+          esc(formatOpsTime(new Date().toISOString())) + '</b></div>' +
+      '</div>' +
+      '<div class="table-wrap"><table class="table"><thead><tr>' +
+        '<th>القسم</th><th>الحالة</th><th>الحجم</th></tr></thead><tbody>' + rows +
+      '</tbody></table></div>' +
+      '<p class="panel__note">' +
+        (rep.bad.length
+          ? '⚠ اتُكتشف أقسام تالفة واتصلحت تلقائياً من النسخة الاحتياطية: ' + esc(rep.bad.join('، '))
+          : '✓ مفيش أقسام تالفة — البيانات محفوظة ومتطابقة.') +
+        ' — مفيش أي عملية بتمسح بياناتك من تلقائها: أي استبدال من المزامنة لقسم فارغ بيتجاهل تلقائياً.' +
+      '</p>';
+  }
+
+  /* ---------- أزرار العمليات ---------- */
+  /* زر «تراجع عن آخر عملية» بيتعامل معاه المُوزِّع تحت عشان ما ينفّذش مرتين */
+
+  var opsClearBtn = $('#opsClear');
+  if (opsClearBtn) opsClearBtn.addEventListener('click', function () {
+    openConfirm({
+      title: 'تفريغ سجل العمليات',
+      message: 'هل تريد مسح سجل العمليات بالكامل؟ البيانات نفسها لن تُمسح — سيُطلب كلمة المرور.',
+      yes: 'نعم، تفريغ السجل', no: 'تراجع', password: true,
+      onYes: function () {
+        saveOps([]);
+        renderOperations();
+        toast('تم تفريغ سجل العمليات — بياناتك لم تتأثر');
+      }
+    });
+  });
+
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+    var u = t.closest('[data-undo-op]');
+    if (!u) return;
+    var id = u.getAttribute('data-undo-op');
+    var op = null;
+    if (id === '__last__') {
+      var all = getOps();
+      for (var i = 0; i < all.length; i++) if (all[i].undoable) { op = all[i]; break; }
+      if (!op) { toast('مفيش عملية قابلة للتراجع حالياً', true); return; }
+    } else {
+      getOps().forEach(function (o) { if (o.id === id) op = o; });
+      if (!op) { toast('العملية غير موجودة', true); return; }
+    }
+    openConfirm({
+      title: 'تراجع عن عملية',
+      message: 'هل تريد التراجع عن: «' + (op.desc || 'عملية') + '»؟ سيتم إرجاع القسم لحالته السابقة.',
+      yes: 'نعم، تراجع', no: 'تراجع',
+      onYes: function () { undoOpById(op.id); }
+    });
+  });
+
+
+  /* ---------- رسائل التحصيل عبر واتساب ---------- */
+  var KEY_WA = 'app_wa_settings';
+  var KEY_WA_LOG = 'app_wa_log';
+  var WA_DEFAULT_TEMPLATE =
+    'مرحبًا {الاسم}،' + '\n' +
+    'إشعار تحصيل بتاريخ {التاريخ}' + '\n' +
+    '• المبلغ قبل التحصيل: {قبل}' + '\n' +
+    '• المدفوع: {المدفوع}' + '\n' +
+    '• المتبقي: {المتبقي}' + '\n' +
+    'شكرًا لكم — نظام الإدارة';
+  var waBusy = false;
+
+  function waSettings() {
+    var s = null;
+    try { s = JSON.parse(localStorage.getItem(KEY_WA) || 'null'); } catch (e) { s = null; }
+    if (!s || typeof s !== 'object') s = {};
+    return {
+      template: (typeof s.template === 'string' && s.template) ? s.template : WA_DEFAULT_TEMPLATE,
+      phonePref: (s.phonePref === 'backup' || s.phonePref === 'both') ? s.phonePref : 'primary',
+      country: /^\d{1,4}$/.test(String(s.country || '')) ? String(s.country) : '20'
+    };
+  }
+
+  function saveWaSettings(s) {
+    try {
+      localStorage.setItem(KEY_WA, JSON.stringify({
+        template: String(s.template || WA_DEFAULT_TEMPLATE),
+        phonePref: s.phonePref === 'backup' || s.phonePref === 'both' ? s.phonePref : 'primary',
+        country: /^\d{1,4}$/.test(String(s.country || '')) ? String(s.country) : '20'
+      }));
+    } catch (e) {}
+  }
+
+  function waLog() {
+    try {
+      var v = JSON.parse(localStorage.getItem(KEY_WA_LOG) || '[]');
+      return safeList(v, []);
+    } catch (e) { return []; }
+  }
+
+  function saveWaLog(list) {
+    try { localStorage.setItem(KEY_WA_LOG, JSON.stringify(list)); } catch (e) {}
+  }
+
+  function waLastPayment(c) {
+    var pays = (c && Array.isArray(c.payments)) ? c.payments : [];
+    for (var i = pays.length - 1; i >= 0; i--) if (pays[i] && typeof pays[i] === 'object') return pays[i];
+    return null;
+  }
+
+  /* مفتاح فريد لكل عملية تحصيل: أول ما يحصل تحصيل جديد المفتاح يتغير
+     فيسمح الإرسال مرة تانية — غير كده نفس التحصيل ما يترسلش تاني. */
+  function waKey(c, i, last) {
+    var pays = Array.isArray(c.payments) ? c.payments : [];
+    return [i, c.name || '', pays.length, last.date || '', Number(last.amount || 0)].join('|');
+  }
+
+  function waPhone(c) {
+    var pref = waSettings().phonePref;
+    var p1 = String(c.phone || '').replace(/[^\d+]/g, '');
+    var p2 = String(c.phone2 || '').replace(/[^\d+]/g, '');
+    if (pref === 'backup') return p2;
+    if (pref === 'both') return p1 || p2;
+    return p1;
+  }
+
+  /* الرقم بصيغة واتساب الدولية: كود الدولة + الرقم بدون صفر أو علامات */
+  function waDigits(n) {
+    var cc = waSettings().country;
+    var d = String(n || '').replace(/\D/g, '');
+    if (!d) return '';
+    if (d.indexOf('00') === 0) d = d.slice(2);
+    if (cc) {
+      if (d.indexOf(cc) === 0 && d.length > cc.length + 6) return d;
+      if (d.charAt(0) === '0') d = d.slice(1);
+      if (d.indexOf(cc) !== 0) d = cc + d;
+    } else if (d.charAt(0) === '0') {
+      d = d.slice(1);
+    }
+    return d;
+  }
+
+  function waFill(tpl, c, info) {
+    var d = derive(c);
+    var map = {
+      '{الاسم}': c.name || '', '{name}': c.name || '',
+      '{التاريخ}': formatDate(info.date), '{date}': formatDate(info.date),
+      '{قبل}': money(info.before), '{before}': money(info.before),
+      '{المدفوع}': money(info.paid), '{paid}': money(info.paid),
+      '{المتبقي}': money(d.rest), '{rest}': money(d.rest)
+    };
+    var out = String(tpl == null ? '' : tpl);
+    for (var k in map) if (Object.prototype.hasOwnProperty.call(map, k)) out = out.split(k).join(map[k]);
+    return out;
+  }
+
+  function waRows() {
+    var s = waSettings();
+    var log = waLog();
+    var out = [];
+    getCustomers().forEach(function (c, i) {
+      if (!c || typeof c !== 'object') return;
+      var last = waLastPayment(c);
+      if (!last) return;
+      var d = derive(c);
+      var paid = Number(last.amount || 0);
+      var info = {
+        date: last.date || todayISO(),
+        paid: paid,
+        before: Math.max(d.rest + paid, 0)
+      };
+      var key = waKey(c, i, last);
+      out.push({
+        i: i, c: c, info: info, key: key, phone: waPhone(c),
+        sent: log.some(function (e) { return e && e.key === key; }),
+        text: waFill(s.template, c, info)
+      });
+    });
+    return out;
+  }
+
+  function renderWaPanel() {
+    var tplEl = $('#waTemplate'), prefEl = $('#waPhonePref'), tb = $('#waTbody');
+    if (!tplEl || !prefEl || !tb) return;
+    var s = waSettings();
+    if (document.activeElement !== tplEl) tplEl.value = s.template;
+    if (prefEl.value !== s.phonePref) prefEl.value = s.phonePref;
+    var ccEl = $('#waCountry');
+    if (ccEl && document.activeElement !== ccEl) ccEl.value = s.country;
+
+    var rows = waRows();
+    var html = '';
+    rows.forEach(function (r) {
+      var status = r.sent
+        ? '<span class="tag tag--in">تم الإرسال ✓</span>'
+        : (r.phone ? '<span class="tag tag--warn">جاهز للإرسال</span>'
+                   : '<span class="tag tag--out">لا يوجد رقم</span>');
+      html += '<tr><td>' + (r.i + 1) + '</td>' +
+        '<td>' + esc(r.c.name || 'بدون اسم') + '</td>' +
+        '<td>' + esc(r.phone || '—') + '</td>' +
+        '<td>' + esc(formatDate(r.info.date)) + ' · ' + money(r.info.paid) + '</td>' +
+        '<td>' + status + '</td>' +
+        '<td class="col-cell"><button type="button" class="btn btn--ghost btn--sm" data-wa-send="' + r.i + '"' +
+          ((!r.phone || r.sent) ? ' disabled' : '') + '>' + (r.sent ? 'تم الإرسال' : 'إرسال') + '</button></td>' +
+        '</tr>';
+    });
+    if (!rows.length) {
+      html = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:22px">' +
+        'مفيش عملاء عندهم تحصيل مسجّل بعد — أضف أول دفعة من شاشة التحصيل.</td></tr>';
+    }
+    tb.innerHTML = html;
+
+    var cnt = $('#waCount');
+    if (cnt) {
+      var sent = rows.filter(function (r) { return r.sent; }).length;
+      var pending = rows.filter(function (r) { return !r.sent && r.phone; }).length;
+      cnt.textContent = rows.length + ' عميل · تم ' + sent + ' · متبقٍ ' + pending;
+    }
+    var prev = $('#waPreview');
+    if (prev) {
+      var sample = null;
+      rows.forEach(function (r) { if (!sample && !r.sent && r.phone) sample = r; });
+      if (!sample && rows.length) sample = rows[0];
+      var pv = sample ? sample.text : '—';
+      try { prev.value = pv; } catch (e) {}
+      prev.textContent = pv;
+    }
+  }
+
+  function waOpen(text, phone) {
+    var digits = waDigits(phone);
+    if (!digits) return false;
+    var url = 'https://wa.me/' + digits + '?text=' + encodeURIComponent(text || '');
+    try {
+      var w = window.open(url, '_blank');
+      return !!w;
+    } catch (e) { return false; }
+  }
+
+  function waSendOne(i) {
+    var r = null;
+    waRows().forEach(function (x) { if (x.i === i) r = x; });
+    if (!r) { toast('العميل غير موجود', true); return; }
+    if (r.sent) { toast('تم إرسال هذا التحصيل من قبل — يُسمح بإعادة الإرسال عند حدوث تحصيل جديد', true); return; }
+    if (!r.phone) { toast('لا يوجد رقم هاتف مسجّل لهذا العميل', true); return; }
+    if (!waOpen(r.text, r.phone)) {
+      toast('تعذّر فتح واتساب — اسمح بالنوافذ المنبثقة في المتصفح', true);
+      return;
+    }
+    var log = waLog();
+    log.push({ key: r.key, cid: r.i, name: r.c.name || '', phone: r.phone, at: new Date().toISOString(), text: r.text });
+    saveWaLog(log);
+    renderWaPanel();
+    toast('تم فتح واتساب للعميل ' + (r.c.name || ''));
+  }
+
+  function waSendAll() {
+    if (waBusy) return;
+    var list = waRows().filter(function (r) { return !r.sent && r.phone; });
+    if (!list.length) {
+      toast('مفيش رسائل جديدة — الكل تم إرساله أو بدون رقم هاتف', true);
+      return;
+    }
+    var btn = $('#waSendAllBtn');
+    var added = [];
+    var idx = 0, done = 0;
+    waBusy = true;
+    if (btn) btn.disabled = true;
+
+    function finish(okMsg) {
+      if (added.length) {
+        var log = waLog();
+        added.forEach(function (e) {
+          if (!log.some(function (x) { return x && x.key === e.key; })) log.push(e);
+        });
+        saveWaLog(log);
+      }
+      waBusy = false;
+      if (btn) btn.disabled = false;
+      renderWaPanel();
+      if (okMsg) toast(okMsg);
+    }
+
+    function next() {
+      if (idx >= list.length) { finish('تم إرسال ' + done + ' رسالة من ' + list.length + ' — لن يتكرر أي منهم'); return; }
+      var r = list[idx++];
+      if (!waOpen(r.text, r.phone)) {
+        finish('المتصفح حجب نافذة واتساب — اسمح بالنوافذ المنبثقة وأعد الإرسال (تم ' + done + ' من ' + list.length + ')', true);
+        return;
+      }
+      added.push({ key: r.key, cid: r.i, name: r.c.name || '', phone: r.phone, at: new Date().toISOString(), text: r.text });
+      done++;
+      renderWaPanel();
+      setTimeout(next, 450);
+    }
+    next();
+  }
+
+  /* أزرار لوحة رسائل التحصيل */
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+    var s = t.closest('[data-wa-send]');
+    if (s) { waSendOne(Number(s.getAttribute('data-wa-send'))); return; }
+    if (t.closest('#waSaveBtn')) {
+      var tpl = $('#waTemplate'), pref = $('#waPhonePref'), ccEl = $('#waCountry');
+      saveWaSettings({
+        template: tpl ? tpl.value : waSettings().template,
+        phonePref: pref ? pref.value : waSettings().phonePref,
+        country: ccEl ? ccEl.value : waSettings().country
+      });
+      renderWaPanel();
+      toast('تم حفظ إعدادات رسائل التحصيل');
+      return;
+    }
+    if (t.closest('#waSendAllBtn')) { waSendAll(); return; }
+  });
+
+  document.addEventListener('change', function (e) {
+    if (!e.target || !e.target.id) return;
+    if (e.target.id === 'waPhonePref' || e.target.id === 'waCountry') {
+      var s = waSettings();
+      if (e.target.id === 'waPhonePref') s.phonePref = e.target.value;
+      else s.country = e.target.value;
+      saveWaSettings(s);
+      renderWaPanel();
+    }
+  });
+
+  document.addEventListener('focusout', function (e) {
+    if (e.target && e.target.id === 'waTemplate') {
+      var s = waSettings();
+      var v = e.target.value;
+      if (v !== s.template) { s.template = v; saveWaSettings(s); renderWaPanel(); }
+    }
+  });
+
   /* ---------- الإقلاع ---------- */
-  /* ---------- الإقلاع ---------- */
-  renderHomeStats();
-  renderCustomers();
-  renderLedger();
-  renderLedgerSummary();
-  showView('home');
+  /* كل خطوة في try: فشل أي رسم أولي ما يمنعش فتح الشاشة الرئيسية
+     (دي كانت سبب «الشاشة الفاضية» — خطوة واحدة بتوقّع الباقي كله). */
+  var bootFailed = [];
+  function bootStep(run, label) {
+    try { run(); } catch (e) {
+      bootFailed.push(label);
+      try { console.error('فشل الإقلاع في «' + label + '»: ' + (e && e.message ? e.message : e)); } catch (e2) {}
+    }
+  }
+  bootStep(function () { installOpsHook(); }, 'سجل العمليات');
+  bootStep(function () { repairStorage(); }, 'فحص التخزين');
+  bootStep(function () {
+    renderHomeStats();
+    renderCustomers();
+    renderLedger();
+    renderLedgerSummary();
+  }, 'الرسم الأولي');
+  try {
+    showView('home');
+  } catch (e) {
+    try { console.error('فشل فتح الرئيسية: ' + (e && e.message ? e.message : e)); } catch (e2) {}
+    $('.view').forEach(function (v) { v.classList.toggle('is-active', v.id === 'view-home'); });
+  }
+  if (bootFailed.length) {
+    toast('تعذّر تحميل: ' + bootFailed.join('، ') + ' — بياناتك سليمة، أعد تشغيل التطبيق.', true);
+  }
+
+  /* أي خطأ غير متوقع يظهر رسالة بدل شاشة صامتة */
+  try {
+    window.addEventListener('error', function (ev) {
+      var m = ev && ev.message ? ev.message : 'خطأ غير معروف';
+      try { toast('حدث خطأ غير متوقع: ' + m, true); } catch (e) {}
+    });
+  } catch (e) {}
 
   window.syncApi = syncApi;
   window.syncApply = syncApply;

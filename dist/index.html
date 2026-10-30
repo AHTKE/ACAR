@@ -28,7 +28,7 @@
     <p style="color:#9fadc2;margin-bottom:30px;">يجب ربط حساب Google Drive للدخول إلى التطبيق</p>
     <label style="display:block;text-align:right;color:#f2f6fb;margin-bottom:8px;">رابط المجلد العام</label>
     <input type="text" id="forceFolderUrl" style="width:100%;padding:12px;background:#0a0e15;border:1px solid #4f8cff;border-radius:12px;color:#f2f6fb;margin-bottom:20px;" placeholder="https://drive.google.com/drive/folders/...">
-    <button type="button" id="gateConnect" onclick="window.location.href='/api/google/login';localStorage.setItem('app_shared_folder_url',document.getElementById('forceFolderUrl').value);" style="width:100%;padding:14px;background:linear-gradient(90deg,#4f8cff,#7aa8ff);color:#fff;border:none;border-radius:12px;font-weight:700;cursor:pointer;">ربط حساب Google Drive</button>
+    <button type="button" id="gateConnect" onclick="localStorage.setItem('app_shared_folder_url',document.getElementById('forceFolderUrl').value);window.startGoogleLogin?window.startGoogleLogin(event):(window.location.href='/api/google/login');" style="width:100%;padding:14px;background:linear-gradient(90deg,#4f8cff,#7aa8ff);color:#fff;border:none;border-radius:12px;font-weight:700;cursor:pointer;">ربط حساب Google Drive</button>
     <div id="gateError" style="display:none;margin-top:16px;padding:12px 14px;border-radius:12px;border:1px solid #f87171;background:rgba(248,113,113,.12);color:#fecaca;font-size:13px;line-height:1.9;text-align:right;"></div>
     <button type="button" id="gateDiag" style="margin-top:14px;width:100%;padding:10px;background:transparent;border:1px solid #33415a;border-radius:10px;color:#9fadc2;font-weight:600;font-size:12.5px;cursor:pointer;">🔍 فحص المفاتيح (لو بيقول إنها ناقصة)</button>
     <div id="gateDiagBox" style="display:none;margin-top:10px;padding:12px 14px;border-radius:12px;border:1px solid #33415a;background:#0d1420;color:#cbd5e1;font-size:12.5px;line-height:1.9;text-align:right;word-break:break-word;"></div>
@@ -234,6 +234,16 @@
           <span class="card__body">
             <span class="card__title">التفاصيل</span>
             <span class="card__desc">الإجماليات المرتبطة: المستثمر، المدفوعات، الأرباح — بدون تكرار</span>
+          </span>
+          <span class="card__arrow"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-arrow"/></svg></span>
+        </button>
+
+        <!-- 9) العمليات -->
+        <button class="card card--locked" data-go="operations">
+          <span class="card__icon card__icon--violet"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-exchange"/></svg></span>
+          <span class="card__body">
+            <span class="card__title">العمليات <svg viewBox="0 0 24 24" class="ico ico--lock"><use href="#ic-lock"/></svg></span>
+            <span class="card__desc">سجل كامل بكل تغيير حصل في التطبيق مع تراجع عن أي عملية</span>
           </span>
           <span class="card__arrow"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-arrow"/></svg></span>
         </button>
@@ -715,6 +725,60 @@
 
       <div class="summary" id="collectionSummary"></div>
 
+      <div class="panel" id="waPanel">
+        <div class="page-head" style="padding:0;border:0;background:none">
+          <div class="page-head__title">
+            <span class="card__icon card__icon--pink sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-link"></use></svg></span>
+            <div><h2>رسائل التحصيل عبر واتساب</h2><p>رسالة واحدة لكل عميل لكل عملية تحصيل — والمُرسَل له لا يُرسَل له مرة أخرى إلا بتحصيل جديد</p></div>
+          </div>
+          <span class="count-pill" id="waCount">0 عميل</span>
+        </div>
+
+        <div class="form" style="margin-top:14px">
+          <label class="field field--full"><span>قالب الرسالة (تقدر تعدّل النص زي ما تحب)</span>
+            <textarea id="waTemplate" rows="5" spellcheck="true"></textarea>
+          </label>
+          <p class="panel__note" style="margin:8px 0 12px">
+            المتاح للاستبدال: <b>{الاسم}</b> · <b>{التاريخ}</b> · <b>{قبل}</b> · <b>{المدفوع}</b> · <b>{المتبقي}</b>
+            (وتقدر تستخدم بالإنجليزي: {name} {date} {before} {paid} {rest})
+          </p>
+          <div class="form__row form__row--3">
+            <label class="field"><span>الرقم المستخدم في الإرسال</span>
+              <select id="waPhonePref">
+                <option value="primary">الرقم الأساسي فقط</option>
+                <option value="backup">الرقم الاحتياطي فقط</option>
+                <option value="both">الأساسي ثم الاحتياطي (احتياطي)</option>
+              </select>
+            </label>
+            <label class="field"><span>كود الدولة (واتساب)</span>
+              <input type="text" id="waCountry" inputmode="numeric" maxlength="4" placeholder="20" />
+            </label>
+            <label class="field"><span>معاينة الرسالة</span>
+              <textarea id="waPreview" rows="5" readonly tabindex="-1"></textarea>
+            </label>
+          </div>
+          <div class="form__actions">
+            <button type="button" class="btn btn--ghost" id="waSaveBtn">حفظ الإعدادات</button>
+            <button type="button" class="btn btn--primary" id="waSendAllBtn">إرسال للجميع</button>
+          </div>
+        </div>
+
+        <div class="table-wrap" style="margin-top:14px">
+          <table class="table">
+            <thead><tr>
+              <th style="width:52px">#</th>
+              <th>العميل</th>
+              <th>الهاتف</th>
+              <th>آخر تحصيل</th>
+              <th>الحالة</th>
+              <th style="width:120px"><span class="sr-only">إرسال</span></th>
+            </tr></thead>
+            <tbody id="waTbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+
       <div class="panel">
         <p class="panel__hint" style="margin:0 0 14px">اضغط على اسم العميل لفتح تفاصيل تحصيله — تظهر أسفل السطر مباشرة، ويمكنك إضافة دفعة جديدة من داخلها.</p>
         <div class="table-wrap">
@@ -850,13 +914,19 @@
 
       <div class="panel">
         <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-group"/></svg> الجمعيات</h3>
-        <p class="panel__hint">أضف الجمعية وقيمة الاشتراك السنوي — القيمة بتُستخدم كافتراضي لأي عضو جديد تضيفه بعدها. تعديل الاسم يتحدّث تلقائياً على كل أعضائها.</p>
+        <p class="panel__hint">الجمعية <b>تاخد وتبدي فلوس</b>: كل عضو بيدفع <b>قيمة السهم</b> كل شهر، والحصيلة الشهر كاملة بتُقبض لعضو عليه <b>الدور</b> ذلك الشهر. الحصيلة الشهرية = قيمة السهم × عدد الأعضاء، وبتظهر تلقائياً على الكارت. عدّل الاسم يتحدّث على كل أعضائها.</p>
         <form id="assocForm" class="form" novalidate>
           <input type="hidden" name="idx" value="-1" />
           <div class="form__row">
             <label class="field"><span>اسم الجمعية *</span><input type="text" name="name" required placeholder="مثال: جمعية الإعمار" /></label>
-            <label class="field"><span>قيمة الاشتراك السنوي *</span><input type="number" name="fee" min="0" step="any" required placeholder="0" /></label>
+            <label class="field"><span>قيمة السهم (الاشتراك) *</span><input type="number" name="fee" min="0" step="any" required placeholder="0" /></label>
           </div>
+          <div class="form__row form__row--3">
+            <label class="field"><span>عدد شهور الدورة (كم شهر بتدفع) *</span><input type="number" name="months" min="1" max="120" step="1" placeholder="12" title="عدد الأشهر/الأشهر التي تدفعها الجمعية مرة واحدة — عدد الأدوار = عدد الأشهر" /></label>
+            <label class="field"><span>يوم القبض في الشهر</span><input type="number" name="payoutDay" min="1" max="30" step="1" placeholder="1" /></label>
+            <label class="field"><span>أول شهر في الدورة</span><input type="month" name="startMonth" placeholder="2026-11" title="شهر بداية الدورة — يحدد موعد دور كل عضو" /></label>
+          </div>
+          <p class="panel__note">الحصيلة الشهرية والمؤقتات بتتحسب تلقائياً: <b>الحصيلة = قيمة السهم × عدد الأعضاء</b> • <b>مدّة الدورة</b> بالشهر والسنة • <b>موعد قبض كل عضو</b> من ترتيب الأدوار.</p>
           <p class="form__error" id="assocError" hidden></p>
           <div class="form__actions">
             <button type="submit" class="btn btn--primary" id="assocSubmitBtn"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-plus"/></svg> إضافة جمعية</button>
@@ -908,10 +978,116 @@
                 <th>المدفوع</th>
                 <th>المتبقي</th>
                 <th>الحالة</th>
-                <th style="width:170px"><span class="sr-only">إجراءات</span></th>
+                <th>موعد قبضه</th>
+                <th style="width:230px"><span class="sr-only">إجراءات</span></th>
               </tr>
             </thead>
             <tbody id="membersTbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-coins"/></svg> جدول الأدوار الشهرية (مين بيقبض فين)</h3>
+        <p class="panel__hint" id="matrixHint">اختر جمعية من الفلتر فوق عشان يظهر جدول الأدوار بتاعها.</p>
+        <div class="table-wrap" id="matrixWrap" hidden>
+          <table class="table" id="matrixTable">
+            <thead id="matrixHead"></thead>
+            <tbody id="matrixTbody"></tbody>
+          </table>
+        </div>
+        <p class="panel__note" id="matrixNote" hidden></p>
+      </div>
+    </section>
+
+    <!-- بروفايل عضو الجمعية -->
+    <section class="view" id="view-member-profile">
+      <div class="page-head">
+        <button class="back-btn" data-go="associations"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-back"/></svg> رجوع للجمعيات</button>
+        <div class="page-head__title">
+          <span class="card__icon card__icon--blue sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-group"/></svg></span>
+          <div><h2 id="mfpTitle">بروفايل عضو الجمعية</h2><p id="mfpSub">—</p></div>
+        </div>
+        <span class="status-pill" id="mfpStatus">—</span>
+        <div class="form__actions" style="margin:0;gap:8px">
+          <button type="button" class="btn btn--ghost btn--sm" id="mfpExcelBtn" title="تحميل بيانات العضو في ملف Excel">⬇ Excel</button>
+          <button type="button" class="btn btn--ghost btn--sm" id="mfpPdfBtn" title="تحميل بيانات العضو في ملف PDF منظّم">⬇ PDF</button>
+          <button type="button" class="btn btn--ghost btn--sm" id="mfpEditBtn">تعديل البيانات</button>
+          <button type="button" class="btn btn--ghost btn--sm btn--danger" id="mfpDeleteBtn">حذف العضو</button>
+        </div>
+      </div>
+
+      <div class="panel panel--narrow" id="mfpSummary"></div>
+
+      <div class="panel">
+        <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-coins"/></svg> تسجيل دفعة لهذا العضو</h3>
+        <p class="panel__hint">اختر الشهر وادخل المبلغ المدفوع — الحالة والجدول بيتحدّثوا تلقائياً، وإجمالي المدفوع بيزيداد فوراً.</p>
+        <form id="mfpPayForm" class="form" novalidate>
+          <div class="form__row form__row--3">
+            <label class="field"><span>الشهر *</span><select name="month" id="mfpMonth"></select></label>
+            <label class="field"><span>المبلغ المدفوع *</span><input type="number" name="amount" min="0" step="any" placeholder="0" /></label>
+            <label class="field"><span>تاريخ الدفع</span><input type="date" name="date" id="mfpPayDate" /></label>
+          </div>
+          <p class="form__error" id="mfpError" hidden></p>
+          <div class="form__actions">
+            <button type="submit" class="btn btn--primary" id="mfpPayBtn"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-check"/></svg> حفظ الدفعة</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-group"/></svg> جدول أقساطه شهراً بشهر</h3>
+        <p class="panel__hint" id="mfpCycleHint">—</p>
+        <div class="table-wrap">
+          <table class="table" id="mfpTable">
+            <thead><tr>
+              <th style="width:52px">#</th><th>الشهر</th><th>صاحب الدور (القبّاض)</th>
+              <th>المطلوب</th><th>المدفوع</th><th>المتبقي</th><th>الحالة</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-exchange"/></svg> الحركات المرتبطة بهذا العضو</h3>
+        <div id="mfpLinks"></div>
+      </div>
+    </section>
+
+    <!-- العمليات (محمي) -->
+    <section class="view" id="view-operations">
+      <div class="page-head">
+        <button class="back-btn" data-go="home"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-back"/></svg> رجوع</button>
+        <div class="page-head__title">
+          <span class="card__icon card__icon--violet sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-exchange"/></svg></span>
+          <div><h2>العمليات</h2><p>سجل كل تغيير + تراجع عن أي عملية</p></div>
+        </div>
+        <span class="protected-pill"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-lock"/></svg> محمي</span>
+      </div>
+
+      <div class="search-bar">
+        <span class="count-pill" id="opsCount">0 عملية</span>
+        <span class="count-pill" id="opsPolicy">السجل محلي على هذا الجهاز</span>
+      </div>
+
+      <div class="summary summary--4" id="opsSummary"></div>
+
+      <div class="panel">
+        <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-coins"/></svg> سجل العمليات</h3>
+        <p class="panel__hint">كل عملية تغيير في البيانات (إضافة أو تعديل أو حذف أو استبدال بالمزامنة) بتتسجّل هنا <b>تلقائياً</b> مع وقتها ووصفها — تقدر ترجع القسم لحالته السابقة بضغطة واحدة، والعملية نفسها كمان بتتسجّل.</p>
+        <div class="form__actions" style="margin:0 0 16px;gap:8px">
+          <button type="button" class="btn btn--primary" id="opsUndoLast" data-undo-op="__last__">↩ تراجع عن آخر عملية</button>
+          <button type="button" class="btn btn--ghost btn--danger" id="opsClear" data-clear-ops>تفريغ السجل</button>
+          <button type="button" class="btn btn--ghost" data-go="settings">فحص سلامة البيانات</button>
+        </div>
+        <div class="table-wrap">
+          <table class="table" id="opsTable">
+            <thead><tr>
+              <th style="width:52px">#</th><th>الوقت</th><th>القسم</th><th>ما الذي تغيّر</th><th>الحالة</th>
+              <th style="width:90px"><span class="sr-only">تراجع</span></th>
+            </tr></thead>
+            <tbody id="opsTbody"></tbody>
           </table>
         </div>
       </div>
@@ -1078,8 +1254,18 @@
             <li><span class="card__icon card__icon--amber sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-coins"/></svg></span><div><b>التحصيل</b><small>يُقفل بكلمة المرور</small></div><svg viewBox="0 0 24 24" class="ico ico--lock"><use href="#ic-lock"/></svg></li>
             <li><span class="card__icon card__icon--pink sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-link"/></svg></span><div><b>الشركاء</b><small>يُقفل بكلمة المرور</small></div><svg viewBox="0 0 24 24" class="ico ico--lock"><use href="#ic-lock"/></svg></li>
             <li><span class="card__icon card__icon--blue sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-group"/></svg></span><div><b>جمعيات</b><small>يُقفل بكلمة المرور</small></div><svg viewBox="0 0 24 24" class="ico ico--lock"><use href="#ic-lock"/></svg></li>
+            <li><span class="card__icon card__icon--violet sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-exchange"/></svg></span><div><b>العمليات</b><small>يُقفل بكلمة المرور — سجل التغييرات والتراجع</small></div><svg viewBox="0 0 24 24" class="ico ico--lock"><use href="#ic-lock"/></svg></li>
           </ul>
           <p class="panel__note">تُحفظ كلمة المرور محلياً على هذا الجهاز فقط.</p>
+        </div>
+
+        <div class="panel" style="grid-column:1/-1">
+          <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-shield"/></svg> سلامة البيانات والتخزين</h3>
+          <p class="panel__hint">فحص لكل أقسام التخزين: هل القيم سليمة ولا تالفة؟ وكم عملية مسجّلة في سجل العمليات؟ <b>الحماية المفعّلة:</b> أي محاولة استبدال قسم فيه بيانات بقسم فارغ من المزامنة بتتجاهل تلقائياً عشان البيانات ما تتمسحش من تلقاء نفسها.</p>
+          <div id="dataSafetyBody"></div>
+          <div class="form__actions" style="margin-top:14px">
+            <button type="button" class="btn btn--primary" data-go="operations">فتح سجل العمليات والتراجع</button>
+          </div>
         </div>
 
         <div class="panel" style="grid-column:1/-1">
@@ -1242,6 +1428,12 @@
           <div><h2 id="pfpTitle">بروفايل الشريك</h2><p id="pfpSub">—</p></div>
         </div>
         <span class="status-pill" id="pfpRole">—</span>
+        <div class="form__actions" style="margin:0;gap:8px">
+          <button type="button" class="btn btn--ghost btn--sm" id="pfpExcelBtn" title="تحميل بيانات هذا الشريك في ملف Excel">⬇ Excel</button>
+          <button type="button" class="btn btn--ghost btn--sm" id="pfpPdfBtn" title="تحميل بيانات هذا الشريك في ملف PDF منظّم">⬇ PDF</button>
+          <button type="button" class="btn btn--ghost btn--sm" id="pfpEditBtn">تعديل البيانات</button>
+          <button type="button" class="btn btn--ghost btn--sm btn--danger" id="pfpDeleteBtn">حذف الشريك</button>
+        </div>
       </div>
 
       <div class="panel panel--narrow" id="pfpSummary"></div>

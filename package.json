@@ -4,7 +4,13 @@
   "private": true,
   "description": "نظام الإدارة المتكامل — نسخة ويب + أندرويد + ديسكتوب",
   "scripts": {
-    "build": "node build.js"
+    "build": "node build.js",
+    "desktop:serve": "node desktop/server.js",
+    "desktop:install": "npm install --prefix desktop",
+    "desktop:dist": "npm run build && npm --prefix desktop run dist:win-all",
+    "desktop:dist:win64": "npm run build && npm --prefix desktop run dist:win64",
+    "desktop:dist:win32": "npm run build && npm --prefix desktop run dist:win32",
+    "desktop:dist:portable": "npm run build && npm --prefix desktop run dist:win-portable64"
   },
   "dependencies": {
     "canvas": "^3.2.3",
