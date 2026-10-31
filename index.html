@@ -1678,7 +1678,7 @@
             det.push('الـClient ID غير صالح' + (s.clientIdLength ? ' (طوله ' + s.clientIdLength + ')' : ''));
           }
           if (s && s.secretValid === false) det.push('Client Secret غير صالح');
-          if (s && s.verdict) det.push('السبب: ' + s.verdict);
+          if (s && s.verdict && !/^(ok|keys_ready|connected)$/i.test(s.verdict)) det.push('السبب: ' + s.verdict);
           if (det.length) {
             gateStatusError('تعذّر الربط — ' + det.join(' · ') + '. راجع إعدادات Google ثم اضغط «إعادة المحاولة».');
           } else {
