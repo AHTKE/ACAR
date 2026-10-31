@@ -43,6 +43,7 @@
     <input type="text" id="forceFolderUrl" style="width:100%;padding:12px;background:#0a0e15;border:1px solid #4f8cff;border-radius:12px;color:#f2f6fb;margin-bottom:20px;" placeholder="https://drive.google.com/drive/folders/...">
     <button type="button" id="gateConnect" onclick="localStorage.setItem('app_shared_folder_url',document.getElementById('forceFolderUrl').value);window.startGoogleLogin?window.startGoogleLogin(event):(window.location.href='/api/google/login');" style="width:100%;padding:14px;background:linear-gradient(90deg,#4f8cff,#7aa8ff);color:#fff;border:none;border-radius:12px;font-weight:700;cursor:pointer;">ربط حساب Google Drive</button>
     <div id="gateError" style="display:none;margin-top:16px;padding:12px 14px;border-radius:12px;border:1px solid #f87171;background:rgba(248,113,113,.12);color:#fecaca;font-size:13px;line-height:1.9;text-align:right;"></div>
+    <button type="button" id="gateRetry" style="width:100%;margin-top:12px;padding:11px;background:transparent;border:1px solid #4f8cff;color:#9fadc2;border-radius:10px;cursor:pointer;font-weight:600;">إعادة المحاولة</button>
     <button type="button" id="gateDiag" style="margin-top:14px;width:100%;padding:10px;background:transparent;border:1px solid #33415a;border-radius:10px;color:#9fadc2;font-weight:600;font-size:12.5px;cursor:pointer;">🔍 فحص المفاتيح (لو بيقول إنها ناقصة)</button>
     <div id="gateDiagBox" style="display:none;margin-top:10px;padding:12px 14px;border-radius:12px;border:1px solid #33415a;background:#0d1420;color:#cbd5e1;font-size:12.5px;line-height:1.9;text-align:right;word-break:break-word;"></div>
   </div>
@@ -1621,10 +1622,32 @@
   var gate = document.getElementById('forceAuthGate');
   if (gate) gate.style.display = 'flex';
   if (typeof fetch === 'function') {
-    fetch('/api/google/status', { credentials: 'same-origin' })
-      .then(function (r) { return r.json().catch(function () { return {}; }); })
-      .then(function (s) { if (s && s.connected && gate) gate.style.display = 'none'; })
-      .catch(function () {});
+    function gateStatusError(msg) {
+      var e = document.getElementById('gateError');
+      if (!e) return;
+      e.style.display = 'block';
+      e.textContent = msg;
+    }
+    function checkGate() {
+      var e = document.getElementById('gateError');
+      if (e) e.style.display = 'none';
+      fetch('/api/google/status', { credentials: 'same-origin' })
+        .then(function (r) {
+          if (r && r.ok === false) throw new Error('HTTP ' + (r.status || '?'));
+          return r.json().catch(function () { return {}; });
+        })
+        .then(function (s) {
+          if (s && s.connected && gate) gate.style.display = 'none';
+          else gateStatusError('لم يتم ربط حساب Google Drive بعد — اربط الحساب للمتابعة.');
+        })
+        .catch(function (err) {
+          gateStatusError('تعذّر التحقق من حالة الربط (' + (err && err.message ? err.message : 'خطأ') +
+            ') — البيانات محفوظة، اضغط «إعادة المحاولة».');
+        });
+    }
+    checkGate();
+    var gateRetryBtn = document.getElementById('gateRetry');
+    if (gateRetryBtn) gateRetryBtn.addEventListener('click', checkGate);
   }
   /* تسجيل Service Worker ليعمل التطبيق مثبتاً على أندرويد/الديسكتوب بدون إنترنت */
   if ('serviceWorker' in navigator) {

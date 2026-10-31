@@ -1,7 +1,7 @@
 /* ============================================================
    نظام الإدارة المتكامل — Service Worker (عمل بدون إنترنت)
    ============================================================ */
-var CACHE = 'nizam-idara-v8';
+var CACHE = 'nizam-idara-v9';
 
 var SHELL = [
   './',
@@ -51,7 +51,9 @@ self.addEventListener('fetch', function (event) {
           var copy = res.clone();
           caches.open(CACHE).then(function (c) { c.put('./', copy); }).catch(function () {});
         }
-        return res;
+        /* لو الخادم رجّع خطأ (502/503) نعرض آخر نسخة شغالة بدل صفحة الخطأ */
+        if (res && res.ok) return res;
+        return caches.match('./').then(function (c) { return c || res; });
       }).catch(function () {
         return caches.match('./');
       })
@@ -66,7 +68,9 @@ self.addEventListener('fetch', function (event) {
         var copy = res.clone();
         caches.open(CACHE).then(function (c) { c.put(req, copy); }).catch(function () {});
       }
-      return res;
+      /* ملف رجع 502؟ نرجع نسخته المحفوظة عشان الصفحة ما تنكسرش */
+      if (res && res.ok) return res;
+      return caches.match(req).then(function (c) { return c || res; });
     }).catch(function () {
       return caches.match(req);
     })
