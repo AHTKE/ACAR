@@ -126,7 +126,7 @@
       </span>
       <span class="brand__text">
         <strong>نظام الإدارة</strong>
-        <small>الإصدار 1.0</small>
+        <small>الإصدار 1.0 · b20261031c</small>
       </span>
     </button>
 
@@ -1615,6 +1615,34 @@
 <div class="toast" id="toast" role="status" aria-live="polite"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-check"/></svg><span></span></div>
 
 <script src="export.js"></script>
+<script>
+/* حارس الشاشة: أي لحظة مفيش فيها شاشة مفعّلة، الرئيسية بترجع فورًا.
+   الغرض: الشاشة الفاضية تحت الهيدر تبقى مستحيلة حتى لو app.js وقع في النص. */
+(function () {
+  var HOME = 'view-home';
+  function ensureActive() {
+    var content = document.getElementById('content');
+    if (!content) return;
+    if (content.querySelector('.view.is-active')) return;
+    var home = document.getElementById(HOME);
+    if (home) home.classList.add('is-active');
+  }
+  function start() {
+    var content = document.getElementById('content');
+    if (!content) return;
+    ensureActive();
+    if (!window.MutationObserver) return;
+    var busy = false;
+    new MutationObserver(function () {
+      if (busy) return;
+      busy = true;
+      try { ensureActive(); } finally { setTimeout(function () { busy = false; }, 0); }
+    }).observe(content, { attributes: true, subtree: true, attributeFilter: ['class'] });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();
+</script>
 <script src="app.js"></script>
 <script src="auth-gate-addon.js"></script>
 <script>
@@ -1637,8 +1665,25 @@
           return r.json().catch(function () { return {}; });
         })
         .then(function (s) {
-          if (s && s.connected && gate) gate.style.display = 'none';
-          else gateStatusError('لم يتم ربط حساب Google Drive بعد — اربط الحساب للمتابعة.');
+          if (s && s.connected && gate) { gate.style.display = 'none'; return; }
+          if (s && s.configured === false) {
+            var miss = (s.missing && s.missing.length) ? s.missing.join('، ') : 'Client ID، Client Secret';
+            gateStatusError('مفاتيح Google غير مضبوطة على الخادم: ' + miss +
+              ' — أضِفها في إعدادات الاستضافة ثم اضغط «إعادة المحاولة».');
+            return;
+          }
+          /* مش مربوط ومفيش خطأ إعدادات ظاهر — نقول السبب الحقيقي لو متاح */
+          var det = [];
+          if (s && s.clientIdValid === false) {
+            det.push('الـClient ID غير صالح' + (s.clientIdLength ? ' (طوله ' + s.clientIdLength + ')' : ''));
+          }
+          if (s && s.secretValid === false) det.push('Client Secret غير صالح');
+          if (s && s.verdict) det.push('السبب: ' + s.verdict);
+          if (det.length) {
+            gateStatusError('تعذّر الربط — ' + det.join(' · ') + '. راجع إعدادات Google ثم اضغط «إعادة المحاولة».');
+          } else {
+            gateStatusError('لم يتم ربط حساب Google Drive بعد — اربط الحساب للمتابعة.');
+          }
         })
         .catch(function (err) {
           gateStatusError('تعذّر التحقق من حالة الربط (' + (err && err.message ? err.message : 'خطأ') +
@@ -1677,10 +1722,12 @@
     function healthy() {
       var act = document.querySelector('.view.is-active');
       if (!act || !window.__appBooted) return false;
-      if (act.id !== 'view-home') return true;
       if (/jsdom/i.test(navigator.userAgent || '')) return true;
       var cs = getComputedStyle(act);
-      return cs.display !== 'none' && Number(cs.opacity) > 0.05 && act.offsetHeight > 40;
+      if (cs.display === 'none' || Number(cs.opacity) <= 0.05 || act.offsetHeight <= 40) return false;
+      /* شاشة ظاهرة بس فاضية فعلاً = مش سليمة */
+      if ((act.innerText || '').trim().length < 10) return false;
+      return true;
     }
     function check() {
       var box = document.getElementById('bootHelp');
@@ -1696,6 +1743,14 @@
     }
     setTimeout(check, 2500);
     setTimeout(check, 6000);
+    /* إنقاذ: لو مفيش شاشة مفعّلة خالص نحلها قبل ما نعرض أي رسالة */
+    setTimeout(function () {
+      var content = document.getElementById('content');
+      if (content && !content.querySelector('.view.is-active')) {
+        var home = document.getElementById('view-home');
+        if (home) home.classList.add('is-active');
+      }
+    }, 1500);
 
     document.addEventListener('click', function (e) {
       var t = e.target && e.target.closest ? e.target.closest('[data-boot-retry]') : null;
