@@ -126,7 +126,7 @@
       </span>
       <span class="brand__text">
         <strong>نظام الإدارة</strong>
-        <small>الإصدار 1.0 · b20261031c</small>
+        <small>الإصدار 1.0 · b20261031d</small>
       </span>
     </button>
 
@@ -605,10 +605,6 @@
       <div class="panel" id="supLedgerPanel">
         <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-exchange"/></svg> حركات الدواخل والخوارج المرتبطة بهذا المورد</h3>
         <div id="supLedgerBody"></div>
-      </div>
-    </section>
-
-    <!-- الدواخل والخوارج -->        </div>
       </div>
     </section>
 
@@ -1617,27 +1613,49 @@
 <script src="export.js"></script>
 <script>
 /* حارس الشاشة: أي لحظة مفيش فيها شاشة مفعّلة، الرئيسية بترجع فورًا.
-   الغرض: الشاشة الفاضية تحت الهيدر تبقى مستحيلة حتى لو app.js وقع في النص. */
+   الغرض: الشاشة الفاضية تحت الهيدر تبقى مستحيلة حتى لو app.js وقع في النص.
+   ملاحظة مهمة: الفحص على مستوى الصفحة كلها (مش جوه #content) لأن بعض
+   الإصدارات كانت بتحط شاشات بره #content — والحارس الأعمى كان بيفتح
+   الرئيسية فوق القسم المفتوح فيرجّع المستخدم للرئيسية بالغلط. */
 (function () {
   var HOME = 'view-home';
-  function ensureActive() {
+  var busy = false;
+  /* نرجّع أي شاشة موجودة بره #content لمكانها الصح (تمرير + ظهور سليم) */
+  function normalize() {
     var content = document.getElementById('content');
     if (!content) return;
-    if (content.querySelector('.view.is-active')) return;
-    var home = document.getElementById(HOME);
-    if (home) home.classList.add('is-active');
+    var vs = document.querySelectorAll('.view');
+    for (var i = 0; i < vs.length; i++) {
+      if (vs[i].parentElement !== content) { try { content.appendChild(vs[i]); } catch (e) {} }
+    }
+  }
+  function ensureActive() {
+    var act = document.querySelectorAll('.view.is-active');
+    if (!act.length) {
+      var home = document.getElementById(HOME);
+      if (home) home.classList.add('is-active');
+      return;
+    }
+    if (act.length === 1) return;
+    /* أكتر من شاشة مفعّلة = عطل: نترك شاشة القسم ونشيل الرئيسية */
+    var keep = act[act.length - 1];
+    for (var i = act.length - 1; i >= 0; i--) {
+      if (act[i].id && act[i].id !== HOME) { keep = act[i]; break; }
+    }
+    for (var j = 0; j < act.length; j++) { if (act[j] !== keep) act[j].classList.remove('is-active'); }
   }
   function start() {
-    var content = document.getElementById('content');
-    if (!content) return;
+    if (!document.getElementById('content')) return;
+    normalize();
     ensureActive();
+    setTimeout(normalize, 400);
+    setTimeout(normalize, 1500);
     if (!window.MutationObserver) return;
-    var busy = false;
     new MutationObserver(function () {
       if (busy) return;
       busy = true;
       try { ensureActive(); } finally { setTimeout(function () { busy = false; }, 0); }
-    }).observe(content, { attributes: true, subtree: true, attributeFilter: ['class'] });
+    }).observe(document.body, { attributes: true, subtree: true, attributeFilter: ['class'] });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();
@@ -1745,8 +1763,7 @@
     setTimeout(check, 6000);
     /* إنقاذ: لو مفيش شاشة مفعّلة خالص نحلها قبل ما نعرض أي رسالة */
     setTimeout(function () {
-      var content = document.getElementById('content');
-      if (content && !content.querySelector('.view.is-active')) {
+      if (!document.querySelector('.view.is-active')) {
         var home = document.getElementById('view-home');
         if (home) home.classList.add('is-active');
       }
