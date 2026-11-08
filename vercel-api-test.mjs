@@ -89,7 +89,7 @@ ok('configured=false من السيرفر (مش من الواجهة)', j && j.con
 ok('Content-Type JSON', String(r.headers['content-type']).indexOf('json') > -1, r.headers['content-type']);
 
 console.log('\n[V2] بالمفتاحين المضبوطين');
-const TEST_CID = '1089687675916-07b8oa53303rere6sd3tqb6fs2gmkg7a.apps.googleusercontent.com';
+const TEST_CID = '123456789012-testclientidforchecks.apps.googleusercontent.com';
 const TEST_SECRET = 'GOCSPX-testsecret0123456789abcd';
 process.env.GOOGLE_CLIENT_ID = TEST_CID;
 process.env.GOOGLE_CLIENT_SECRET = TEST_SECRET;
@@ -115,17 +115,23 @@ ok('404 و JSON', r.status === 404 && !!j, r.status + ' ' + r.body.slice(0, 60))
 r = await run(makeReq({ url: '/index.html' }));
 ok('مسار خارج /api ما يوصلش للـAPI (Vercel بيخدم الملفات الثابتة قبل الـfunctions)', r.status === 404, String(r.status));
 
-console.log('\n[V4ب] ملفات api/ كلها محمّلة ومسجّلة كـfunctions');
-const apiFiles = fs.readdirSync('api/google').map((f) => ['api/google/' + f, '/api/google/' + f.replace(/\.js$/, '')])
-  .concat(fs.readdirSync('api/sync').map((f) => ['api/sync/' + f, '/api/sync/' + f.replace(/\.js$/, '')]));
-for (const [file, apiPath] of apiFiles) {
-  const mod = await import('./' + file);
-  ok(file + ' بيوصّل على default function', typeof mod.default === 'function', typeof mod.default);
-  ok(file + ' بياخد مساره من الملف نفسه',
-     fs.readFileSync(file, 'utf8').indexOf(JSON.stringify(apiPath)) > -1, apiPath);
+console.log('\n[V4ب] دالة Vercel واحدة تخدم كل المسارات');
+const apiFiles = fs.readdirSync('api').filter((f) => f.endsWith('.js'));
+ok('عدد دوال api = 1 (حد Hobby 12)', apiFiles.length === 1, apiFiles.join(', '));
+ok('الاسم catch-all', apiFiles[0] === '[...path].js', apiFiles[0]);
+const routeMod = await import('./api/[...path].js');
+ok('catch-all عنده default function', typeof routeMod.default === 'function', typeof routeMod.default);
+const expectedRoutes = [
+  '/api/google/status', '/api/google/ping', '/api/google/check',
+  '/api/google/capabilities', '/api/google/login', '/api/google/callback',
+  '/api/google/access-token', '/api/google/upload', '/api/google/notify',
+  '/api/google/disconnect', '/api/sync/pull', '/api/sync/push',
+  '/api/sync/folder', '/api/sync/versions', '/api/sync/version'
+];
+for (const route of expectedRoutes) {
+  ok(route + ' موجود في catch-all', routeMod.ROUTES.includes(route), route);
 }
-/* اختبار فعلي لملف route مشترك: نفس status.js اللي Vercel بيناديه */
-const statusMod = await import('./api/google/status.js');
+/* اختبار فعلي للـcatch-all بنفس way Vercel بيناديه */
 r = await new Promise((resolve, reject) => {
   const req = makeReq({ url: '/api/google/status' });
   const res = {
@@ -133,11 +139,26 @@ r = await new Promise((resolve, reject) => {
     ended: false, _b: '',
     end(c) { this.ended = true; this._b = c ? String(c) : ''; resolve({ status: this.statusCode, headers: this.headers, body: this._b }); }
   };
-  Promise.resolve(statusMod.default(req, res)).catch(reject);
-  setTimeout(() => reject(new Error('timeout route')), 5000);
+  Promise.resolve(routeMod.default(req, res)).then(() => {
+    if (!res.ended) reject(new Error('catch-all لم يستجب'));
+  }).catch(reject);
+  setTimeout(() => reject(new Error('timeout catch-all')), 5000);
 });
 j = json(r);
-ok('api/google/status.js يرجّع configured=true بالمفاتيح', r.status === 200 && j && j.configured === true, r.body.slice(0, 80));
+ok('catch-all status يرجّع configured=true', r.status === 200 && j && j.configured === true, r.body.slice(0, 80));
+r = await new Promise((resolve, reject) => {
+  const req = makeReq({ url: '/api/unknown' });
+  const res = {
+    statusCode: 200, headers: {}, setHeader(k, v) { this.headers[String(k).toLowerCase()] = v; },
+    ended: false, _b: '',
+    end(c) { this.ended = true; this._b = c ? String(c) : ''; resolve({ status: this.statusCode, headers: this.headers, body: this._b }); }
+  };
+  Promise.resolve(routeMod.default(req, res)).then(() => {
+    if (!res.ended) reject(new Error('catch-all unknown لم يستجب'));
+  }).catch(reject);
+  setTimeout(() => reject(new Error('timeout catch-all unknown')), 5000);
+});
+ok('catch-all مسار غير معروف → 404 JSON', r.status === 404 && !!json(r), r.status + ' ' + r.body.slice(0, 80));
 
 console.log('\n[V5] تخزين الربط في الكوكي (الـD1 shim)');
 const cdb = createCookieDB('');

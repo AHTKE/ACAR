@@ -100,9 +100,25 @@ Desktop (`redirect_uri=http://127.0.0.1:47820/api/google/callback`) ويحفظ �
 محليًا. الحالة (`state`) بتتحفظ في الملف نفسه مش في كوكي، عشان العملية تكمّل
 حتى لو الرجوع حصل في متصفح مختلف عن نافذة التطبيق.
 
-> الموقع لازم يكون منشور من نسخة فيها `/api/google/capabilities` و
-> `/api/google/access-token`. لو النشر الأساسي قديم، التطبيق بيستخدم النسخة
-> الاحتياطية تلقائيًا؛ وتقدر تثبّتها بـ`NIZAM_SITE_FALLBACK`.
+### إعداد Google Console الصح (مهم)
+
+| السيناريو | نوع العميل | رابط الإرجاع المسجَّل |
+|---|---|---|
+| الوضع الافتراضي: الربط عبر الموقع | **Web application** | `https://<دومين-الموقع>/api/google/callback` بالحرف |
+| الوضع المحلي: `NIZAM_LINK_MODE=local` | **Desktop app** | مش محتاج تسجيل؛ Google بيقبل أي منفذ على `127.0.0.1` |
+| لو استخدمت Web client للوضع المحلي | Web application | `http://127.0.0.1:47820/api/google/callback` بالحرف |
+
+> في الوضع الافتراضي **مش محتاج** تضيف `http://127.0.0.1:...` في Google Console.
+> Google callback بيحصل على الموقع نفسه، وبعدها الموقع يمرّر رمز الربط للديسكتوب.
+> تأكد إن `GOOGLE_CLIENT_ID` و`GOOGLE_CLIENT_SECRET` في Vercel من نفس عميل
+> **Web application**، وإن رابط الإرجاع مضاف بالحرف. لو عندك دومين ثابت، ضع
+> `APP_BASE_URL=https://<الدومين>` في Vercel عشان رابط الإرجاع ما يتغيّرش مع
+> روابط الـPreview.
+
+> الموقع لازم يكون منشور من نسخة فيها `/api/google/capabilities`،
+> `/api/google/check`، و`/api/google/access-token`. لو النشر الأساسي قديم،
+> التطبيق بيستخدم النسخة الاحتياطية تلقائيًا؛ وتقدر تثبّتها بـ`NIZAM_SITE_FALLBACK`،
+> وتغيّر الموقع الأساسي بـ`NIZAM_SITE_BASE=https://...`.
 
 باقي مسارات `/api/*` (المزامنة مثلًا) بتتمرّر للموقع الرسمي
 `https://workflow-amw-code.vercel.app`، ولو المسار مش موجود هناك أو رد بخطأ

@@ -72,14 +72,25 @@ module.exports = function createGoogle(deps) {
       b = String(b || '').replace(/\/+$/, '');
       if (b && bases.indexOf(b) < 0) bases.push(b);
     });
-    let found = { ok: false, base: '', at: Date.now() };
+    let found = { ok: false, base: '', origin: '', redirectUri: '', at: Date.now() };
     for (var i = 0; i < bases.length; i++) {
       try {
         const ctl = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined;
         const r = await fetch(bases[i] + '/api/google/capabilities', ctl ? { signal: ctl } : undefined);
         const j = await r.json().catch(function () { return {}; });
         if (r.ok && j && j.desktopLink) {
-          found = { ok: true, base: bases[i], at: Date.now() };
+          /* origin/redirectUri ممكن يختلفوا عن base لو الموقع مثبّت
+             APP_BASE_URL على دومين ثابت. */
+          const origin = /^https?:\/\//i.test(j.origin || '')
+            ? String(j.origin).replace(/\/+$/, '') : bases[i];
+          found = {
+            ok: true,
+            base: bases[i],
+            origin: origin,
+            redirectUri: /^https?:\/\//i.test(j.redirectUri || '')
+              ? String(j.redirectUri) : (origin + '/api/google/callback'),
+            at: Date.now()
+          };
           break;
         }
       } catch (e) { /* جرّب الموقع الاحتياطي */ }
@@ -373,20 +384,24 @@ module.exports = function createGoogle(deps) {
       const viaSite = !!a.site_refresh_token;
       const site = await resolveSite();
       const capable = site.ok;
+      const siteBase = String(a.site_base || site.origin || site.base || SITE_BASE).replace(/\/+$/, '');
+      const siteRedirect = String(site.redirectUri || (siteBase + '/api/google/callback'));
+      const useSite = viaSite || capable;
+      const shownRedirect = useSite ? siteRedirect : rid;
       json(res, 200, {
         configured: c.configured || capable || viaSite,
         connected: !!(viaSite || a.refresh_token),
         email: a.email || '',
         mode: viaSite ? 'site' : 'local',
-        siteBase: a.site_base || site.base || SITE_BASE,
+        siteBase: siteBase,
         siteLink: capable,
         clientIdTail: c.id ? c.id.slice(-10) : '',
         clientIdLength: c.id.length,
         clientIdValid: c.idValid,
         secretPresent: !!c.secret,
         secretValid: c.secretValid,
-        redirectUri: viaSite ? (a.site_base || SITE_BASE) + '/api/google/callback' : rid,
-        origin: c.configured ? rid.replace(/\/api\/google\/callback$/, '') : originLocal(),
+        redirectUri: shownRedirect,
+        origin: shownRedirect.replace(/\/api\/google\/callback$/, ''),
         verdict: viaSite ? 'site_linked'
           : capable ? 'site_ready'
             : !c.configured ? 'missing_keys'
@@ -410,7 +425,8 @@ module.exports = function createGoogle(deps) {
       }
       const auth = readAuth();
       const pendingSite = String(auth.pending_site || '').replace(/\/+$/, '');
-      const siteBase = /^https?:\/\//i.test(pendingSite) ? pendingSite : (siteCache.base || SITE_BASE);
+      const siteBase = /^https?:\/\//i.test(pendingSite)
+        ? pendingSite : (siteCache.origin || siteCache.base || SITE_BASE);
       patchAuth({
         site_refresh_token: refresh,
         site_base: siteBase,
@@ -436,7 +452,27 @@ module.exports = function createGoogle(deps) {
     }
 
     if (pathname === '/api/google/check') {
+      /* في وضع الموقع: الفحص لازم يتم على مفاتيح الموقع نفسها، وإلا
+         هيظهر للمستخدم رابط loopback ومفاتيح ديسكتوب غير مستخدمة. */
+      const site = await resolveSite();
+      if (site.ok) {
+        try {
+          const siteOrigin = String(site.origin || site.base).replace(/\/+$/, '');
+          const ctl = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined;
+          const sr = await fetch(siteOrigin + '/api/google/check', ctl ? { signal: ctl } : undefined);
+          const sj = sr.ok ? await sr.json().catch(function () { return null; }) : null;
+          if (sj && typeof sj === 'object') {
+            sj.mode = 'site';
+            sj.siteLink = true;
+            sj.siteBase = siteOrigin;
+            if (!sj.redirectUri) sj.redirectUri = site.redirectUri;
+            json(res, 200, sj);
+            return true;
+          }
+        } catch (e) { /* لو فشل فحص الموقع نكمل بالفحص المحلي */ }
+      }
       const out = {
+        mode: 'local',
         ok: true, verdict: '', clientId: c.id, clientIdValid: c.idValid,
         secretPresent: !!c.secret, secretValid: c.secretValid,
         redirectUri: redirectUri(), idProbe: null, secretProbe: null, advice: ''
@@ -515,8 +551,9 @@ module.exports = function createGoogle(deps) {
       /* الافتراضي: الربط يبدأ من الموقع الرسمي، وبعد الموافقة يرجع للتطبيق */
       const site = await resolveSite();
       if (site.ok) {
-        patchAuth({ pending_at: Date.now(), pending_site: site.base });
-        redirect(res, site.base + '/api/google/login?desktop=' + (getPort() || 47820));
+        const siteOrigin = String(site.origin || site.base).replace(/\/+$/, '');
+        patchAuth({ pending_at: Date.now(), pending_site: siteOrigin });
+        redirect(res, siteOrigin + '/api/google/login?desktop=' + (getPort() || 47820));
         return true;
       }
       if (!c.configured) {

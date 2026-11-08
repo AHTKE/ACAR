@@ -234,24 +234,17 @@ function readBody(req, limit) {
 /* تمرير /api/* لخادم الويب (اختياري) */
 function proxyApi(req, res, targetPath, base, retried) {
   const baseUrl = base || API_BASE;
-  const isGoogle = targetPath.indexOf('/api/google/') === 0;
-  const isSync = targetPath.indexOf('/api/sync/') === 0;
-  let path = targetPath;
+  const path = targetPath;
 
-  /* التطبيق المكتبي: رابط إرجاع على 127.0.0.1 عشان الجلسة ترجع هنا
-     بدل صفحة الموقع، والـstate cookie تتحفظ على نفس الأصل. */
-  if (isGoogle && currentPort && path.indexOf('redirect_uri=') < 0) {
-    path += (path.indexOf('?') >= 0 ? '&' : '?') +
-      'redirect_uri=' + encodeURIComponent('http://127.0.0.1:' + currentPort + '/api/google/callback');
-  }
-
+  /* بنمرّر المسار كما هو. منضيفش redirect_uri loopback هنا، لأن
+     الوضع الافتراضي بيكمّل OAuth على الموقع نفسه وبعدها بيرجّع
+     الرمز للديسكتوب. كمان مبنبعتش مفاتيح Google المحلية في هيدرز —
+     الموقع لازم يستخدم GOOGLE_CLIENT_ID/SECRET بتوعه هو. */
   const u = new URL(baseUrl + path);
   const headers = Object.assign({}, req.headers, { host: u.host });
   delete headers['accept-encoding'];
-  if (isGoogle || isSync) {
-    if (GOOGLE_CLIENT.client_id) headers['x-nizam-gid'] = GOOGLE_CLIENT.client_id;
-    if (GOOGLE_CLIENT.client_secret) headers['x-nizam-gsecret'] = GOOGLE_CLIENT.client_secret;
-  }
+  delete headers['x-nizam-gid'];
+  delete headers['x-nizam-gsecret'];
   const opts = {
     protocol: u.protocol,
     hostname: u.hostname,

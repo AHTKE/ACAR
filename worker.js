@@ -104,19 +104,11 @@ function cleanEnvVal(v) {
 }
 
 /* المفاتيح كما هي صالحة للاستخدام فعلاً (بعد التنظيف والتحقق) */
-function googleCreds(env, request) {
-  /* التطبيق المكتبي بيعتمد عميل Google من نوع Desktop (يقبل أي منفذ
-     على 127.0.0.1) وببعته في هيدرز من خادمه المحلي — الموقع المنشور
-     يفضل شغال بعميله هو من غير أي تغيير. */
-  var hId = '', hSecret = '';
-  try {
-    if (request && request.headers) {
-      hId = cleanEnvVal(request.headers.get('x-nizam-gid'));
-      hSecret = cleanEnvVal(request.headers.get('x-nizam-gsecret'));
-    }
-  } catch (e) { hId = ''; hSecret = ''; }
-  var id = cleanEnvVal(hId || (env && env.GOOGLE_CLIENT_ID));
-  var secret = cleanEnvVal(hSecret || (env && env.GOOGLE_CLIENT_SECRET));
+function googleCreds(env) {
+  /* الموقع بيستخدم مفاتيحه هو فقط. مفاتيح الديسكتوب تتحل محليًا
+     في desktop/google.js، وممنوع تتبعت للويب في هيدرز. */
+  var id = cleanEnvVal(env && env.GOOGLE_CLIENT_ID);
+  var secret = cleanEnvVal(env && env.GOOGLE_CLIENT_SECRET);
   var idValid = /^\d{6,}-[a-z0-9_-]{10,}\.apps\.googleusercontent\.com$/i.test(id);
   var secretValid = /^GOCSPX-[A-Za-z0-9_-]{8,}$/.test(secret) || secret.length >= 24;
   return {
@@ -659,8 +651,8 @@ async function fetchProfile(accessToken) {
 /* ---------- مسارات API ---------- */
 async function handleApi(request, env, pathname) {
   const origin = originOf(request);
-  /* مفاتيح المشروع — ممكن التطبيق المكتبي يبعت مفاتيحه الخاصة (عميل Desktop) */
-  const reqCreds = googleCreds(env, request);
+  /* مفاتيح المشروع المنشور — الديسكتوب بيعمل OAuth المحلي بمفاتيحه لوحده */
+  const reqCreds = googleCreds(env);
 
   /* الحالة + تشخيص المفاتيح (بدون أي كشف للسر) */
   if (pathname === '/api/google/status') {
@@ -815,9 +807,13 @@ async function handleApi(request, env, pathname) {
   if (pathname === '/api/google/capabilities') {
     return json({
       ok: true,
-      desktopLink: true,
-      version: 2,
+      configured: reqCreds.configured,
+      /* الديسكتوب ميبدأش ربط من الموقع إلا لو الموقع عنده مفاتيح
+         صالحة فعلًا، وإلا يرجع للوضع المحلي بدل صفحة خطأ جوجل. */
+      desktopLink: reqCreds.ready,
+      version: 3,
       origin: originFor(request, env),
+      redirectUri: redirectUriFor(request, env),
       loginUrl: '/api/google/login?desktop=<port>',
       accessTokenUrl: '/api/google/access-token'
     }, 200);

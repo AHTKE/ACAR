@@ -93,6 +93,8 @@ let server = null;
   ok('الوضع محلي قبل الربط', j.mode === 'local', j.mode);
   ok('غير مربوط', j.connected === false);
   ok('configured يتفعّل من الموقع', j.configured === true);
+  ok('رابط الإرجاع المعروض هو رابط الموقع',
+    j.redirectUri === 'http://127.0.0.1:' + SITE_PORT + '/api/google/callback', j.redirectUri);
 
   console.log('\n[2] بدء الربط من الموقع');
   let r = await fetch(base + '/api/google/login', { redirect: 'manual' });

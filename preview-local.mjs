@@ -1,13 +1,15 @@
 /* ============================================================
    preview-local.mjs — معاينة محلية بنفس منطق Vercel
-   يقدّم dist/ كملفات ثابتة + نفس ملفات api/ اللي Vercel
-   بيناديها، يعني شاشة ربط Google بتشتغل هنا نفس شغلها هناك.
+   يقدّم dist/ كملفات ثابتة + نفس مسارات worker.js اللي Vercel
+   بيناديها من دالة catch-all واحدة، يعني شاشة ربط Google بتشتغل
+   هنا نفس شغلها هناك.
    التشغيل: node preview-local.mjs   ثم افتح http://localhost:4567
    ============================================================ */
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import run from './vercel-run.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const dist = path.join(root, 'dist');
@@ -21,24 +23,33 @@ for (const name of ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET']) {
   }
 }
 
-/* نفس ملفات api/ — المسار بيتحدد من اسم الملف زي ما Vercel بيعمل */
+/* نفس المسارات اللي بيخدمها catch-all على Vercel */
 const ROUTES = [
-  ['/api/google/status', 'api/google/status.js'],
-  ['/api/google/login', 'api/google/login.js'],
-  ['/api/google/callback', 'api/google/callback.js'],
-  ['/api/google/disconnect', 'api/google/disconnect.js'],
-  ['/api/google/upload', 'api/google/upload.js'],
-  ['/api/google/notify', 'api/google/notify.js'],
-  ['/api/sync/pull', 'api/sync/pull.js'],
-  ['/api/sync/push', 'api/sync/push.js'],
-  ['/api/sync/folder', 'api/sync/folder.js'],
-  ['/api/sync/versions', 'api/sync/versions.js'],
-  ['/api/sync/version', 'api/sync/version.js']
+  '/api/google/status',
+  '/api/google/ping',
+  '/api/google/check',
+  '/api/google/capabilities',
+  '/api/google/login',
+  '/api/google/callback',
+  '/api/google/access-token',
+  '/api/google/upload',
+  '/api/google/notify',
+  '/api/google/disconnect',
+  '/api/sync/pull',
+  '/api/sync/push',
+  '/api/sync/folder',
+  '/api/sync/versions',
+  '/api/sync/version'
 ];
 const handlers = new Map();
-for (const [route, file] of ROUTES) {
-  const mod = await import('./' + file);
-  handlers.set(route, mod.default);
+for (const route of ROUTES) {
+  handlers.set(route, (req, res) => {
+    /* المعاينة المحلية http مش https، وVercel بيحدد البروتوكول
+       في الهيدرز. نضبطه هنا عشان روابط OAuth المحلية تطلع http. */
+    if (!req.headers['x-forwarded-proto']) req.headers['x-forwarded-proto'] = 'http';
+    if (!req.headers['x-forwarded-host'] && req.headers.host) req.headers['x-forwarded-host'] = req.headers.host;
+    return run(req, res, route);
+  });
 }
 
 const TYPES = {

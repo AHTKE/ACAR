@@ -9,6 +9,28 @@ const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'nizam-gtest-'));
 process.env.NIZAM_DATA_DIR = DATA;
 /* الاختبار ده بيغطّي الوضع المحلي (بدون الموقع) */
 process.env.NIZAM_LINK_MODE = 'local';
+/* مفاتيح وهمية بصيغة صحيحة — الاختبار مبيلمسش Google الحقيقي. */
+process.env.NIZAM_GOOGLE_CLIENT_ID = '123456789012-testclientidforchecks.apps.googleusercontent.com';
+process.env.NIZAM_GOOGLE_CLIENT_SECRET = 'GOCSPX-testsecret0123456789abcd';
+
+/* محاكاة Google عشان الاختبار يشتغل من غير مفاتيح حقيقية. */
+const realFetch = globalThis.fetch;
+globalThis.fetch = async function (url, opts) {
+  const u = String(url && url.url ? url.url : url);
+  if (u.indexOf('https://accounts.google.com') === 0) {
+    return new Response(null, {
+      status: 302,
+      headers: { location: 'http://127.0.0.1:' + PORT + '/?error=login_required' }
+    });
+  }
+  if (u.indexOf('https://oauth2.googleapis.com/token') === 0) {
+    return new Response(JSON.stringify({ error: 'invalid_grant' }), {
+      status: 400, headers: { 'Content-Type': 'application/json' }
+    });
+  }
+  return realFetch(url, opts);
+};
+
 const server = require('./desktop/server');
 
 let pass = 0, fail = 0;

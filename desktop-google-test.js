@@ -2,8 +2,8 @@
    desktop-google-test.js — اختبار ربط Google من النسخة المكتبية
    ------------------------------------------------------------
    • عميل Desktop: رابط الإرجاع على 127.0.0.1 مقبول من غير تسجيل.
-   • مفاتيح الديسكتوب تتبعت من خادمه المحلي في هيدرز، والموقع
-     بيفضل على مفاتيحه.
+   • الموقع بيستخدم مفاتيحه المنشورة (env) فقط، ومش بيقبل مفاتيح
+     من هيدرز الطلب.
    • أي redirect_uri خارج loopback بيترفض (حماية من open redirect).
 
    المفاتيح هنا وهمية بصيغة صحيحة فقط — مفيش أي سر حقيقي في الملف.
@@ -41,47 +41,53 @@ global.fetch = async function (url, opts) {
 (async () => {
   const worker = (await import('./worker.js')).default;
   const env = {
-    GOOGLE_CLIENT_ID: '',
-    GOOGLE_CLIENT_SECRET: '',
+    GOOGLE_CLIENT_ID: ID,
+    GOOGLE_CLIENT_SECRET: SECRET,
     ASSETS: { fetch: () => new Response('assets') }
   };
-  const hdrs = { 'x-nizam-gid': ID, 'x-nizam-gsecret': SECRET };
+  const noKeys = Object.assign({}, env, { GOOGLE_CLIENT_ID: '', GOOGLE_CLIENT_SECRET: '' });
 
-  console.log('\n[1] الديسكتوب يبعت مفاتيحه ورابط إرجاع loopback');
+  console.log('\n[1] الديسكتوب يمرّر رابط إرجاع loopback والموقع يستخدم مفاتيحه');
   let r = await worker.fetch(new Request(
-    SITE + '/api/google/login?redirect_uri=' + encodeURIComponent(LOCAL), { headers: hdrs }), env);
+    SITE + '/api/google/login?redirect_uri=' + encodeURIComponent(LOCAL)), env);
   ok('رد بتحويل (302)', r.status === 302, r.status);
   let loc = r.headers.get('location') || '';
   ok('التحويل على Google', loc.indexOf('accounts.google.com') > -1, loc.slice(0, 60));
   const q = new URL(loc).searchParams;
-  ok('client_id = عميل الديسكتوب', q.get('client_id') === ID, q.get('client_id'));
+  ok('client_id = مفاتيح الموقع', q.get('client_id') === ID, q.get('client_id'));
   ok('redirect_uri = 127.0.0.1', q.get('redirect_uri') === LOCAL, q.get('redirect_uri'));
   ok('فيه scope للدرايف', String(q.get('scope')).indexOf('drive') > -1, q.get('scope'));
   ok('فيه state', !!q.get('state'));
   const stateCookie = (r.headers.get('set-cookie') || '');
   ok('كوكي الحالة اتبعتت', stateCookie.indexOf('gstate=') > -1, stateCookie.slice(0, 40));
 
-  console.log('\n[2] نفس المسار من الموقع (من غير هيدرز) يستخدم مفاتيح الموقع');
-  r = await worker.fetch(new Request(SITE + '/api/google/login'), env);
+  console.log('\n[2] نفس المسار من الموقع يستخدم مفاتيح الموقع');
+  r = await worker.fetch(new Request(SITE + '/api/google/login'), noKeys);
   ok('بدون مفاتيح الموقع → 503', r.status === 503, r.status);
 
-  r = await worker.fetch(new Request(SITE + '/api/google/login', { headers: hdrs }), env);
+  r = await worker.fetch(new Request(SITE + '/api/google/login'), env);
   const q2 = new URL(r.headers.get('location') || 'https://x/').searchParams;
   ok('لما مفيش redirect_uri → دومين الموقع', q2.get('redirect_uri') === SITE + '/api/google/callback', q2.get('redirect_uri'));
 
   console.log('\n[3] redirect_uri خارج loopback مرفوض');
   r = await worker.fetch(new Request(
-    SITE + '/api/google/login?redirect_uri=' + encodeURIComponent('https://evil.example/cb'),
-    { headers: hdrs }), env);
+    SITE + '/api/google/login?redirect_uri=' + encodeURIComponent('https://evil.example/cb')), env);
   const q3 = new URL(r.headers.get('location') || 'https://x/').searchParams;
   ok('بيرجع لدومين الموقع مش للخارج', q3.get('redirect_uri') === SITE + '/api/google/callback', q3.get('redirect_uri'));
 
   console.log('\n[4] localhost بدون منفذ مقبول');
   r = await worker.fetch(new Request(
-    SITE + '/api/google/login?redirect_uri=' + encodeURIComponent('http://localhost/api/google/callback'),
-    { headers: hdrs }), env);
+    SITE + '/api/google/login?redirect_uri=' + encodeURIComponent('http://localhost/api/google/callback')), env);
   const q4 = new URL(r.headers.get('location') || 'https://x/').searchParams;
   ok('localhost مقبول', q4.get('redirect_uri') === 'http://localhost/api/google/callback', q4.get('redirect_uri'));
+
+  console.log('\n[5] capabilities ما بتدعيش دعم الموقع من غير مفاتيح');
+  r = await worker.fetch(new Request(SITE + '/api/google/capabilities'), noKeys);
+  let cap = await r.json();
+  ok('desktopLink=false من غير مفاتيح', cap && cap.desktopLink === false, JSON.stringify(cap));
+  r = await worker.fetch(new Request(SITE + '/api/google/capabilities'), env);
+  cap = await r.json();
+  ok('desktopLink=true بالمفاتيح', cap && cap.desktopLink === true, JSON.stringify(cap));
 
   console.log('\n' + '='.repeat(50));
   console.log('  PASS: ' + pass + '   FAIL: ' + fail);
