@@ -1010,6 +1010,7 @@ label.btn{cursor:pointer;user-select:none}
 [data-theme="light"] .hero h1,[data-theme="light"] .card h3{color:var(--text)}
 [data-theme="light"] .titlebar__clock{background:var(--panel)}
 
+/* ---------- التحصيل الشهري ---------- */
 /* ---------- قفل دخول التطبيق (app-lock.js) ---------- */
 .app-lock{position:fixed;inset:0;z-index:99990;display:flex;align-items:center;justify-content:center;padding:20px;background:radial-gradient(circle at 50% 30%,#141a3f 0%,#0a0d1a 55%,#05070f 100%)}
 .app-lock__card{width:100%;max-width:380px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.10);border-radius:20px;padding:26px 22px;box-shadow:0 24px 60px rgba(0,0,0,.55);text-align:center}
@@ -1023,3 +1024,70 @@ label.btn{cursor:pointer;user-select:none}
 .app-lock__btn{width:100%;margin-top:6px}
 .app-lock__link{display:block;width:100%;margin-top:10px;background:none;border:0;color:#38bdf8;font:inherit;font-size:.82rem;cursor:pointer;text-decoration:underline}
 .app-lock__err{margin:6px 0;color:#fca5a5;font-size:.8rem}
+
+/* ---------- التحصيل الشهري ---------- */
+.field__hint{display:block;margin-top:6px;color:var(--muted);font-size:12px;line-height:1.7}
+.col-status{white-space:nowrap}
+.plan-box{border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,.03);padding:16px;display:flex;flex-direction:column;gap:14px}
+.plan-box--late{border-color:rgba(248,113,113,.35);background:rgba(248,113,113,.05)}
+.plan-box__head{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.plan-box__head>div{min-width:0}
+.plan-box__head b{display:block;font-size:15px}
+.plan-box__head small{display:block;color:var(--muted);font-size:12.5px;margin-top:4px}
+.plan-box__head .tag{margin-inline-start:auto}
+.plan-box__hint{margin:0;color:var(--muted);font-size:12.5px;line-height:1.9}
+.plan-box__ok{margin:0;color:#6ee7b7;font-size:13px;font-weight:600}
+.plan-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.plan-kpis>div{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.plan-kpis small{display:block;color:var(--muted);font-size:11.5px;margin-bottom:5px}
+.plan-kpis b{font-size:15px}
+.plan-late{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.28);border-radius:12px;padding:12px 14px}
+.plan-late>b{display:block;color:#fca5a5;font-size:13px;margin-bottom:6px}
+.plan-late ul{margin:0;padding-inline-start:18px;display:flex;flex-direction:column;gap:6px}
+.plan-late li{font-size:12.5px;line-height:1.8;color:#fecaca}
+.plan-late li b{color:#fff}
+.plan-late p{margin:8px 0 0;color:var(--muted);font-size:12px;line-height:1.8}
+.plan-months{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;max-height:420px;overflow:auto;padding:2px}
+.month-card{border:1px solid var(--line);border-radius:14px;padding:11px 12px;background:var(--panel-2);display:flex;flex-direction:column;gap:4px;position:relative}
+.month-card__top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.month-card__top b{font-size:12.5px}
+.month-card__dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:none}
+.month-card__amount{font-size:15px;font-weight:800;letter-spacing:.3px}
+.month-card__state{font-size:12px;font-weight:700}
+.month-card small{color:var(--muted);font-size:11px;line-height:1.6}
+.month-card.is-paid{border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.08)}
+.month-card.is-paid .month-card__dot{background:#34d399;box-shadow:0 0 0 3px rgba(52,211,153,.18)}
+.month-card.is-paid .month-card__state{color:#6ee7b7}
+.month-card.is-overdue{border-color:rgba(248,113,113,.45);background:rgba(248,113,113,.08)}
+.month-card.is-overdue .month-card__dot{background:#f87171;box-shadow:0 0 0 3px rgba(248,113,113,.18)}
+.month-card.is-overdue .month-card__state{color:#fca5a5}
+.month-card.is-due{border-color:rgba(245,158,11,.45);background:rgba(245,158,11,.07)}
+.month-card.is-due .month-card__dot{background:#fbbf24;box-shadow:0 0 0 3px rgba(245,158,11,.18)}
+.month-card.is-due .month-card__state{color:#fcd34d}
+.month-card.is-upcoming{opacity:.72}
+.month-card__rest{color:#fca5a5!important}
+@media (max-width:640px){.plan-kpis{grid-template-columns:1fr}}
+
+/* ===== الموظفون / المصنعية / تصنيف المخازن ===== */
+.summary--3{grid-template-columns:repeat(3,1fr)}
+.custom-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.custom-row input{flex:1;min-width:0;background:rgba(0,0,0,.28);border:1px solid var(--line);border-radius:11px;padding:10px 12px;color:var(--text);font-size:13px;outline:none;transition:.2s}
+.custom-row input:focus{border-color:rgba(79,140,255,.7);box-shadow:0 0 0 3px rgba(79,140,255,.12)}
+.custom-row .btn{flex:0 0 auto;width:34px;height:34px;padding:0;font-size:18px}
+.catalog-tree{margin-top:16px;display:flex;flex-direction:column;gap:12px}
+.catalog-cat{border:1px solid var(--line);border-radius:14px;background:var(--panel-2);overflow:hidden}
+.catalog-cat__head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.02);flex-wrap:wrap}
+.catalog-cat__head small{color:var(--muted);font-size:12px}
+.catalog-cat__empty{padding:14px;color:var(--muted);font-size:13px}
+.catalog-item{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:1px dashed var(--line)}
+.catalog-item:last-child{border-bottom:0}
+.catalog-item__body{min-width:0;flex:1}
+.catalog-item__title{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.catalog-item__specs{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+.spec-chip{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:999px;padding:3px 8px;font-size:11px;color:var(--muted);background:rgba(255,255,255,.03)}
+.catalog-item__note{margin:7px 0 0;color:var(--muted);font-size:12px}
+.catalog-empty{padding:18px;border:1px dashed var(--line);border-radius:14px;text-align:center;color:var(--muted);font-size:13px}
+.link-btn{background:none;border:0;color:var(--primary);font:inherit;font-weight:700;cursor:pointer;padding:0;text-align:start}
+.link-btn:hover{text-decoration:underline}
+@media (max-width:900px){.summary--3{grid-template-columns:1fr 1fr}}
+@media (max-width:650px){.summary--3{grid-template-columns:1fr}}

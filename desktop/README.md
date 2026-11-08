@@ -87,7 +87,7 @@ npm --prefix desktop run start   # نافذة Electron
 
 | الخطوة | ماذا يحدث |
 |---|---|
-| `GET /api/google/status` | يسأل الموقع `/api/google/capabilities` (نتيجة متخزنة 5 دقايق) — لو مش موجود يبقى الموقع منشور من نسخة قديمة |
+| `GET /api/google/status` | يسأل الموقع الأساسي `/api/google/capabilities`، ولو مش موجود أو رجع خطأ يجرّب النسخة الاحتياطية المنشورة تلقائيًا (النتيجة متخزنة 5 دقايق) |
 | `GET /api/google/login` | تحويل للموقع: `/api/google/login?desktop=<منفذ التطبيق>` |
 | موافقة Google | بتحصل في المتصفح الافتراضي على الموقع نفسه (كوكيز الموقع كاملة هناك) |
 | `GET /api/google/callback` (على الموقع) | يستبدل الكود بـ`refresh_token` ويحفظه، وبعدين يحوّل لـ`http://127.0.0.1:<port>/api/google/site-link?refresh=…&email=…` |
@@ -101,7 +101,8 @@ Desktop (`redirect_uri=http://127.0.0.1:47820/api/google/callback`) ويحفظ �
 حتى لو الرجوع حصل في متصفح مختلف عن نافذة التطبيق.
 
 > الموقع لازم يكون منشور من نسخة فيها `/api/google/capabilities` و
-> `/api/google/access-token` — غير كده التطبيق بيرجع للوضع المحلي تلقائيًا.
+> `/api/google/access-token`. لو النشر الأساسي قديم، التطبيق بيستخدم النسخة
+> الاحتياطية تلقائيًا؛ وتقدر تثبّتها بـ`NIZAM_SITE_FALLBACK`.
 
 باقي مسارات `/api/*` (المزامنة مثلًا) بتتمرّر للموقع الرسمي
 `https://workflow-amw-code.vercel.app`، ولو المسار مش موجود هناك أو رد بخطأ

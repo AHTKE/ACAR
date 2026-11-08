@@ -35,6 +35,7 @@
     'supplier-profile': 'كشف حساب مورد',
     details: 'التفاصيل',
     stores: 'المخازن',
+    employees: 'الموظفين',
     'partner-profile': 'بروفايل شريك',
     'member-profile': 'بروفايل عضو الجمعية',
     operations: 'العمليات'
@@ -104,6 +105,47 @@
     try { localStorage.setItem(KEY_CUSTOMERS, JSON.stringify(list)); } catch (e) {}
   }
 
+  /* ---------- الموظفون ---------- */
+  var KEY_EMPLOYEES = 'app_employees';
+  function getEmployees() {
+    try {
+      var raw = localStorage.getItem(KEY_EMPLOYEES);
+      if (raw) {
+        var arr = JSON.parse(raw);
+        if (Array.isArray(arr)) return safeList(arr, []).map(function (e) {
+          if (!Array.isArray(e.transactions)) e.transactions = [];
+          return e;
+        });
+      }
+    } catch (e) {}
+    return [];
+  }
+
+  /* ---------- محرك التحصيل الشهري (monthly.js) ---------- */
+  var MC = (typeof createMonthlyCollection === 'function') ? createMonthlyCollection({
+    getCustomers: getCustomers,
+    derive: derive,
+    money: money,
+    esc: esc,
+    formatDate: formatDate,
+    monthLabel: monthLabel,
+    pad: pad
+  }) : null;
+  var monthlyPlan = MC ? MC.monthlyPlan : function () {
+    return {
+      active: false, day: 0, monthly: 0, count: 0, startKey: '', months: [],
+      overdueMonths: [], prevUnpaid: [], current: null, requiredNow: 0,
+      overdueAmount: 0, settled: false, isLate: false, hasPrev: false, status: 'none'
+    };
+  };
+  var planPill = MC ? MC.planPill : function () { return ''; };
+  var planDetailHTML = MC ? MC.planDetailHTML : function () { return ''; };
+  var getDefaultDueDay = MC ? MC.getDefaultDueDay : function () { return 0; };
+  var saveDefaultDueDay = MC ? MC.saveDefaultDueDay : function () {};
+  var customerDueDay = MC ? MC.customerDueDay : function () { return 0; };
+  var monthKeyFromISO = MC ? MC.monthKeyFromISO : function () { return ''; };
+  var monthKeyOf = MC ? MC.monthKeyOf : function (y, m) { return y + '-' + pad(m + 1); };
+
   /* ---------- التنقل ---------- */
   function showView(id) {
     $$('.view').forEach(function (v) { v.classList.toggle('is-active', v.id === 'view-' + id); });
@@ -126,7 +168,8 @@
     if (id === 'collection') step(function () { renderCollection(colFilter()); renderCollectionSummary(); }, 'التحصيل');
     if (id === 'collection') step(function () { renderWaPanel(); }, 'رسائل واتساب');
     if (id === 'ledger') step(function () { renderLedger(); renderLedgerSummary(); fillPartyLists(); }, 'الدواخل والخوارج');
-    if (id === 'stores') step(function () { renderStoreChips(); renderStores(); fillStoreSuggests(); }, 'المخازن');
+    if (id === 'stores') step(function () { renderStoreChips(); renderStores(); fillStoreSuggests(); if (window.WarehouseCatalog) window.WarehouseCatalog.render(); }, 'المخازن');
+    if (id === 'employees') step(function () { if (window.EmployeesUI) window.EmployeesUI.render(); }, 'الموظفين');
     if (id === 'partners') step(function () { renderPartners(); }, 'الشركاء');
     if (id === 'associations') step(function () { renderAssociations(); }, 'الجمعيات');
     if (id === 'details') step(function () { renderDetails(); }, 'التفاصيل');
@@ -640,6 +683,14 @@
     var due = Math.max(total - down, 0);
     var rest = Math.max(due - later, 0);
     var list = getCustomers();
+    var dueDayNum = f.dueDay ? parseInt(f.dueDay.value, 10) : 0;
+    var dueDay = (dueDayNum >= 1 && dueDayNum <= 31) ? dueDayNum : 0;
+    var startDateVal = String(f.startDate.value || '');
+    var nowDate = new Date();
+    var scheduleStart = monthKeyFromISO(startDateVal) || monthKeyOf(nowDate.getFullYear(), nowDate.getMonth());
+    if (editingCustomerIdx >= 0 && list[editingCustomerIdx] && list[editingCustomerIdx].scheduleStart) {
+      scheduleStart = list[editingCustomerIdx].scheduleStart;
+    }
     var entry = {
       name: String(f.name.value || '').trim(),
       phone: String(f.phone.value || '').trim(),
@@ -653,10 +704,12 @@
       due: due,
       rest: rest,
       duration: (String(f.durationValue.value || '').trim() + ' ' + String(f.durationUnit.value || '')).trim(),
+      dueDay: dueDay,
+      scheduleStart: scheduleStart,
       status: String(f.status.value || ''),
       startYear: String(f.startYear.value || ''),
       endYear: String(f.endYear.value || ''),
-      startDate: String(f.startDate.value || ''),
+      startDate: startDateVal,
       endDate: String(f.endDate.value || ''),
       paidByUs: parseFloat(f.paidByUs.value) || 0,
       balance: rest,
@@ -756,6 +809,8 @@
       if (f.durationUnit.options[i].value === unit) { unitOk = true; break; }
     }
     f.durationUnit.value = unitOk ? unit : 'شهر';
+    var dueDayVal = parseInt(c.dueDay, 10);
+    if (f.dueDay) f.dueDay.value = (dueDayVal >= 1 && dueDayVal <= 31) ? dueDayVal : '';
     if (c.status) f.status.value = c.status;
     var radios = form.querySelectorAll('input[name="status"]');
     for (var ri = 0; ri < radios.length; ri++) {
@@ -778,6 +833,9 @@
     fillYears();
     renderNotes();
     recalc();
+    if (form.elements.dueDay && getDefaultDueDay()) {
+      form.elements.dueDay.placeholder = 'الافتراضي: ' + getDefaultDueDay();
+    }
 
     form.addEventListener('input', function (e) {
       recalc();
@@ -851,6 +909,10 @@
       sendSum += Number(s.total != null ? s.total : (Number(s.qty || 0) * Number(s.price || 0)));
     });
     var paidByUs = Number(c.paidByUs || 0) + led.out;
+    /* المصنعية وأجور العمال: تُخصم من رصيد المدفوع منا للعميل، ولا تُسجَّل في الخزنة. */
+    var manu = Array.isArray(c.manufacturing) ? c.manufacturing : [];
+    var manuTotal = 0;
+    manu.forEach(function (x) { manuTotal += Number(x.amount || 0); });
     /* حركات المخازن المرتبطة بالعميل: خوارج/توريد له يزيد المستحق، والمرتجع يقلله */
     var storeSends = Array.isArray(c.storeSends) ? c.storeSends : [];
     var storeCharge = 0, storeReturn = 0;
@@ -864,9 +926,10 @@
       pays: pays, paidPays: paidPays, paid: paid, rest: rest,
       n: n, unit: unit,
       sends: sends, sendSum: sendSum, paidByUs: paidByUs,
+      manu: manu, manuTotal: manuTotal,
       storeSends: storeSends, storeCharge: storeCharge, storeReturn: storeReturn,
       ledIn: led.in, ledOut: led.out, ledList: led.list,
-      sendBal: Math.max(paidByUs - sendSum, 0)
+      sendBal: Math.max(paidByUs - sendSum - manuTotal, 0)
     };
   }
 
@@ -1218,6 +1281,7 @@
       infoItem('رقم الاحتياطي', c.phone2) +
       infoItem('الرقم القومي', c.nationalId) +
       infoItem('مدة السداد', c.duration) +
+      infoItem('يوم التحصيل في الشهر', customerDueDay(c) ? (customerDueDay(c) + ' من كل شهر') : 'غير محدد') +
       infoItem('العنوان', c.address, 'info-item--wide') +
       infoItem('سنة البدء', c.startYear) +
       infoItem('سنة الانتهاء', c.endYear || 'لم يكتمل بعد') +
@@ -1235,6 +1299,7 @@
       infoItem('المبلغ الإجمالي قبل خصم المقدم', money(d.total)) +
       infoItem('المبلغ المدفوع من العميل (المقدم)', money(d.down)) +
       infoItem('المبلغ المدفوع منا نحن للعميل', money(c.paidByUs)) +
+      infoItem('إجمالي المصنعية وأجور العمال', money(d.manuTotal)) +
       infoItem('المطلوب سداده بعد خصم المقدم', money(d.due)) +
       infoItem('دفعات مسجّلة عند الإضافة', money(d.later)) +
       infoItem('إجمالي التحصيل من الملف', money(d.paidPays)) +
@@ -1313,6 +1378,7 @@
     sf.elements.note.value = '';
     $('#sendError').hidden = true;
     updateSendCalc();
+    try { document.dispatchEvent(new CustomEvent('nizam:profile-rendered')); } catch (e) {}
   }
 
   function formatDate(v) {
@@ -1431,7 +1497,7 @@
     return sum;
   }
   function profileSendBal(c, d) {
-    return Math.max(Number((d && d.paidByUs) || 0) - profileSendSum(c, d), 0);
+    return Math.max(Number((d && d.paidByUs) || 0) - profileSendSum(c, d) - Number((d && d.manuTotal) || 0), 0);
   }
   var sendView = { filter: '', grouped: false };
 
@@ -2723,6 +2789,7 @@
 
   function collectionDetailHTML(c, idx) {
     var d = derive(c);
+    var plan = monthlyPlan(c);
     var paidTotal = d.down + d.paid;
     var pct = d.total > 0 ? Math.min(100, Math.round((paidTotal / d.total) * 100)) : (d.rest > 0 ? 0 : 100);
 
@@ -2738,7 +2805,7 @@
         '<td class="amount pos">' + money(p.amount) + '</td>' +
         '<td>' + esc(p.no || (i + 1)) + '</td>' +
         '<td class="amount">' + money(running) + '</td>' +
-        '<td>' + (p.note ? esc(p.note) : '—') + '</td>' +
+        '<td>' + (p.note ? esc(p.note) : ((Array.isArray(p.months) && p.months.length) ? ('شهور: ' + esc(p.months.map(monthLabel).join('، '))) : '—')) + '</td>' +
         '<td class="col-cell"><button type="button" class="btn btn--ghost btn--sm btn--danger" data-del-colpay="' + i + '" data-cidx="' + idx + '">حذف</button></td>' +
         '</tr>';
     });
@@ -2780,10 +2847,12 @@
       '<div class="progress-label"><span>نسبة السداد: ' + pct + '%</span>' +
         '<span>قيمة القسط: ' + ((d.n > 0 && d.unit) ? money(d.rest / d.n) + ' / ' + d.unit : '—') + '</span></div>' +
 
+      planDetailHTML(c) +
+
       '<form class="form" id="mainCollectForm" data-idx="' + idx + '" novalidate>' +
         '<div class="form__row form__row--3">' +
           '<label class="field"><span>التاريخ *</span><input type="date" name="date" value="' + todayISO() + '" required /></label>' +
-          '<label class="field"><span>المبلغ المدفوع *</span><input type="number" name="amount" min="0" step="any" required placeholder="0" /></label>' +
+          '<label class="field"><span>المبلغ المدفوع *</span><input type="number" name="amount" min="0" step="any" required placeholder="' + (plan.requiredNow > 0 ? money(plan.requiredNow) : '0') + '" /></label>' +
           '<label class="field"><span>المرة الكام في الدفع *</span><input type="number" name="no" min="1" step="1" required value="' + (d.pays.length + 1) + '" /></label>' +
         '</div>' +
         '<div class="form__row">' +
@@ -2795,6 +2864,7 @@
         '</div>' +
         '<p class="form__error" hidden></p>' +
         '<div class="form__actions">' +
+          (plan.requiredNow > 0 ? '<button type="button" class="btn btn--ghost" data-fill-required="' + plan.requiredNow + '">دفع المطلوب الآن (' + money(plan.requiredNow) + ')</button>' : '') +
           '<button type="submit" class="btn btn--primary"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-plus"></use></svg> إضافة تحصيل</button>' +
         '</div>' +
       '</form>' +
@@ -2832,6 +2902,20 @@
       });
     }
 
+    /* فلتر الفئة: متأخرون / شهور سابقة / دفعوا */
+    var sfEl = $('#collectionStatusFilter');
+    var sf = sfEl ? sfEl.value : 'all';
+    if (sf !== 'all') {
+      list = list.filter(function (x) {
+        var p = monthlyPlan(x.c);
+        if (!p.active) return false;
+        if (sf === 'late') return p.isLate;
+        if (sf === 'prev') return p.hasPrev;
+        if (sf === 'paid') return !p.isLate;
+        return true;
+      });
+    }
+
     /* لو العميل المفتوح اختفى من نتائج البحث نغلقه */
     if (collectionOpen != null && !list.some(function (x) { return x.i === collectionOpen; })) {
       collectionOpen = null;
@@ -2841,6 +2925,7 @@
     list.forEach(function (entry, n) {
       var c = entry.c;
       var d = derive(c);
+      var plan = monthlyPlan(c);
       var open = collectionOpen === entry.i;
       html += '<tr class="collection-row' + (open ? ' is-open' : '') + '" data-idx="' + entry.i + '">' +
         '<td>' + (n + 1) + '</td>' +
@@ -2848,15 +2933,16 @@
         '<td>' + esc(c.phone || '—') + '</td>' +
         '<td>' + esc(c.address || '—') + '</td>' +
         '<td class="amount' + (d.rest > 0 ? ' neg' : '') + '">' + money(d.rest) + '</td>' +
+        '<td class="col-status">' + planPill(plan) + '</td>' +
         '<td class="col-arrow"><span class="chev"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-arrow"></use></svg></span></td>' +
         '</tr>';
       if (open) {
-        html += '<tr class="collection-detail"><td colspan="6">' + collectionDetailHTML(c, entry.i) + '</td></tr>';
+        html += '<tr class="collection-detail"><td colspan="7">' + collectionDetailHTML(c, entry.i) + '</td></tr>';
       }
     });
 
     if (!list.length) {
-      html = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:26px">' +
+      html = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:26px">' +
         (q ? 'لا توجد نتائج مطابقة' : 'لا يوجد عملاء بعد — أضف عميلاً أولاً') + '</td></tr>';
     }
 
@@ -2907,19 +2993,39 @@
     if (amt > d.rest) return fail('المبلغ المدفوع أكبر من المتبقي (' + money(d.rest) + ')');
     if (err) err.hidden = true;
 
+    if (!c.scheduleStart) {
+      c.scheduleStart = monthKeyFromISO(c.startDate) || monthKeyOf(new Date().getFullYear(), new Date().getMonth());
+    }
+    var planBefore = monthlyPlan(c);
     var pays = d.pays.slice();
-    pays.push({ date: date, amount: amt, no: no, note: String(el.note.value || '').trim() });
+    var pay = { date: date, amount: amt, no: no, note: String(el.note.value || '').trim() };
+    pays.push(pay);
     pays.sort(function (a, b) { return String(a.date).localeCompare(String(b.date)); });
     c.payments = pays;
     c.rest = Math.max(d.rest - amt, 0);
     c.balance = c.rest;
     if (c.due == null) c.due = d.due;
+
+    /* الشهور التي سدّدتها هذه الدفعة — الأقدم أولاً */
+    var planAfter = monthlyPlan(c);
+    var paidBefore = {};
+    planBefore.months.forEach(function (m) { if (m.paid) paidBefore[m.key] = true; });
+    var coveredMonths = [];
+    planAfter.months.forEach(function (m) {
+      if (m.paid && !paidBefore[m.key]) coveredMonths.push(m.key);
+    });
+    if (coveredMonths.length) {
+      pay.months = coveredMonths;
+      if (!pay.note) pay.note = 'سداد شهور: ' + coveredMonths.map(monthLabel).join('، ');
+    }
     saveCustomers(list);
 
     renderCollection(colFilter());
     renderCollectionSummary();
     renderHomeStats();
-    toast('تمت إضافة تحصيل بقيمة ' + money(amt) + ' — المتبقي: ' + money(c.rest));
+    toast(coveredMonths.length
+      ? 'تم التحصيل — سُدّدت شهور: ' + coveredMonths.map(monthLabel).join('، ')
+      : ('تمت إضافة تحصيل بقيمة ' + money(amt) + ' — المتبقي: ' + money(c.rest)));
   });
 
   function mainCollectRecalc(e) {
@@ -2935,6 +3041,44 @@
       renderCollection(this.value);
     });
   }
+
+  var collectionStatusFilter = $('#collectionStatusFilter');
+  if (collectionStatusFilter) collectionStatusFilter.addEventListener('change', function () {
+    collectionOpen = null;
+    renderCollection(colFilter());
+  });
+
+  /* زر «دفع المطلوب الآن» داخل تفاصيل العميل */
+  document.addEventListener('click', function (e) {
+    var fill = e.target && e.target.closest ? e.target.closest('[data-fill-required]') : null;
+    if (!fill) return;
+    e.preventDefault();
+    var cf = $('#mainCollectForm');
+    if (!cf) return;
+    var need = Number(fill.getAttribute('data-fill-required')) || 0;
+    if (need > 0) {
+      cf.elements.amount.value = String(need);
+      updateMainCalc(cf);
+      if (cf.elements.amount.focus) cf.elements.amount.focus();
+    }
+  });
+
+  /* اليوم الافتراضي للتحصيل من الإعدادات */
+  var defaultDueDayEl = $('#defaultDueDay');
+  if (defaultDueDayEl) defaultDueDayEl.value = getDefaultDueDay() || '';
+  var saveDefaultDueDayBtn = $('#saveDefaultDueDay');
+  if (saveDefaultDueDayBtn) saveDefaultDueDayBtn.addEventListener('click', function () {
+    var el = $('#defaultDueDay');
+    var v = el ? parseInt(el.value, 10) : 0;
+    if (el && String(el.value).trim() && !(v >= 1 && v <= 31)) {
+      toast('يوم التحصيل يجب أن يكون من 1 إلى 31', true);
+      return;
+    }
+    saveDefaultDueDay(v);
+    toast((v >= 1 && v <= 31) ? ('تم حفظ يوم التحصيل الافتراضي: ' + v) : 'تم إلغاء اليوم الافتراضي');
+    safeRun(function () { renderCollection(colFilter()); }, 'التحصيل بعد حفظ اليوم');
+    safeRun(function () { renderWaPanel(); }, 'رسائل واتساب');
+  });
 
   safeRun(function () { renderCollection(''); renderCollectionSummary(); }, 'التحصيل');
 
@@ -3068,12 +3212,25 @@
         desc: 'مقدم مدفوع من العميل: ' + name, note: '',
         party: { type: 'customer', name: name }
       }));
-      var adv = Number(c.paidByUs || 0);
-      if (adv > 0) ops.push(Object.assign({}, base, {
-        key: 'auto:cus:' + ci + ':adv', type: 'out', amount: adv, date: c.startDate || '',
-        desc: 'مدفوع منا نحن للعميل: ' + name, note: '',
-        party: { type: 'customer', name: name }
-      }));
+      /* المبلغ المدفوع منا للعميل لا يُسجَّل تلقائيًا هنا:
+         لم يخرج نقدًا من الخزنة بعد، ويُستهلك مع الوقت بالمرسل والمصنعية. */
+    });
+    getEmployees().forEach(function (e2, ei) {
+      var en = String(e2.name || '').trim();
+      (e2.transactions || []).forEach(function (t, k) {
+        var amt = Number(t.amount || 0);
+        if (!(amt > 0)) return;
+        var isRefund = t.type === 'refund';
+        var lbl = t.type === 'salary' ? 'مرتب موظف'
+          : t.type === 'advance' ? 'سلفة موظف'
+          : t.type === 'bonus' ? 'مكافأة موظف' : 'استرداد من موظف';
+        ops.push({
+          auto: true, src: 'تلقائي', key: 'auto:emp:' + ei + ':' + k,
+          type: isRefund ? 'in' : 'out', amount: amt, date: t.date || '',
+          desc: lbl + ': ' + en, note: t.note || '',
+          party: null
+        });
+      });
     });
     getSuppliers().forEach(function (s, si) {
       var name = String(s.name || '').trim();
@@ -5191,7 +5348,10 @@
     app_associations: 'الجمعيات',
     app_members: 'أعضاء الجمعيات',
     app_wa_settings: 'رسائل التحصيل (واتساب) — الإعدادات',
-    app_wa_log: 'رسائل التحصيل (واتساب) — سجل الإرسال'
+    app_wa_log: 'رسائل التحصيل (واتساب) — سجل الإرسال',
+    app_default_due_day: 'التحصيل الشهري — يوم التحصيل الافتراضي',
+    app_employees: 'الموظفون',
+    app_store_catalog: 'تصنيف المخازن والأصناف'
   };
   var SYNC_KEYS = Object.keys(SYNC_LABELS);
   var SYNC_PUSH_MS = 60 * 60 * 1000;    /* رفع تلقائي كل ساعة */
@@ -7527,6 +7687,9 @@
     '• المبلغ قبل التحصيل: {قبل}' + '\n' +
     '• المدفوع: {المدفوع}' + '\n' +
     '• المتبقي: {المتبقي}' + '\n' +
+    '• يوم التحصيل: {اليوم} من كل شهر' + '\n' +
+    '• الشهور غير المدفوعة: {الشهور}' + '\n' +
+    '• المطلوب الآن: {المطلوب}' + '\n' +
     'شكرًا لكم — نظام الإدارة';
   var waBusy = false;
 
@@ -7570,9 +7733,13 @@
 
   /* مفتاح فريد لكل عملية تحصيل: أول ما يحصل تحصيل جديد المفتاح يتغير
      فيسمح الإرسال مرة تانية — غير كده نفس التحصيل ما يترسلش تاني. */
-  function waKey(c, i, last) {
+  function waKey(c, i, last, plan) {
     var pays = Array.isArray(c.payments) ? c.payments : [];
-    return [i, c.name || '', pays.length, last.date || '', Number(last.amount || 0)].join('|');
+    var base = [i, c.name || '', pays.length, last ? (last.date || '') : '', last ? Number(last.amount || 0) : 0].join('|');
+    if (plan && plan.active && plan.overdueMonths.length) {
+      base += '|due:' + plan.overdueMonths.map(function (m) { return m.key; }).join(',');
+    }
+    return base;
   }
 
   function waPhone(c) {
@@ -7602,12 +7769,20 @@
 
   function waFill(tpl, c, info) {
     var d = derive(c);
+    var plan = monthlyPlan(c);
+    var monthsTxt = plan.overdueMonths.length
+      ? plan.overdueMonths.map(function (m) { return monthLabel(m.key); }).join('، ')
+      : 'لا يوجد';
     var map = {
       '{الاسم}': c.name || '', '{name}': c.name || '',
       '{التاريخ}': formatDate(info.date), '{date}': formatDate(info.date),
       '{قبل}': money(info.before), '{before}': money(info.before),
       '{المدفوع}': money(info.paid), '{paid}': money(info.paid),
-      '{المتبقي}': money(d.rest), '{rest}': money(d.rest)
+      '{المتبقي}': money(d.rest), '{rest}': money(d.rest),
+      '{اليوم}': plan.day ? String(plan.day) : '—', '{day}': plan.day ? String(plan.day) : '—',
+      '{القسط}': money(plan.monthly || 0), '{monthly}': money(plan.monthly || 0),
+      '{الشهور}': monthsTxt, '{months}': monthsTxt,
+      '{المطلوب}': money(plan.requiredNow || 0), '{required}': money(plan.requiredNow || 0)
     };
     var out = String(tpl == null ? '' : tpl);
     for (var k in map) if (Object.prototype.hasOwnProperty.call(map, k)) out = out.split(k).join(map[k]);
@@ -7621,22 +7796,38 @@
     getCustomers().forEach(function (c, i) {
       if (!c || typeof c !== 'object') return;
       var last = waLastPayment(c);
-      if (!last) return;
+      var plan = monthlyPlan(c);
+      if (!last && !plan.active) return;
       var d = derive(c);
-      var paid = Number(last.amount || 0);
+      var paid = last ? Number(last.amount || 0) : 0;
       var info = {
-        date: last.date || todayISO(),
+        date: last ? (last.date || todayISO()) : todayISO(),
         paid: paid,
-        before: Math.max(d.rest + paid, 0)
+        before: last ? Math.max(d.rest + paid, 0) : d.rest
       };
-      var key = waKey(c, i, last);
+      var key = waKey(c, i, last, plan);
       out.push({
-        i: i, c: c, info: info, key: key, phone: waPhone(c),
+        i: i, c: c, info: info, key: key, phone: waPhone(c), plan: plan,
         sent: log.some(function (e) { return e && e.key === key; }),
         text: waFill(s.template, c, info)
       });
     });
     return out;
+  }
+
+  function waRowsFiltered() {
+    var el = $('#waStatusFilter');
+    var f = el ? el.value : 'all';
+    var rows = waRows();
+    if (f === 'all') return rows;
+    return rows.filter(function (r) {
+      var p = r.plan;
+      if (!p || !p.active) return false;
+      if (f === 'late') return p.isLate;
+      if (f === 'prev') return p.hasPrev;
+      if (f === 'paid') return !p.isLate;
+      return true;
+    });
   }
 
   function renderWaPanel() {
@@ -7648,7 +7839,7 @@
     var ccEl = $('#waCountry');
     if (ccEl && document.activeElement !== ccEl) ccEl.value = s.country;
 
-    var rows = waRows();
+    var rows = waRowsFiltered();
     var html = '';
     rows.forEach(function (r) {
       var status = r.sent
@@ -7659,14 +7850,15 @@
         '<td>' + esc(r.c.name || 'بدون اسم') + '</td>' +
         '<td>' + esc(r.phone || '—') + '</td>' +
         '<td>' + esc(formatDate(r.info.date)) + ' · ' + money(r.info.paid) + '</td>' +
+        '<td>' + planPill(r.plan) + '</td>' +
         '<td>' + status + '</td>' +
         '<td class="col-cell"><button type="button" class="btn btn--ghost btn--sm" data-wa-send="' + r.i + '"' +
           ((!r.phone || r.sent) ? ' disabled' : '') + '>' + (r.sent ? 'تم الإرسال' : 'إرسال') + '</button></td>' +
         '</tr>';
     });
     if (!rows.length) {
-      html = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:22px">' +
-        'مفيش عملاء عندهم تحصيل مسجّل بعد — أضف أول دفعة من شاشة التحصيل.</td></tr>';
+      html = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:22px">' +
+        'مفيش عملاء مطابقين للفئة المختارة — جرّب «الكل» أو أضف يوم تحصيل/دفعة أولاً.</td></tr>';
     }
     tb.innerHTML = html;
 
@@ -7716,7 +7908,7 @@
 
   function waSendAll() {
     if (waBusy) return;
-    var list = waRows().filter(function (r) { return !r.sent && r.phone; });
+    var list = waRowsFiltered().filter(function (r) { return !r.sent && r.phone; });
     if (!list.length) {
       toast('مفيش رسائل جديدة — الكل تم إرساله أو بدون رقم هاتف', true);
       return;
@@ -7778,6 +7970,7 @@
 
   document.addEventListener('change', function (e) {
     if (!e.target || !e.target.id) return;
+    if (e.target.id === 'waStatusFilter') { renderWaPanel(); return; }
     if (e.target.id === 'waPhonePref' || e.target.id === 'waCountry') {
       var s = waSettings();
       if (e.target.id === 'waPhonePref') s.phonePref = e.target.value;
@@ -8125,6 +8318,22 @@
       it2.innerHTML = storeItems($('#supStorePick') ? $('#supStorePick').value : '').map(function (nm) {
         return '<option value="' + esc(nm) + '"></option>';
       }).join('');
+    }
+    if (window.WarehouseCatalog) {
+      try {
+        var storeNow = $('#storePick') ? $('#storePick').value : '';
+        var storeNow2 = $('#supStorePick') ? $('#supStorePick').value : '';
+        if (it) it.innerHTML += window.WarehouseCatalog.itemOptions(storeNow);
+        if (it2) it2.innerHTML += window.WarehouseCatalog.itemOptions(storeNow2);
+        [it, it2].forEach(function (dl) {
+          if (!dl) return;
+          var seen = {};
+          Array.prototype.slice.call(dl.querySelectorAll('option')).forEach(function (op) {
+            if (seen[op.value]) { if (op.parentNode) op.parentNode.removeChild(op); }
+            else seen[op.value] = 1;
+          });
+        });
+      } catch (e) {}
     }
     fillStoreWorkList();
     renderStoreChips();
@@ -8538,6 +8747,37 @@
       try { toast('حدث خطأ غير متوقع: ' + m, true); } catch (e) {}
     });
   } catch (e) {}
+
+  /* جسر بسيط للوحدات المنفصلة (الموظفون / المصنعية / تصنيف المخازن) */
+  window.NizamApp = {
+    getCustomers: getCustomers,
+    saveCustomers: saveCustomers,
+    getCurrentCustomer: function () { return getCustomers()[currentIdx] || null; },
+    getCurrentIdx: function () { return currentIdx; },
+    deriveCustomer: derive,
+    getEmployees: getEmployees,
+    refreshProfile: function () {
+      if (currentIdx > -1) { try { renderProfile(); } catch (e) {} }
+    },
+    refreshLedger: function () {
+      try { renderLedger(); renderLedgerSummary(); } catch (e) {}
+    },
+    renderHomeStats: renderHomeStats,
+    toast: toast,
+    money: money,
+    esc: esc,
+    formatDate: formatDate,
+    todayISO: todayISO,
+    getStores: getStores,
+    saveStores: saveStores,
+    getStoreNames: getStoreNames,
+    storeItemBalance: storeItemBalance,
+    storeItems: storeItems,
+    addStore: addStore,
+    renderStores: renderStores,
+    fillStoreSuggests: fillStoreSuggests,
+    profileSendBal: function (c) { return profileSendBal(c, derive(c)); }
+  };
 
   window.syncApi = syncApi;
   window.syncApply = syncApply;

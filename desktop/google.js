@@ -51,26 +51,45 @@ module.exports = function createGoogle(deps) {
   /* الموقع الرسمي اللي بيتم الربط من خلاله (ومنه بنجدّد رمز الوصول) */
   const SITE_BASE = String(deps.siteBase || process.env.NIZAM_SITE_BASE ||
     deps.apiBase || 'https://workflow-amw-code.vercel.app').replace(/\/+$/, '');
+  /* النشر الأساسي ممكن يكون نسخة قديمة من غير مسارات ربط الديسكتوب،
+     فبنجرّب النسخة الاحتياطية المنشورة من نفس الكود قبل ما نستسلم. */
+  const FALLBACK_SITE_BASE = String(deps.fallbackSiteBase || process.env.NIZAM_SITE_FALLBACK ||
+    'https://site-88abe32661714048a24e9bd63ac05f70.freebuff.page').replace(/\/+$/, '');
   const LINK_MODE = String(process.env.NIZAM_LINK_MODE || '').toLowerCase();
   let tokenCache = { tok: '', exp: 0 };
-  let siteCache = { ok: false, at: 0 };
+  let siteCache = { ok: false, base: '', at: 0 };
   /* مدة تخزين نتيجة فحص الموقع (صفر = فحص في كل مرة — للاختبارات) */
   const CAP_TTL = Number(process.env.NIZAM_SITE_CAP_TTL || 5 * 60 * 1000);
 
-  /* هل الموقع المنشور بيدعم تمرير الربط للتطبيق؟ (نتيجة متخزّنة 5 دقايق) */
+  /* بنختار أول موقع منشور عنده مسارات ربط الديسكتوب. النتيجة متخزّنة
+     5 دقايق، ولو الأساسي رجع 404/خطأ بنجرّب الاحتياطي في نفس المحاولة. */
+  async function resolveSite() {
+    if (LINK_MODE === 'local') return { ok: false, base: '' };
+    if (LINK_MODE === 'site') return { ok: true, base: SITE_BASE };
+    if (CAP_TTL > 0 && siteCache.at && Date.now() - siteCache.at < CAP_TTL) return siteCache;
+    const bases = [];
+    [SITE_BASE, FALLBACK_SITE_BASE].forEach(function (b) {
+      b = String(b || '').replace(/\/+$/, '');
+      if (b && bases.indexOf(b) < 0) bases.push(b);
+    });
+    let found = { ok: false, base: '', at: Date.now() };
+    for (var i = 0; i < bases.length; i++) {
+      try {
+        const ctl = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined;
+        const r = await fetch(bases[i] + '/api/google/capabilities', ctl ? { signal: ctl } : undefined);
+        const j = await r.json().catch(function () { return {}; });
+        if (r.ok && j && j.desktopLink) {
+          found = { ok: true, base: bases[i], at: Date.now() };
+          break;
+        }
+      } catch (e) { /* جرّب الموقع الاحتياطي */ }
+    }
+    siteCache = found;
+    return found;
+  }
+
   async function siteCapable() {
-    if (LINK_MODE === 'local') return false;
-    if (LINK_MODE === 'site') return true;
-    if (CAP_TTL > 0 && siteCache.at && Date.now() - siteCache.at < CAP_TTL) return siteCache.ok;
-    let ok = false;
-    try {
-      const ctl = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined;
-      const r = await fetch(SITE_BASE + '/api/google/capabilities', ctl ? { signal: ctl } : undefined);
-      const j = await r.json().catch(function () { return {}; });
-      ok = !!(r.ok && j && j.desktopLink);
-    } catch (e) { ok = false; }
-    siteCache = { ok: ok, at: Date.now() };
-    return ok;
+    return !!(await resolveSite()).ok;
   }
 
   /* ---------- المفاتيح ---------- */
@@ -352,13 +371,14 @@ module.exports = function createGoogle(deps) {
       const a = readAuth();
       const rid = redirectUri();
       const viaSite = !!a.site_refresh_token;
-      const capable = await siteCapable();
+      const site = await resolveSite();
+      const capable = site.ok;
       json(res, 200, {
         configured: c.configured || capable || viaSite,
         connected: !!(viaSite || a.refresh_token),
         email: a.email || '',
         mode: viaSite ? 'site' : 'local',
-        siteBase: a.site_base || SITE_BASE,
+        siteBase: a.site_base || site.base || SITE_BASE,
         siteLink: capable,
         clientIdTail: c.id ? c.id.slice(-10) : '',
         clientIdLength: c.id.length,
@@ -388,16 +408,20 @@ module.exports = function createGoogle(deps) {
           'الموقع ما رجّعش رمز ربط صالح — اضغط «ربط Google Drive» وجرّب تاني')));
         return true;
       }
+      const auth = readAuth();
+      const pendingSite = String(auth.pending_site || '').replace(/\/+$/, '');
+      const siteBase = /^https?:\/\//i.test(pendingSite) ? pendingSite : (siteCache.base || SITE_BASE);
       patchAuth({
         site_refresh_token: refresh,
-        site_base: SITE_BASE,
+        site_base: siteBase,
         email: email,
         refresh_token: '',
         access_token: '',
         expires_at: 0,
         connected_at: new Date().toISOString(),
         pending_state: '',
-        pending_at: 0
+        pending_at: 0,
+        pending_site: ''
       });
       tokenCache = { tok: '', exp: 0 };
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -489,9 +513,10 @@ module.exports = function createGoogle(deps) {
 
     if (pathname === '/api/google/login') {
       /* الافتراضي: الربط يبدأ من الموقع الرسمي، وبعد الموافقة يرجع للتطبيق */
-      if (await siteCapable()) {
-        patchAuth({ pending_at: Date.now() });
-        redirect(res, SITE_BASE + '/api/google/login?desktop=' + (getPort() || 47820));
+      const site = await resolveSite();
+      if (site.ok) {
+        patchAuth({ pending_at: Date.now(), pending_site: site.base });
+        redirect(res, site.base + '/api/google/login?desktop=' + (getPort() || 47820));
         return true;
       }
       if (!c.configured) {
@@ -507,7 +532,7 @@ module.exports = function createGoogle(deps) {
       const state = crypto.randomUUID();
       /* الحالة بتتحفظ محليًا (مش كوكي) — لأن الرجوع ممكن يحصل في
          متصفح خارجي مختلف عن نافذة التطبيق. */
-      patchAuth({ pending_state: state, pending_at: Date.now() });
+      patchAuth({ pending_state: state, pending_at: Date.now(), pending_site: '' });
       const u = new URL(AUTH_URL);
       u.searchParams.set('client_id', c.id);
       u.searchParams.set('redirect_uri', redirectUri());

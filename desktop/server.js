@@ -63,6 +63,14 @@ const API_BASE = String(process.env.NIZAM_API_BASE || DEFAULT_API_BASE).replace(
 /* مفاتيح عميل Google الخاص بالديسكتوب (عميل Desktop: يقبل أي منفذ loopback) */
 let GOOGLE_CLIENT = {};
 try { GOOGLE_CLIENT = require('./google-client.json') || {}; } catch (e) { GOOGLE_CLIENT = {}; }
+/* بديل آمن للتشغيل والاختبار من غير كتابة السر في ملف: تقدر تمرّر
+   NIZAM_GOOGLE_CLIENT_ID و NIZAM_GOOGLE_CLIENT_SECRET في البيئة. */
+if (process.env.NIZAM_GOOGLE_CLIENT_ID || process.env.NIZAM_GOOGLE_CLIENT_SECRET) {
+  GOOGLE_CLIENT = Object.assign({}, GOOGLE_CLIENT, {
+    client_id: process.env.NIZAM_GOOGLE_CLIENT_ID || GOOGLE_CLIENT.client_id,
+    client_secret: process.env.NIZAM_GOOGLE_CLIENT_SECRET || GOOGLE_CLIENT.client_secret
+  });
+}
 let currentPort = 0;
 
 const TYPES = {
@@ -285,7 +293,8 @@ const google = createGoogle({
   readBody: readBody,
   getPort: function () { return currentPort; },
   client: function () { return GOOGLE_CLIENT; },
-  siteBase: String(process.env.NIZAM_SITE_BASE || API_BASE).replace(/\/+$/, '')
+  siteBase: String(process.env.NIZAM_SITE_BASE || API_BASE).replace(/\/+$/, ''),
+  fallbackSiteBase: String(process.env.NIZAM_SITE_FALLBACK || FALLBACK_API_BASE).replace(/\/+$/, '')
 });
 
 const server = http.createServer(async (req, res) => {

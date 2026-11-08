@@ -405,6 +405,12 @@
               </div>
             </div>
           </div>
+          <div class="form__row">
+            <label class="field" data-field="dueDay"><span>يوم التحصيل في الشهر</span>
+              <input type="number" name="dueDay" min="1" max="31" step="1" placeholder="مثال: 19" />
+              <small class="field__hint">اليوم الذي يجب أن يدفع فيه العميل كل شهر. لو تركته فارغاً يُطبَّق اليوم الافتراضي من الإعدادات.</small>
+            </label>
+          </div>
         </div>
 
         <!-- الحالة والسنوات -->
@@ -875,6 +881,12 @@
         <div class="field field--search"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-search"/></svg>
         <input type="text" id="collectionSearch" placeholder="ابحث عن عميل بالاسم أو الهاتف أو العنوان…" />
         </div>
+        <select id="collectionStatusFilter" title="عرض فئة معينة من العملاء حسب حالة التحصيل الشهري">
+          <option value="all">الكل</option>
+          <option value="late">المتأخرون / المتعسرون</option>
+          <option value="prev">لم يدفعوا شهوراً سابقة</option>
+          <option value="paid">دفعوا / غير متأخرين</option>
+        </select>
         <span class="count-pill" id="collectionCount">0 عميل</span>
       </div>
 
@@ -894,9 +906,20 @@
             <textarea id="waTemplate" rows="5" spellcheck="true"></textarea>
           </label>
           <p class="panel__note" style="margin:8px 0 12px">
-            المتاح للاستبدال: <b>{الاسم}</b> · <b>{التاريخ}</b> · <b>{قبل}</b> · <b>{المدفوع}</b> · <b>{المتبقي}</b>
-            (وتقدر تستخدم بالإنجليزي: {name} {date} {before} {paid} {rest})
+            المتاح للاستبدال: <b>{الاسم}</b> · <b>{التاريخ}</b> · <b>{قبل}</b> · <b>{المدفوع}</b> · <b>{المتبقي}</b> · <b>{اليوم}</b> · <b>{القسط}</b> · <b>{الشهور}</b> · <b>{المطلوب}</b>
+            (وتقدر تستخدم بالإنجليزي: {name} {date} {before} {paid} {rest} {day} {monthly} {months} {required})
           </p>
+          <div class="form__row">
+            <label class="field"><span>فئة العملاء المستهدفة</span>
+              <select id="waStatusFilter">
+                <option value="all">الكل</option>
+                <option value="late">المتأخرون / المتعسرون (بعد يوم التحصيل)</option>
+                <option value="prev">لم يدفعوا شهوراً سابقة</option>
+                <option value="paid">دفعوا / غير متأخرين</option>
+              </select>
+            </label>
+            <p class="panel__note" style="align-self:flex-end;margin:0">اختر الفئة لعرض رسائلها فقط — «إرسال للجميع» يرسل للفئة المعروضة حالياً.</p>
+          </div>
           <div class="form__row form__row--3">
             <label class="field"><span>الرقم المستخدم في الإرسال</span>
               <select id="waPhonePref">
@@ -925,6 +948,7 @@
               <th>العميل</th>
               <th>الهاتف</th>
               <th>آخر تحصيل</th>
+              <th>حالة الشهر</th>
               <th>الحالة</th>
               <th style="width:120px"><span class="sr-only">إرسال</span></th>
             </tr></thead>
@@ -945,6 +969,7 @@
                 <th>الهاتف</th>
                 <th>العنوان</th>
                 <th>المتبقي</th>
+                <th>الحالة الشهرية</th>
                 <th style="width:64px"><span class="sr-only">فتح التفاصيل</span></th>
               </tr>
             </thead>
@@ -1385,6 +1410,21 @@
         </div>
       </div>
 
+      <div class="panel" style="margin-bottom:20px">
+        <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-coins"/></svg> التحصيل الشهري — اليوم الافتراضي</h3>
+        <p class="panel__hint">حدّد يوم التحصيل الافتراضي في الشهر (مثلاً 19). يُطبَّق تلقائياً على كل عميل لم تحدد له يوماً خاصاً في بياناته. بعد مرور هذا اليوم بدون دفع يتحوّل شهر العميل إلى «متأخر» ويظهر ضمن المتعسرين، وتظل الشهور المتراكمة ظاهرة عليه حتى سدادها بالترتيب.</p>
+        <div class="form__row">
+          <label class="field"><span>يوم التحصيل الافتراضي في الشهر</span>
+            <input type="number" id="defaultDueDay" min="1" max="31" step="1" placeholder="مثال: 19" />
+            <small class="field__hint">اتركه فارغاً لإلغاء اليوم الافتراضي. العميل الذي له يوم خاص في بياناته يتقدّم على هذا الرقم دائماً.</small>
+          </label>
+          <div class="form__actions" style="margin:0;align-self:flex-end">
+            <button type="button" class="btn btn--primary" id="saveDefaultDueDay"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-check"/></svg> حفظ اليوم الافتراضي</button>
+          </div>
+        </div>
+        <p class="panel__note">مثال: لو اليوم الافتراضي 19، فكل عميل لم يُكتب له يوم يُعتبر مستحقاً يوم 19 من كل شهر؛ وبعد انتهاء يوم 19 بدون دفع يظهر «متأخر» وتظهر ملاحظة الشهر غير المدفوع في شاشة التحصيل وفي رسائل واتساب.</p>
+      </div>
+
       <div class="settings-grid">
         <div class="panel">
           <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-lock"/></svg> تغيير كلمة المرور</h3>
@@ -1791,6 +1831,10 @@ window.__retryAsset = function (el, name) {
 };
 </script>
 <script src="export.js" onerror="__retryAsset(this,'export.js')"></script>
+<script src="monthly.js" onerror="__retryAsset(this,'monthly.js')"></script>
+<script src="employees.js" onerror="__retryAsset(this,'employees.js')"></script>
+<script src="customer-extra.js" onerror="__retryAsset(this,'customer-extra.js')"></script>
+<script src="warehouse-catalog.js" onerror="__retryAsset(this,'warehouse-catalog.js')"></script>
 <script>
 /* حارس الشاشة: أي لحظة مفيش فيها شاشة مفعّلة، الرئيسية بترجع فورًا.
    الغرض: الشاشة الفاضية تحت الهيدر تبقى مستحيلة حتى لو app.js وقع في النص.
