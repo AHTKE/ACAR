@@ -118,6 +118,9 @@ ok('مسار خارج /api ما يوصلش للـAPI (Vercel بيخدم المل
 console.log('\n[V4ب] دالة Vercel واحدة تخدم كل المسارات');
 const apiFiles = fs.readdirSync('api').filter((f) => f.endsWith('.js'));
 ok('عدد دوال api = 1 (حد Hobby 12)', apiFiles.length === 1, apiFiles.join(', '));
+const vercelIgnore = fs.readFileSync('.vercelignore', 'utf8');
+ok('.vercelignore يمنع رجوع مسارات google القديمة', /(^|\n)api\/google\s*($|\n)/.test(vercelIgnore), vercelIgnore);
+ok('.vercelignore يمنع رجوع مسارات sync القديمة', /(^|\n)api\/sync\s*($|\n)/.test(vercelIgnore), vercelIgnore);
 ok('الاسم catch-all', apiFiles[0] === '[...path].js', apiFiles[0]);
 const routeMod = await import('./api/[...path].js');
 ok('catch-all عنده default function', typeof routeMod.default === 'function', typeof routeMod.default);

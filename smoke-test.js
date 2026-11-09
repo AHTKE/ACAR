@@ -11,8 +11,10 @@ vc.on('error', (...a) => errors.push('console.error: ' + a.join(' ')));
 let html = fs.readFileSync('dist/index.html', 'utf8');
 const app = fs.readFileSync('dist/app.js', 'utf8');
 const exp = fs.readFileSync('dist/export.js', 'utf8');
+const monthly = fs.readFileSync('dist/monthly.js', 'utf8');
 html = html
   .replace(/<script[^>]*src="export\.js"[^>]*>\s*<\/script>/, () => '<script>' + exp + '</script>')
+  .replace(/<script[^>]*src="monthly\.js"[^>]*>\s*<\/script>/, () => '<script>' + monthly + '</script>')
   .replace(/<script[^>]*src="app\.js"[^>]*>\s*<\/script>/, () => '<script>' + app + '</script>');
 
 const dom = new JSDOM(html, {
@@ -161,6 +163,9 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   click($('[data-open-profile]'));
   ok('راح لملف العميل', $('#view-profile').classList.contains('is-active'));
   ok('ملف العميل اتبنى من غير خطأ', !!$('#profileTitle').textContent && errors.length === 0, errors.join(' | '));
+  ok('لوحة التحصيل الشهري ظاهرة في بروفايل العميل', !!$('#profilePlan'));
+  ok('البروفايل بيعرض حالة التحصيل', $('#profilePlan').textContent.indexOf('التحصيل الشهري') > -1,
+     $('#profilePlan').textContent.slice(0, 160));
 
   console.log('\n[9] إجماليات الملخص');
   const boxes = $$('#collectionSummary b').map((b) => b.textContent);

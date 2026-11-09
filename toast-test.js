@@ -64,6 +64,12 @@ const ok = (n, c, x) => { if (c) { pass++; console.log('  PASS  ' + n); } else {
   x.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
   ok('اتقفل بالضغط على ×', !(t && t.classList.contains('show')));
 
+  console.log('\n[2ب] pointerup بيقفل فورًا (لمس الموبايل)');
+  window.toast('رسالة اختبار 2');
+  const x2 = doc.querySelector('#toastClose');
+  x2.dispatchEvent(new window.Event('pointerup', { bubbles: true, cancelable: true }));
+  ok('اتقفل بـ pointerup', !(t && t.classList.contains('show')));
+
   console.log('\n[3] إشعار جديد بيظهر تاني');
   window.toast('رسالة تانية');
   ok('ظهر تاني', !!(t && t.classList.contains('show')));

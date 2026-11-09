@@ -162,16 +162,19 @@
           }
         }
         left = Math.max(left - covered, 0);
+        var dueISO = monthDueISO(key, day);
         var dueEnd = monthDueEnd(key, day);
         var state;
         if (isPaid) state = 'paid';
         else if (dueEnd && now.getTime() > dueEnd.getTime()) state = 'overdue';
         else if (key === currentKey) state = 'due';
         else state = 'upcoming';
+        var paidISO = paidAt ? String(paidAt).slice(0, 10) : '';
+        var latePaid = !!(isPaid && paidISO && dueISO && paidISO > dueISO);
         var item = {
           key: key, index: ii, amount: amount, paidAmount: covered,
           remaining: Math.max(amount - covered, 0), paid: isPaid,
-          paidAt: paidAt, dueISO: monthDueISO(key, day), state: state
+          paidAt: paidAt, dueISO: dueISO, state: state, latePaid: latePaid
         };
         plan.months.push(item);
         if (state === 'overdue') {
@@ -221,14 +224,22 @@
       var cls = m.state === 'paid' ? 'is-paid'
         : m.state === 'overdue' ? 'is-overdue'
           : m.state === 'due' ? 'is-due' : 'is-upcoming';
+      var stateText = monthStateText(m);
       var dateLine;
-      if (m.state === 'paid') dateLine = m.paidAt ? ('دُفع في ' + formatDate(m.paidAt)) : 'مدفوع ضمن الدفعات السابقة';
-      else if (m.state === 'overdue') dateLine = 'كان مستحقاً ' + formatDate(m.dueISO);
-      else dateLine = 'الاستحقاق ' + formatDate(m.dueISO);
-      return '<div class="month-card ' + cls + '">' +
+      if (m.state === 'paid' && m.latePaid) {
+        stateText = 'مدفوع بعد التأخير';
+        dateLine = 'غير مدفوع ← مدفوع في ' + formatDate(m.paidAt);
+      } else if (m.state === 'paid') {
+        dateLine = m.paidAt ? ('دُفع في ' + formatDate(m.paidAt)) : 'مدفوع ضمن الدفعات السابقة';
+      } else if (m.state === 'overdue') {
+        dateLine = 'غير مدفوع حتى الآن — كان مستحقاً ' + formatDate(m.dueISO);
+      } else {
+        dateLine = 'الاستحقاق ' + formatDate(m.dueISO);
+      }
+      return '<div class="month-card ' + cls + (m.latePaid ? ' is-late-paid' : '') + '">' +
         '<div class="month-card__top"><b>' + esc(monthLabel(m.key)) + '</b><span class="month-card__dot"></span></div>' +
         '<div class="month-card__amount">' + money(m.amount) + '</div>' +
-        '<div class="month-card__state">' + monthStateText(m) + '</div>' +
+        '<div class="month-card__state">' + stateText + '</div>' +
         '<small>' + esc(dateLine) + '</small>' +
         (m.state === 'overdue' && m.remaining < m.amount - 0.005
           ? '<small class="month-card__rest">متبقي منه: ' + money(m.remaining) + '</small>' : '') +
@@ -249,6 +260,13 @@
           esc(formatDate(m.dueISO)) + ' · المطلوب ' + money(m.remaining) + '</li>';
       }).join('');
       var cards = plan.months.slice().reverse().map(monthCardHTML).join('');
+      var latePaid = plan.months.filter(function (m) { return m.latePaid; });
+      var history = latePaid.length
+        ? '<div class="plan-history"><b>تغيّر حالة السداد</b><ul>' +
+          latePaid.map(function (m) {
+            return '<li><b>' + esc(monthLabel(m.key)) + '</b> — غير مدفوع ← مدفوع في ' + esc(formatDate(m.paidAt)) + '</li>';
+          }).join('') + '</ul></div>'
+        : '';
       return '<div class="plan-box' + (plan.overdueMonths.length ? ' plan-box--late' : '') + '">' +
         '<div class="plan-box__head">' +
           '<div><b>التحصيل الشهري</b><small>يوم ' + plan.day + ' من كل شهر · القسط ' + money(plan.monthly) + ' · بداية ' + esc(monthLabel(plan.startKey)) + '</small></div>' +
@@ -263,6 +281,7 @@
           ? '<div class="plan-late"><b>ملاحظات المتأخرات</b><ul>' + late + '</ul><p>أي دفعة جديدة تُخصم من أقدم شهر غير مدفوع أولاً، ثم الشهر الذي يليه بالترتيب.</p></div>'
           : '<p class="plan-box__ok">لا توجد شهور متأخرة — العميل منتظم في السداد ✓</p>') +
         '<div class="plan-months">' + cards + '</div>' +
+        history +
         '</div>';
     }
 

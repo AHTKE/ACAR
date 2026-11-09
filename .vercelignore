@@ -1,0 +1,6 @@
+# Vercel Hobby allows at most 12 Serverless Functions per deployment.
+# All /api routes are served by the single catch-all api/[...path].js.
+# Ignore legacy route wrappers if an older snapshot restores them, so a
+# deployment cannot exceed the Hobby limit or lose those routes.
+api/google
+api/sync

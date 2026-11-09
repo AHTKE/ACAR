@@ -1273,6 +1273,10 @@
       '<div class="progress"><i style="width:' + pct + '%"></i></div>' +
       '<div class="progress-label"><span>مدفوع: ' + money(d.paid) + '</span><span>متبقي: ' + money(d.rest) + '</span></div>';
 
+    /* حالة التحصيل الشهري — تفضل ظاهرة في البروفايل للمتأخر، وتتحدث بعد كل دفعة */
+    var profilePlanEl = $('#profilePlan');
+    if (profilePlanEl) profilePlanEl.innerHTML = planDetailHTML(c);
+
     /* البيانات الشخصية */
     $('#profileInfo').innerHTML =
       infoItem('اسم العميل', c.name) +
@@ -2619,9 +2623,12 @@
     }
     if (close) {
       close.addEventListener('click', closeToast);
+      /* على الموبايل ممكن الـclick يتلغي بعد لمسة/سحب؛ نقفل برضه على pointerup و touchend */
+      close.addEventListener('pointerup', closeToast);
+      close.addEventListener('touchend', closeToast);
       /* نمنع السحب/الضغط على الإشعار نفسه لما نضغط زر × */
       close.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
-      close.addEventListener('pointerup', function (e) { e.stopPropagation(); });
+      close.addEventListener('touchstart', function (e) { e.stopPropagation(); });
     }
     el.addEventListener('click', function (e) {
       if (e.target.closest('#toastClose, .toast__x')) { closeToast(e); return; }
@@ -8150,6 +8157,7 @@
     renderStoreChips();
     renderStores();
     toast('اتضاف المخزن «' + name + '» ✓ — اختاره في نموذج الحركة');
+    try { document.dispatchEvent(new CustomEvent('nizam:stores-changed', { detail: { type: 'add', name: name } })); } catch (e) {}
     return true;
   }
 
@@ -8167,6 +8175,7 @@
     renderStoreChips();
     renderStores();
     toast('اتحذف مخزن «' + name + '» — حركاته اتنقلت لـ «' + move + '»');
+    try { document.dispatchEvent(new CustomEvent('nizam:stores-changed', { detail: { type: 'delete', name: name, target: move } })); } catch (e) {}
   }
 
   function renderStoreSummary() {
@@ -8554,6 +8563,7 @@
       toggleStorePayFields();
       updateStoreCalc();
       renderStores();
+      try { document.dispatchEvent(new CustomEvent('nizam:store-data-changed')); } catch (e) {}
       var lbl = STORE_LABEL[type] || type;
       var extra = '';
       if (paid > 0) extra = ' — واتسجّل دفع ' + money(paid) + ' للمورد';
@@ -8627,6 +8637,7 @@
         saveStores(v2);
         try { unlinkStoreFromParty(gone); } catch (e) {}
         renderStores();
+        try { document.dispatchEvent(new CustomEvent('nizam:store-data-changed')); } catch (e) {}
         toast('تم حذف حركة المخزن مع أثرها في حساب الطرف');
       }
     });

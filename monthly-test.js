@@ -72,6 +72,18 @@ assert.strictEqual(p.current && p.current.state, 'due');
 const sep = p.months.find((m) => m.key === '2026-09');
 assert.strictEqual(sep.paid, true);
 assert.strictEqual(sep.paidAt, '2026-11-08');
+assert.strictEqual(sep.latePaid, true, 'سبتمبر اتدفع بعد استحقاقه');
+const octLate = p.months.find((m) => m.key === '2026-10');
+assert.strictEqual(octLate.latePaid, true, 'أكتوبر اتدفع بعد استحقاقه');
+assert.ok(MC.monthCardHTML(sep).indexOf('غير مدفوع') > -1, 'الكارت يوضح أنه كان غير مدفوع');
+assert.ok(MC.monthCardHTML(sep).indexOf('2026-11-08') > -1, 'تاريخ الدفع ظاهر');
+assert.ok(MC.monthCardHTML(sep).indexOf('مدفوع بعد التأخير') > -1, 'حالة التحول ظاهرة');
+
+/* 2ب) دفعة قبل الاستحقاق: الشهور مدفوعة في موعدها */
+c = base({ payments: [{ date: '2026-09-10', amount: 20000 }] });
+p = MC.monthlyPlan(c, new Date(2026, 10, 8, 12, 0, 0));
+assert.strictEqual(p.months.find((m) => m.key === '2026-09').latePaid, false);
+assert.strictEqual(p.months.find((m) => m.key === '2026-10').latePaid, false);
 
 /* 3) في 20 ديسمبر بدون دفع جديد: نوفمبر وديسمبر متأخران */
 p = MC.monthlyPlan(c, new Date(2026, 11, 20, 12, 0, 0));
@@ -126,4 +138,11 @@ assert.strictEqual(MC.getDefaultDueDay(), 25);
 MC.saveDefaultDueDay(0);
 assert.strictEqual(MC.getDefaultDueDay(), 0);
 
-console.log('✓ كل اختبارات التحصيل الشهري نجحت (9 سيناريوهات)');
+/* 10) تفاصيل البروفايل تعرض التحول من غير مدفوع إلى مدفوع بتاريخ الدفع */
+c = base({ scheduleStart: '2020-01', payments: [{ date: '2021-01-15', amount: 60000 }] });
+const detail = MC.planDetailHTML(c);
+assert.ok(detail.indexOf('تغيّر حالة السداد') > -1, 'سجل تغيّر الحالة ظاهر');
+assert.ok(detail.indexOf('غير مدفوع ← مدفوع') > -1, 'التحول ظاهر في تفاصيل البروفايل');
+assert.ok(detail.indexOf('2021-01-15') > -1, 'تاريخ الدفع ظاهر في تفاصيل البروفايل');
+
+console.log('✓ كل اختبارات التحصيل الشهري نجحت (10 سيناريوهات)');
