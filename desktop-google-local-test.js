@@ -7,8 +7,7 @@ const path = require('path');
 const PORT = 47821;
 const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'nizam-gtest-'));
 process.env.NIZAM_DATA_DIR = DATA;
-/* الاختبار ده بيغطّي الوضع المحلي (بدون الموقع) */
-process.env.NIZAM_LINK_MODE = 'local';
+/* الاختبار ده بيغطّي الوضع الافتراضي: محلي لما مفاتيح Desktop موجودة. */
 /* مفاتيح وهمية بصيغة صحيحة — الاختبار مبيلمسش Google الحقيقي. */
 process.env.NIZAM_GOOGLE_CLIENT_ID = '123456789012-testclientidforchecks.apps.googleusercontent.com';
 process.env.NIZAM_GOOGLE_CLIENT_SECRET = 'GOCSPX-testsecret0123456789abcd';

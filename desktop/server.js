@@ -12,8 +12,8 @@
    • /local/kv        ← حفظ/حذف مفتاح واحد
    • /local/status    ← حالة القاعدة (عدد المفاتيح + الحجم)
    • /local/nizam.db  ← نسخة من ملف القاعدة للتنزيل الاحتياطي
-   • /api/*           ← يُمرَّر لخادم Vercel/الويب لو NIZAM_API_BASE مضبوط
-                        (عشان ربط Google Drive والمزامنة يشتغلوا)
+   • /api/*           ← ربط Google محلي، وباقي المسارات (المزامنة)
+                        تُمرَّر لـ NIZAM_API_BASE لو مضبوط
    التشغيل: node desktop/server.js   ثم افتح http://127.0.0.1:4568
    ============================================================ */
 'use strict';
@@ -51,13 +51,9 @@ function resolveDataDir() {
 const DATA_DIR = resolveDataDir();
 const DB_FILE = path.join(DATA_DIR, 'nizam.db');
 const DEFAULT_PORT = Number(process.env.PORT || 4568);
-/* خادم الويب اللي بيشغّل واجهات /api (ربط Google + المزامنة).
-   الديسكتوب بيستخدم الموقع المنشور افتراضيًا، وأي NIZAM_API_BASE
-   بيتغلّب عليه. */
+/* خادم الويب اللي بيشغّل واجهات المزامنة. الربط بـGoogle بيتم محليًا
+   في هذا الخادم، وأي NIZAM_API_BASE بيتغلّب على الافتراضي. */
 const DEFAULT_API_BASE = 'https://workflow-amw-code.vercel.app';
-/* لو الموقع الرسمي مش فيه مسار معيّن (نسخة أقدم) أو رد بـ500، بنجرّب
-   نسخة Sites المنشورة من نفس الكود بدل ما الطلب يفشل. */
-const FALLBACK_API_BASE = 'https://site-88abe32661714048a24e9bd63ac05f70.freebuff.page';
 const API_BASE = String(process.env.NIZAM_API_BASE || DEFAULT_API_BASE).replace(/\/+$/, '');
 
 /* مفاتيح عميل Google الخاص بالديسكتوب (عميل Desktop: يقبل أي منفذ loopback) */
@@ -232,14 +228,13 @@ function readBody(req, limit) {
 }
 
 /* تمرير /api/* لخادم الويب (اختياري) */
-function proxyApi(req, res, targetPath, base, retried) {
-  const baseUrl = base || API_BASE;
+function proxyApi(req, res, targetPath) {
+  const baseUrl = API_BASE;
   const path = targetPath;
 
-  /* بنمرّر المسار كما هو. منضيفش redirect_uri loopback هنا، لأن
-     الوضع الافتراضي بيكمّل OAuth على الموقع نفسه وبعدها بيرجّع
-     الرمز للديسكتوب. كمان مبنبعتش مفاتيح Google المحلية في هيدرز —
-     الموقع لازم يستخدم GOOGLE_CLIENT_ID/SECRET بتوعه هو. */
+  /* بنمرّر المسار كما هو، ومبنبعتش مفاتيح Google المحلية في هيدرز.
+     ربط Google في الوضع المحلي بيتعمل داخل desktop/google.js،
+     والموقع (لو اخترت وضع site) بيستخدم GOOGLE_CLIENT_ID/SECRET بتوعه. */
   const u = new URL(baseUrl + path);
   const headers = Object.assign({}, req.headers, { host: u.host });
   delete headers['accept-encoding'];
@@ -254,14 +249,6 @@ function proxyApi(req, res, targetPath, base, retried) {
     headers: headers
   };
   const pre = (u.protocol === 'https:' ? require('https') : http).request(opts, (r) => {
-    /* الموقع الرسمي مش فيه المسار ده (نسخة أقدم) أو رد بخطأ خادم →
-       نجرّب النسخة الاحتياطية المنشورة من نفس الكود. */
-    const status = r.statusCode || 502;
-    if (!retried && baseUrl === API_BASE && FALLBACK_API_BASE !== API_BASE && (status === 404 || status >= 500)) {
-      try { r.resume(); } catch (e) {}
-      proxyApi(req, res, targetPath, FALLBACK_API_BASE, true);
-      return;
-    }
     const h = Object.assign({}, r.headers);
     /* الكوكيز بتيجي Secure من الموقع، و127.0.0.1 على http لازم تتشال منها */
     if (h['set-cookie']) {
@@ -286,8 +273,7 @@ const google = createGoogle({
   readBody: readBody,
   getPort: function () { return currentPort; },
   client: function () { return GOOGLE_CLIENT; },
-  siteBase: String(process.env.NIZAM_SITE_BASE || API_BASE).replace(/\/+$/, ''),
-  fallbackSiteBase: String(process.env.NIZAM_SITE_FALLBACK || FALLBACK_API_BASE).replace(/\/+$/, '')
+  siteBase: String(process.env.NIZAM_SITE_BASE || API_BASE).replace(/\/+$/, '')
 });
 
 const server = http.createServer(async (req, res) => {

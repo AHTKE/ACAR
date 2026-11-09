@@ -81,48 +81,53 @@ npm --prefix desktop run start   # نافذة Electron
 
 ## 4) ربط Google Drive في نسخة سطح المكتب
 
-### الوضع الافتراضي: الربط عبر الموقع الرسمي
-`desktop/google.js` بيبدأ الربط من الموقع المنشور (`NIZAM_SITE_BASE`، الافتراضي
-`https://workflow-amw-code.vercel.app`) وبعدين الموقع يمرّر الربط للتطبيق:
+### الوضع الافتراضي: محلي أولًا
+`desktop/google.js` بيفضّل OAuth المحلي لو لقى مفاتيح عميل Desktop في
+`desktop/google-client.json` أو في `NIZAM_GOOGLE_CLIENT_ID` و`NIZAM_GOOGLE_CLIENT_SECRET`.
+الربط بيحصل على `http://127.0.0.1:47820/api/google/callback` والرمز بيتحفظ في
+`data/google-auth.json` على الجهاز. الحالة (`state`) بتتحفظ في الملف نفسه مش في
+كوكي، عشان العملية تكمّل حتى لو الرجوع حصل في متصفح مختلف عن نافذة التطبيق.
+
+لو مفاتيح عميل Desktop مش موجودة، التطبيق بيرجع تلقائيًا لوضع الربط عبر الموقع
+(نفس السلوك القديم) بدل ما يفشل. تقدر تجبر وضعًا معينًا:
+
+| القيمة | السلوك |
+|---|---|
+| بدون `NIZAM_LINK_MODE` | محلي لو المفاتيح موجودة، وإلا عبر الموقع |
+| `NIZAM_LINK_MODE=local` | محلي فقط — ولو المفاتيح ناقصة تظهر رسالة واضحة |
+| `NIZAM_LINK_MODE=site` | يجرّب الموقع أولًا، ولو مش متاح يرجع للمحلي |
+
+### الوضع عبر الموقع (اختياري)
+بيبدأ من `NIZAM_SITE_BASE` (الافتراضي `https://workflow-amw-code.vercel.app`):
 
 | الخطوة | ماذا يحدث |
 |---|---|
-| `GET /api/google/status` | يسأل الموقع الأساسي `/api/google/capabilities`، ولو مش موجود أو رجع خطأ يجرّب النسخة الاحتياطية المنشورة تلقائيًا (النتيجة متخزنة 5 دقايق) |
+| `GET /api/google/status` | يسأل الموقع `/api/google/capabilities` |
 | `GET /api/google/login` | تحويل للموقع: `/api/google/login?desktop=<منفذ التطبيق>` |
-| موافقة Google | بتحصل في المتصفح الافتراضي على الموقع نفسه (كوكيز الموقع كاملة هناك) |
-| `GET /api/google/callback` (على الموقع) | يستبدل الكود بـ`refresh_token` ويحفظه، وبعدين يحوّل لـ`http://127.0.0.1:<port>/api/google/site-link?refresh=…&email=…` |
-| `GET /api/google/site-link` | التطبيق يحفظ الرمز في `data/google-auth.json` ويعرض صفحة تأكيد |
+| موافقة Google | بتحصل في المتصفح الافتراضي على الموقع نفسه |
+| `GET /api/google/callback` (على الموقع) | يستبدل الكود بـ`refresh_token` ويحوّل لـ`http://127.0.0.1:<port>/api/google/site-link?refresh=…&email=…` |
+| `GET /api/google/site-link` | التطبيق يحفظ الرمز في `data/google-auth.json` |
 | بعد كده | `upload` / `notify` / `ping` بتجدّد رمز الوصول من الموقع عبر `POST /api/google/access-token` |
-
-### الوضع المحلي (بدون الموقع)
-لو الموقع مش متاح أو `NIZAM_LINK_MODE=local`، التطبيق بيعمل OAuth بنفسه بعميل
-Desktop (`redirect_uri=http://127.0.0.1:47820/api/google/callback`) ويحفظ الرمز
-محليًا. الحالة (`state`) بتتحفظ في الملف نفسه مش في كوكي، عشان العملية تكمّل
-حتى لو الرجوع حصل في متصفح مختلف عن نافذة التطبيق.
 
 ### إعداد Google Console الصح (مهم)
 
 | السيناريو | نوع العميل | رابط الإرجاع المسجَّل |
 |---|---|---|
-| الوضع الافتراضي: الربط عبر الموقع | **Web application** | `https://<دومين-الموقع>/api/google/callback` بالحرف |
-| الوضع المحلي: `NIZAM_LINK_MODE=local` | **Desktop app** | مش محتاج تسجيل؛ Google بيقبل أي منفذ على `127.0.0.1` |
+| الوضع المحلي (الافتراضي) | **Desktop app** | مش محتاج تسجيل؛ Google بيقبل أي منفذ على `127.0.0.1` |
 | لو استخدمت Web client للوضع المحلي | Web application | `http://127.0.0.1:47820/api/google/callback` بالحرف |
+| الوضع عبر الموقع: `NIZAM_LINK_MODE=site` | **Web application** | `https://<دومين-الموقع>/api/google/callback` بالحرف |
 
-> في الوضع الافتراضي **مش محتاج** تضيف `http://127.0.0.1:...` في Google Console.
-> Google callback بيحصل على الموقع نفسه، وبعدها الموقع يمرّر رمز الربط للديسكتوب.
-> تأكد إن `GOOGLE_CLIENT_ID` و`GOOGLE_CLIENT_SECRET` في Vercel من نفس عميل
-> **Web application**، وإن رابط الإرجاع مضاف بالحرف. لو عندك دومين ثابت، ضع
-> `APP_BASE_URL=https://<الدومين>` في Vercel عشان رابط الإرجاع ما يتغيّرش مع
-> روابط الـPreview.
+> في الوضع المحلي **مش محتاج** تضيف `http://127.0.0.1:...` في Google Console لو
+> العميل من نوع **Desktop app**. لو استخدمت Web client لازم تسجّل رابط loopback
+> بالحرف. راجع `desktop/google-client.example.json` لطريقة إعداد الملف.
 
-> الموقع لازم يكون منشور من نسخة فيها `/api/google/capabilities`،
-> `/api/google/check`، و`/api/google/access-token`. لو النشر الأساسي قديم،
-> التطبيق بيستخدم النسخة الاحتياطية تلقائيًا؛ وتقدر تثبّتها بـ`NIZAM_SITE_FALLBACK`،
+> الموقع (لو اخترت وضع site) لازم يكون منشور من نسخة فيها
+> `/api/google/capabilities` و`/api/google/check` و`/api/google/access-token`،
 > وتغيّر الموقع الأساسي بـ`NIZAM_SITE_BASE=https://...`.
 
-باقي مسارات `/api/*` (المزامنة مثلًا) بتتمرّر للموقع الرسمي
-`https://workflow-amw-code.vercel.app`، ولو المسار مش موجود هناك أو رد بخطأ
-خادم بيتم التحويل تلقائياً لنسخة Sites المنشورة. تقدر تغيّر الاثنين بـ`NIZAM_API_BASE`.
+باقي مسارات `/api/*` (المزامنة مثلًا) بتتمرّر لـ`NIZAM_API_BASE` (الافتراضي
+`https://workflow-amw-code.vercel.app`). ربط Google نفسه مش بيعتمد على الموقع في
+الوضع المحلي.
 
 > `desktop/google-client.json` (مفاتيح عميل Desktop) مستبعد من git، لكنه
 > **مضمَّن في المثبّت** — التطبيق بيستخدمه في الوضع المحلي فقط.

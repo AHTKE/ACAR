@@ -76,12 +76,10 @@ let server = null;
   process.env.NIZAM_GOOGLE_CLIENT_ID = '123456789012-testclientidforchecks.apps.googleusercontent.com';
   process.env.NIZAM_GOOGLE_CLIENT_SECRET = 'test-only-secret-0123456789abcdef';
   process.env.NIZAM_SITE_BASE = 'http://127.0.0.1:' + SITE_PORT;
-  /* الاختبار بيغطي موقع واحد: نخلي الاحتياطي هو نفسه عشان ما يلمسش
-     النسخة الحقيقية وقت اختبار حالة «الموقع مش بيدعم الربط». */
-  process.env.NIZAM_SITE_FALLBACK = 'http://127.0.0.1:' + SITE_PORT;
   process.env.NIZAM_STORE = 'json';
   process.env.NIZAM_SITE_CAP_TTL = '0';
-  delete process.env.NIZAM_LINK_MODE;
+  /* الاختبار بيغطّي الوضع الاختياري عبر الموقع. */
+  process.env.NIZAM_LINK_MODE = 'site';
 
   server = require('./desktop/server');
   const info = await server.start(PORT);

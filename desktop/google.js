@@ -10,10 +10,10 @@
    بيوصل للتطبيق — وده كان سبب فشل الربط (خطأ 500/جلسة مش موجودة).
 
    فيه وضعين:
-     • «عبر الموقع» (الافتراضي): الربط بيبدأ من الموقع الرسمي، وبعد
-       ما تسمح من Google بيرجع رمز التجديد للتطبيق على loopback،
-       والتطبيق بيجدّده من /api/google/access-token على الموقع.
-     • «محلي»: OAuth بعميل Desktop لو الموقع مش متاح (NIZAM_LINK_MODE=local).
+     • «محلي» (الافتراضي لما مفاتيح عميل Desktop موجودة): التطبيق بيعمل
+       OAuth بنفسه على loopback ويحفظ رمز التجديد على الجهاز.
+     • «عبر الموقع»: اختياري بـ NIZAM_LINK_MODE=site، وبيبدأ من الموقع
+       الرسمي ويرجّع رمز التجديد للتطبيق على loopback.
 
    المسارات: status / check / login / callback / site-link /
              disconnect / ping / upload / notify
@@ -48,60 +48,48 @@ module.exports = function createGoogle(deps) {
   const getPort = deps.getPort;
   const clientOf = typeof deps.client === 'function' ? deps.client : function () { return deps.client || {}; };
   const AUTH_FILE = path.join(deps.dataDir, 'google-auth.json');
-  /* الموقع الرسمي اللي بيتم الربط من خلاله (ومنه بنجدّد رمز الوصول) */
+  /* الموقع الرسمي اللي بيتم الربط من خلاله في وضع site فقط */
   const SITE_BASE = String(deps.siteBase || process.env.NIZAM_SITE_BASE ||
     deps.apiBase || 'https://workflow-amw-code.vercel.app').replace(/\/+$/, '');
-  /* النشر الأساسي ممكن يكون نسخة قديمة من غير مسارات ربط الديسكتوب،
-     فبنجرّب النسخة الاحتياطية المنشورة من نفس الكود قبل ما نستسلم. */
-  const FALLBACK_SITE_BASE = String(deps.fallbackSiteBase || process.env.NIZAM_SITE_FALLBACK ||
-    'https://site-88abe32661714048a24e9bd63ac05f70.freebuff.page').replace(/\/+$/, '');
+  /* auto = محلي لو مفاتيح Desktop موجودة، وإلا موقع. أي قيمة صريحة
+     (local/site) بتتغلّب على الاختيار التلقائي. */
   const LINK_MODE = String(process.env.NIZAM_LINK_MODE || '').toLowerCase();
   let tokenCache = { tok: '', exp: 0 };
   let siteCache = { ok: false, base: '', at: 0 };
   /* مدة تخزين نتيجة فحص الموقع (صفر = فحص في كل مرة — للاختبارات) */
   const CAP_TTL = Number(process.env.NIZAM_SITE_CAP_TTL || 5 * 60 * 1000);
 
-  /* بنختار أول موقع منشور عنده مسارات ربط الديسكتوب. النتيجة متخزّنة
-     5 دقايق، ولو الأساسي رجع 404/خطأ بنجرّب الاحتياطي في نفس المحاولة. */
+  /* الوضع التلقائي: محلي لو مفاتيح Desktop متوفرة، وإلا الربط عبر الموقع.
+     وضع site الصريح بيتحقق من دعم الموقع قبل التحويل، ولو مش متاح
+     بيرجع للوضع المحلي لو المفاتيح موجودة. */
   async function resolveSite() {
     if (LINK_MODE === 'local') return { ok: false, base: '' };
-    if (LINK_MODE === 'site') return { ok: true, base: SITE_BASE };
+    if (LINK_MODE !== 'site' && creds().configured) return { ok: false, base: '' };
     if (CAP_TTL > 0 && siteCache.at && Date.now() - siteCache.at < CAP_TTL) return siteCache;
-    const bases = [];
-    [SITE_BASE, FALLBACK_SITE_BASE].forEach(function (b) {
-      b = String(b || '').replace(/\/+$/, '');
-      if (b && bases.indexOf(b) < 0) bases.push(b);
-    });
     let found = { ok: false, base: '', origin: '', redirectUri: '', at: Date.now() };
-    for (var i = 0; i < bases.length; i++) {
-      try {
-        const ctl = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined;
-        const r = await fetch(bases[i] + '/api/google/capabilities', ctl ? { signal: ctl } : undefined);
-        const j = await r.json().catch(function () { return {}; });
-        if (r.ok && j && j.desktopLink) {
-          /* origin/redirectUri ممكن يختلفوا عن base لو الموقع مثبّت
-             APP_BASE_URL على دومين ثابت. */
-          const origin = /^https?:\/\//i.test(j.origin || '')
-            ? String(j.origin).replace(/\/+$/, '') : bases[i];
-          found = {
-            ok: true,
-            base: bases[i],
-            origin: origin,
-            redirectUri: /^https?:\/\//i.test(j.redirectUri || '')
-              ? String(j.redirectUri) : (origin + '/api/google/callback'),
-            at: Date.now()
-          };
-          break;
-        }
-      } catch (e) { /* جرّب الموقع الاحتياطي */ }
-    }
+    try {
+      const ctl = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined;
+      const r = await fetch(SITE_BASE + '/api/google/capabilities', ctl ? { signal: ctl } : undefined);
+      const j = await r.json().catch(function () { return {}; });
+      if (r.ok && j && j.desktopLink) {
+        /* origin/redirectUri ممكن يختلفوا عن base لو الموقع مثبّت
+           APP_BASE_URL على دومين ثابت. */
+        const origin = /^https?:\/\//i.test(j.origin || '')
+          ? String(j.origin).replace(/\/+$/, '') : SITE_BASE;
+        found = {
+          ok: true,
+          base: SITE_BASE,
+          origin: origin,
+          redirectUri: /^https?:\/\//i.test(j.redirectUri || '')
+            ? String(j.redirectUri) : (origin + '/api/google/callback'),
+          at: Date.now()
+        };
+      }
+    } catch (e) { /* الموقع مش متاح — نكمل بالوضع المحلي */ }
     siteCache = found;
     return found;
   }
 
-  async function siteCapable() {
-    return !!(await resolveSite()).ok;
-  }
 
   /* ---------- المفاتيح ---------- */
   function creds() {
@@ -548,7 +536,7 @@ module.exports = function createGoogle(deps) {
     }
 
     if (pathname === '/api/google/login') {
-      /* الافتراضي: الربط يبدأ من الموقع الرسمي، وبعد الموافقة يرجع للتطبيق */
+      /* الربط عبر الموقع اختياري (NIZAM_LINK_MODE=site)، وإلا محلي */
       const site = await resolveSite();
       if (site.ok) {
         const siteOrigin = String(site.origin || site.base).replace(/\/+$/, '');
