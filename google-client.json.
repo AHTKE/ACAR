@@ -1,7 +1,0 @@
-{
-  "client_id": "1089687675916-tkv1pimq3pnhcnebjcsv4o2bpke4itcn.apps.googleusercontent.com",
-  "client_secret": "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",
-  "redirect_uris": [
-    "http://127.0.0.1:47820/api/google/callback"
-  ]
-}
