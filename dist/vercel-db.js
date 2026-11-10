@@ -90,9 +90,9 @@ export function createCookieDB(cookieHeader) {
       write();
       return null;
     }
-    if ((m = q.match(/^update google_connections set email = \?, updated_at = \? where client_token = \?$/i))) {
-      const row = findByToken(args[2]);
-      if (row) { row.e = args[0] || ''; row.u = args[1] || Date.now(); write(); }
+    if ((m = q.match(/^update google_connections set email = \? where client_token = \?$/i))) {
+      const row = findByToken(args[1]);
+      if (row) { row.e = args[0] || ''; row.u = Date.now(); write(); }
       return null;
     }
     if ((m = q.match(/^delete from google_connections where refresh_token = \?$/i))) {

@@ -912,19 +912,21 @@ async function handleApi(request, env, pathname) {
       if (receivedRefresh) {
         await env.DB.prepare('DELETE FROM google_connections WHERE refresh_token = ?')
           .bind(tok.refresh_token).run();
+        await env.DB.prepare('INSERT INTO google_connections (client_token, refresh_token, email) VALUES (?, ?, ?)')
+          .bind(clientToken, tok.refresh_token, email).run();
       } else {
-        /* Google لم يُعد refresh_token: نجدّد ونحدّث اتصالنا الحالي إن وُجد */
+        /* Google لم يُعد refresh_token: نحدّث الاتصال الحالي ونحتفظ برمز التجديد القديم.
+           لو مفيش اتصال قديم، مانكتبش سطرًا بلا رمز تجديد. */
         const existing = await env.DB.prepare('SELECT client_token FROM google_connections LIMIT 1').first();
-        if (existing) {
-          await env.DB.prepare('UPDATE google_connections SET email = ?, updated_at = ? WHERE client_token = ?')
-            .bind(email, Date.now(), existing.client_token).run();
+        if (!existing) {
+          throw new Error('Google لم يُرجع رمز تجديد — اضغط «ربط Google Drive» تاني ووافق على الصلاحيات كاملة');
         }
-        clientToken = existing ? existing.client_token : clientToken;
+        clientToken = existing.client_token;
+        await env.DB.prepare('UPDATE google_connections SET email = ? WHERE client_token = ?')
+          .bind(email, clientToken).run();
       }
-      await env.DB.prepare('INSERT INTO google_connections (client_token, refresh_token, email) VALUES (?, ?, ?)')
-        .bind(clientToken, tok.refresh_token, email).run();
 
-      if (tok.refresh_token) tokenCache.set(clientToken, {
+      if (tok.refresh_token) tokenCache.set(clientToken + '|' + reqCreds.id, {
         tok: tok.access_token,
         exp: Date.now() + (Number(tok.expires_in || 3500) * 1000)
       });
@@ -1252,7 +1254,8 @@ async function handleApi(request, env, pathname) {
     catch (e) { return json(await authFailure(env, conn, e), 401); }
 
     const jsonText = JSON.stringify(cleanSnapshot(snapshot));
-    if (jsonText.length > MAX_SYNC_BYTES) {
+    const jsonBytes = new TextEncoder().encode(jsonText).length;
+    if (jsonBytes > MAX_SYNC_BYTES) {
       return json({ ok: false, error: 'حجم النسخة أكبر من الحد المسموح (٨ ميجابايت)' }, 413);
     }
 
@@ -1439,15 +1442,22 @@ async function handleApi(request, env, pathname) {
     try { at = await accessToken(env, conn, reqCreds); }
     catch (e) { return json(await authFailure(env, conn, e), 401); }
 
-    /* نتأكد إن الملف فعلاً داخل فولدر المزامنة واسمه من صيغتنا */
+    /* نتأكد إن الملف فعلاً داخل فولدر المزامنة واسمه من صيغتنا —
+       منع أي طلب لملف خارج الفولدر بمعرّف عشوائي. */
+    let folderId;
+    try { folderId = await getOrCreateSyncFolder(env, at); }
+    catch (e) { return json({ ok: false, error: e.message }, 502); }
+
     let meta;
     try {
-      const mr = await fetch(DRIVE_FILES + '/' + id + '?fields=id,name,parents,trashed',
+      const mr = await fetch(DRIVE_FILES + '/' + id + '?fields=id,name,parents,trashed&supportsAllDrives=true',
         { headers: { Authorization: 'Bearer ' + at } });
       meta = await mr.json().catch(() => ({}));
     } catch (e) { meta = {}; }
 
+    const parents = (meta && Array.isArray(meta.parents)) ? meta.parents : [];
     const inSyncFolder = meta && !meta.trashed && meta.name &&
+      parents.indexOf(folderId) > -1 &&
       (meta.name === SYNC_FILE_NAME || meta.name.indexOf('نسخة ') === 0);
     if (!inSyncFolder) return json({ ok: false, error: 'النسخة غير موجودة أو حُذفت' }, 404);
 

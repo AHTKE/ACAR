@@ -48,25 +48,40 @@ function makeReq({ url, method = 'GET', headers = {}, body }) {
   return req;
 }
 
+function makeRes(resolve) {
+  return {
+    statusCode: 200,
+    headers: {},
+    setHeader(k, v) { this.headers[String(k).toLowerCase()] = v; },
+    ended: false,
+    _buf: Buffer.alloc(0),
+    end(chunk) {
+      if (this.ended) return;
+      this.ended = true;
+      if (chunk) this._buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      resolve({ status: this.statusCode, headers: this.headers, body: this._buf.toString('utf8') });
+    }
+  };
+}
+
 function run(req) {
   return new Promise((resolve, reject) => {
-    const res = {
-      statusCode: 200,
-      headers: {},
-      setHeader(k, v) { this.headers[String(k).toLowerCase()] = v; },
-      ended: false,
-      _buf: Buffer.alloc(0),
-      end(chunk) {
-        if (this.ended) return;
-        this.ended = true;
-        if (chunk) this._buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-        resolve({ status: this.statusCode, headers: this.headers, body: this._buf.toString('utf8') });
-      }
-    };
+    const res = makeRes(resolve);
     const timer = setTimeout(() => reject(new Error('timeout')), 8000);
     const apiPath = String(req.url || '/').split('?')[0];
     Promise.resolve(runHandler(req, res, apiPath)).then(() => {
       if (!res.ended) { clearTimeout(timer); reject(new Error('لم يستجب')); }
+    }).catch((e) => { clearTimeout(timer); reject(e); });
+  });
+}
+
+function invoke(handler, req, query) {
+  return new Promise((resolve, reject) => {
+    req.query = query || {};
+    const res = makeRes(resolve);
+    const timer = setTimeout(() => reject(new Error('timeout nested')), 8000);
+    Promise.resolve(handler(req, res)).then(() => {
+      if (!res.ended) { clearTimeout(timer); reject(new Error('nested لم يستجب')); }
     }).catch((e) => { clearTimeout(timer); reject(e); });
   });
 }
@@ -115,13 +130,36 @@ ok('404 و JSON', r.status === 404 && !!j, r.status + ' ' + r.body.slice(0, 60))
 r = await run(makeReq({ url: '/index.html' }));
 ok('مسار خارج /api ما يوصلش للـAPI (Vercel بيخدم الملفات الثابتة قبل الـfunctions)', r.status === 404, String(r.status));
 
-console.log('\n[V4ب] دالة Vercel واحدة تخدم كل المسارات');
-const apiFiles = fs.readdirSync('api').filter((f) => f.endsWith('.js'));
-ok('عدد دوال api = 1 (حد Hobby 12)', apiFiles.length === 1, apiFiles.join(', '));
+console.log('\n[V4ب] ثلاث دوال Vercel تخدم كل المسارات');
+const apiFiles = [];
+(function walkApi(dir, prefix) {
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+    const rel = prefix ? prefix + '/' + ent.name : ent.name;
+    if (ent.isDirectory()) walkApi(dir + '/' + ent.name, rel);
+    else if (ent.name.endsWith('.js')) apiFiles.push(rel);
+  }
+})('api', '');
+ok('عدد دوال api = 3 (تحت حد Hobby 12)', apiFiles.length === 3, apiFiles.join(', '));
+ok('catch-all موجود', apiFiles.includes('[...path].js'), apiFiles.join(', '));
+ok('دالة Google المتداخلة موجودة', apiFiles.includes('google/[action].js'), apiFiles.join(', '));
+ok('دالة Sync المتداخلة موجودة', apiFiles.includes('sync/[action].js'), apiFiles.join(', '));
 const vercelIgnore = fs.readFileSync('.vercelignore', 'utf8');
-ok('.vercelignore يمنع رجوع مسارات google القديمة', /(^|\n)api\/google\s*($|\n)/.test(vercelIgnore), vercelIgnore);
-ok('.vercelignore يمنع رجوع مسارات sync القديمة', /(^|\n)api\/sync\s*($|\n)/.test(vercelIgnore), vercelIgnore);
-ok('الاسم catch-all', apiFiles[0] === '[...path].js', apiFiles[0]);
+ok('.vercelignore لا يتجاهل مسارات google', !/(^|\n)api\/google\s*($|\n)/.test(vercelIgnore), vercelIgnore);
+ok('.vercelignore لا يتجاهل مسارات sync', !/(^|\n)api\/sync\s*($|\n)/.test(vercelIgnore), vercelIgnore);
+
+/* الدوال المتداخلة هي اللي Vercel بيوجّه لها /api/google/* و/api/sync/* */
+const googleNested = (await import('./api/google/[action].js')).default;
+const syncNested = (await import('./api/sync/[action].js')).default;
+ok('دالة Google عنده default function', typeof googleNested === 'function', typeof googleNested);
+ok('دالة Sync عنده default function', typeof syncNested === 'function', typeof syncNested);
+r = await invoke(googleNested, makeReq({ url: '/api/google/status' }), { action: 'status' });
+j = json(r);
+ok('nested /api/google/status يرجع 200 و configured=true', r.status === 200 && j && j.configured === true, r.status + ' ' + r.body.slice(0, 80));
+r = await invoke(syncNested, makeReq({ url: '/api/sync/pull' }), { action: 'pull' });
+j = json(r);
+ok('nested /api/sync/pull يوصل للـworker (401 بدون ربط)', r.status === 401 && j && /ربط/.test(j.error || ''), r.status + ' ' + r.body.slice(0, 80));
+r = await invoke(syncNested, makeReq({ url: '/api/sync/nope' }), { action: 'nope' });
+ok('nested مسار غير معروف → 404 JSON', r.status === 404 && !!json(r), r.status + ' ' + r.body.slice(0, 80));
 const routeMod = await import('./api/[...path].js');
 ok('catch-all عنده default function', typeof routeMod.default === 'function', typeof routeMod.default);
 const expectedRoutes = [
