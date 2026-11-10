@@ -64,7 +64,10 @@ module.exports = function createGoogle(deps) {
      بيرجع للوضع المحلي لو المفاتيح موجودة. */
   async function resolveSite() {
     if (LINK_MODE === 'local') return { ok: false, base: '' };
-    if (LINK_MODE !== 'site' && creds().configured) return { ok: false, base: '' };
+    const local = creds();
+    if (LINK_MODE !== 'site' && local.configured && local.idValid && local.secretValid) {
+      return { ok: false, base: '' };
+    }
     if (CAP_TTL > 0 && siteCache.at && Date.now() - siteCache.at < CAP_TTL) return siteCache;
     let found = { ok: false, base: '', origin: '', redirectUri: '', at: Date.now() };
     try {

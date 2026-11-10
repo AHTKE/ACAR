@@ -265,12 +265,19 @@
   /* ---------- رابط المجلد العام ---------- */
   var input = document.getElementById('forceFolderUrl');
   try {
-    var saved = localStorage.getItem('app_shared_folder_url') || '';
+    var saved = localStorage.getItem('app_sync_custom_folder') ||
+      localStorage.getItem('app_shared_folder_url') || '';
     if (input && saved) input.value = saved;
   } catch (e) {}
   if (input) {
     input.addEventListener('input', function () {
-      try { localStorage.setItem('app_shared_folder_url', input.value.trim()); } catch (e) {}
+      var v = input.value.trim();
+      try {
+        localStorage.setItem('app_shared_folder_url', v);
+        /* نفس الرابط بيظهر في إعدادات المزامنة — نحفظه في المفتاحين
+           عشان المستخدم ما يضطرش يلصقه مرتين. */
+        localStorage.setItem('app_sync_custom_folder', v);
+      } catch (e) {}
     });
   }
 
@@ -336,12 +343,11 @@
   }
   if (typeof fetch === 'function') {
     if (TRUSTED) {
+      /* نبدأ مالكًا محليًا فورًا (الجهاز جهازك)، لكن لا نعود قبل قراءة
+         حالة Google: لو الحساب المربوط مش من حسابات الإدارة لازم يظهر
+         «مشاهد» ويتقفل عليه التعديل. */
       applyAdminFast();
-      try {
-        localStorage.setItem('app_user_role', 'admin');
-        localStorage.setItem('app_user_email', ADMIN_EMAIL);
-      } catch (e) {}
-      return;
+      try { localStorage.setItem('app_user_role', 'admin'); } catch (e) {}
     }
     var cachedRole = roleFromCache();
     var checkTries = 0;
@@ -361,6 +367,11 @@
           if (isAdmin) applyAdminFast();
           else if (connected) applyViewer(true);   /* حساب تاني متصل → مشاهد */
           else applyAdminLocal();                   /* مش مربوط = مالك محلي، الكتابة مسموحة */
+          try {
+            window.dispatchEvent(new CustomEvent('nizam:role', {
+              detail: { role: isAdmin ? 'admin' : (connected ? 'viewer' : 'local'), email: email, connected: connected }
+            }));
+          } catch (eR) {}
           if (connected && /[?&]g=ok/.test(location.search)) setTimeout(pullShared, 700);
         })
         .catch(function () {

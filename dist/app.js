@@ -5008,7 +5008,9 @@
       setDriveStatus('is-warn', 'المفاتيح موجودة لكن ' + googleVerdictText(verdict) +
         (tail ? ' — القيمة الحالية تنتهي بـ ' + tail + ')' : '') + ' — اضغط «فحص المفاتيح»');
     } else if (conn) {
+      var admin = /^(gstsyusudg@gmail\.com|mahmoed181186@gmail\.com)$/i.test(String(email || '').trim());
       setDriveStatus('is-ok', 'متصل بحساب Google Drive' + (email ? ' — ' + email : '') +
+        ' — الدور: ' + (admin ? 'أدمن (صلاحيات كاملة)' : 'مشاهد (تصفح فقط)') +
         (viaSite ? ' (الربط عبر الموقع)' : ''));
     } else if (siteLink) {
       setDriveStatus('', 'الربط بيتم من الموقع الرسمي — اضغط «ربط حساب Google» وهيفتح المتصفح');
@@ -5258,13 +5260,27 @@
     if (typeof fetch !== 'function') { go(); return; }
     fetch('/api/google/status', { credentials: 'same-origin' })
       .then(function (r) {
-        if (!r || r.status === 404 || r.status === 501) throw new Error('NOAPI');
+        if (!r) throw new Error('NOAPI');
+        if (r.status === 404 || r.status === 501) {
+          var noApi = new Error('NOAPI');
+          noApi.status = r.status;
+          throw noApi;
+        }
+        if (!r.ok) {
+          var bad = new Error('HTTP ' + r.status);
+          bad.status = r.status;
+          throw bad;
+        }
         if (typeof r.clone !== 'function') return null;
         return r.clone().json().catch(function () { throw new Error('NOAPI'); });
       })
       .then(function () { go(); })
-      .catch(function () {
-        toast('مسار ربط Google غير متاح على هذه الصفحة — شغّل المعاينة الكاملة (preview-local.mjs) أو افتح الموقع المنشور.', true);
+      .catch(function (err) {
+        if (err && (err.status === 404 || err.status === 501 || err.message === 'NOAPI')) {
+          toast('خادم ربط Google غير منشور على هذا الموقع (404) — لازم مجلد api/ يكون ضمن المشروع المنشور على Vercel، وبعدها اعمل Redeploy.', true);
+        } else {
+          toast('تعذّر الوصول لخادم ربط Google — راجع اتصال الموقع أو إعدادات النشر ثم جرّب تاني.', true);
+        }
       });
   }
   window.startGoogleLogin = startGoogleLogin;
@@ -6193,6 +6209,12 @@
     syncFolderSave.addEventListener('click', function () {
       var v = syncFolderInput ? syncFolderInput.value.trim() : '';
       if (!v) { toast('الصق رابط الفولدر أولاً', true); return; }
+      /* الحفظ المحلي أولاً — لازم ينجح حتى لو الموقع/الـAPI مش متاح. */
+      try {
+        localStorage.setItem('app_sync_custom_folder', v);
+        localStorage.setItem('app_shared_folder_url', v);
+      } catch (e) {}
+      showCustomFolder(v);
       syncFolderSave.disabled = true;
       fetch('/api/sync/folder', {
         method: 'POST',
@@ -6200,35 +6222,37 @@
         body: JSON.stringify({ folderId: v })
       }).then(function (r) { return r.json(); }).then(function (j) {
         syncFolderSave.disabled = false;
-        if (j.ok) {
-          /* نحفظه محلياً كمان — عشان يفضل ظاهر حتى لو قراءة السيرفر فشلت */
-          try { localStorage.setItem('app_sync_custom_folder', v); } catch (e) {}
+        if (j && j.ok) {
           toast('اتحفظ الفولدر المشترك ✓');
           showCustomFolder(v);
         } else {
-          toast(j.error || 'فشل حفظ الفولدر', true);
-          syncFolderShow(j.error || 'فشل الحفظ', false);
+          toast('اتحفظ الفولدر على جهازك ✓ — هيتزامن مع السحابة أول ما الاتصال يرجع', true);
         }
-      }).catch(function (e) {
+      }).catch(function () {
         syncFolderSave.disabled = false;
-        toast('خطأ في الاتصال', true);
+        toast('اتحفظ الفولدر على جهازك ✓ — هيتزامن مع السحابة أول ما الاتصال يرجع', true);
       });
     });
   }
 
   if (syncFolderClear) {
     syncFolderClear.addEventListener('click', function () {
+      try {
+        localStorage.removeItem('app_sync_custom_folder');
+        localStorage.removeItem('app_shared_folder_url');
+      } catch (e) {}
+      if (syncFolderInput) syncFolderInput.value = '';
+      syncFolderClear.hidden = true;
+      syncFolderShow('اترجع للفولدر التلقائي', true);
       fetch('/api/sync/folder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ folderId: '' })
-      }).then(function (r) { return r.json(); }).then(function (j) {
-        try { localStorage.removeItem('app_sync_custom_folder'); } catch (e) {}
-        if (syncFolderInput) syncFolderInput.value = '';
-        syncFolderClear.hidden = true;
-        syncFolderShow('اترجع للفولدر التلقائي', true);
+      }).then(function (r) { return r.json(); }).then(function () {
         toast('اتحذف الفولدر المشترك');
-      }).catch(function () { toast('خطأ في الاتصال', true); });
+      }).catch(function () {
+        toast('اتحذف الفولدر من جهازك — هيتزامن الحذف أول ما الاتصال يرجع', true);
+      });
     });
   }
 

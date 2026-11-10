@@ -43,7 +43,7 @@
     <p style="color:#9fadc2;margin-bottom:30px;">يجب ربط حساب Google Drive للدخول إلى التطبيق</p>
     <label style="display:block;text-align:right;color:#f2f6fb;margin-bottom:8px;">رابط المجلد العام</label>
     <input type="text" id="forceFolderUrl" style="width:100%;padding:12px;background:#0a0e15;border:1px solid #4f8cff;border-radius:12px;color:#f2f6fb;margin-bottom:20px;" placeholder="https://drive.google.com/drive/folders/...">
-    <button type="button" id="gateConnect" onclick="localStorage.setItem('app_shared_folder_url',document.getElementById('forceFolderUrl').value);window.startGoogleLogin?window.startGoogleLogin(event):(window.location.href='/api/google/login');" style="width:100%;padding:14px;background:linear-gradient(90deg,#4f8cff,#7aa8ff);color:#fff;border:none;border-radius:12px;font-weight:700;cursor:pointer;">ربط حساب Google Drive</button>
+    <button type="button" id="gateConnect" onclick="var __u=document.getElementById('forceFolderUrl').value;localStorage.setItem('app_shared_folder_url',__u);localStorage.setItem('app_sync_custom_folder',__u);window.startGoogleLogin?window.startGoogleLogin(event):(window.location.href='/api/google/login');" style="width:100%;padding:14px;background:linear-gradient(90deg,#4f8cff,#7aa8ff);color:#fff;border:none;border-radius:12px;font-weight:700;cursor:pointer;">ربط حساب Google Drive</button>
     <div id="gateError" style="display:none;margin-top:16px;padding:12px 14px;border-radius:12px;border:1px solid #f87171;background:rgba(248,113,113,.12);color:#fecaca;font-size:13px;line-height:1.9;text-align:right;"></div>
     <button type="button" id="gateRetry" style="display:none;width:100%;margin-top:12px;padding:11px;background:transparent;border:1px solid #4f8cff;color:#9fadc2;border-radius:10px;cursor:pointer;font-weight:600;">إعادة المحاولة</button>
     <button type="button" id="gateSkip" style="display:none;width:100%;margin-top:10px;padding:11px;background:transparent;border:1px dashed #33415a;color:#9fadc2;border-radius:10px;cursor:pointer;font-weight:600;font-size:12.5px;">الدخول بدون ربط (وضع محلي)</button>
@@ -1942,9 +1942,17 @@ window.__retryAsset = function (el, name) {
     var __role = JSON.parse(localStorage.getItem('app_role_cache') || 'null');
     var __trusted = (window.APP_TRUSTED_RUNTIME === true) || __localRuntime ||
       (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-    gateTrustedFast = !!__trusted || (!!__role && __role.role === 'admin');
+    var __already = localStorage.getItem('app_drive_conn') === '1' ||
+      localStorage.getItem('app_drive_skip') === '1';
+    /* على الديسكتوب/المحلي: نفتح الشاشة أول مرة عشان المستخدم يلصق رابط
+       الفولدر ويربط Google، وبعد الربط أو «الدخول بدون ربط» ما تظهرش تاني. */
+    gateTrustedFast = (!!__role && __role.role === 'admin') || (__trusted && __already);
   } catch (eFast) {}
   if (gate && gateTrustedFast) hideGate();
+  if (gate && __localRuntime) {
+    var __skip0 = document.getElementById('gateSkip');
+    if (__skip0) __skip0.style.display = 'block';
+  }
   if (typeof fetch === 'function' && !gateTrustedFast) {
     function gateStatusError(msg) {
       var e = document.getElementById('gateError');
@@ -2016,9 +2024,26 @@ window.__retryAsset = function (el, name) {
   }
   /* تسجيل Service Worker ليعمل التطبيق مثبتاً على أندرويد/الديسكتوب بدون إنترنت */
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', function () {
-      navigator.serviceWorker.register('sw.js').catch(function () {});
-    });
+    /* في الديسكتوب/المحلي مفيش داعي لـService Worker: هو اللي كان بيخلي
+       نسخة قديمة من app.js تفضل محفوظة بعد التحديث. نلغي أي تسجيل قديم
+       ونمسح الكاش مرة واحدة، ونسيب الـSW للموقع المنشور بس. */
+    if (__localRuntime || window.APP_TRUSTED_RUNTIME === true) {
+      try {
+        navigator.serviceWorker.getRegistrations().then(function (rs) {
+          return Promise.all(rs.map(function (r) { return r.unregister(); }));
+        }).then(function () {
+          if (typeof caches !== 'undefined' && caches.keys) {
+            return caches.keys().then(function (keys) {
+              return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+            });
+          }
+        }).catch(function () {});
+      } catch (eSW) {}
+    } else {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').catch(function () {});
+      });
+    }
   }
 
   /* ---------- مراقب الإقلاع: لو الواجهة فاضية نعرض رسالة بدل الصمت ---------- */
