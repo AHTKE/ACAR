@@ -10,15 +10,22 @@
   var DEFAULT_PASSWORD = '2468';
   var KEY_PASSWORD = 'app_password';
   var KEY_CUSTOMERS = 'app_customers';
+  var KEY_SECTION_LOCKS = 'app_section_locks_v1';
 
-  /* الأقسام المحمية بكلمة المرور */
-  var PROTECTED = {
-    collection: 'التحصيل',
-    partners: 'الشركاء',
-    associations: 'جمعيات',
-    operations: 'العمليات',
-    details: 'التفاصيل'
+  /* كل الأقسام الرئيسية القابلة للقفل من الإعدادات (للأدمن فقط) */
+  var SECTION_LOCKABLE = [
+    'home', 'customers', 'add-customer', 'suppliers', 'add-supplier',
+    'ledger', 'collection', 'partners', 'associations', 'stores',
+    'employees', 'details', 'operations'
+  ];
+  /* الأقسام المقفولة افتراضيًا بكلمة المرور العامة — نفس سلوك النسخة القديمة */
+  var DEFAULT_LOCKED = {
+    collection: true, partners: true, associations: true, operations: true, details: true
   };
+
+  /* أسماء الشهور تُستخدم في أول رسم للتحصيل، فلازم تتعرف قبل أي رسم. */
+  var AR_MONTH_NAMES = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+    'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
   var SECTION_NAMES = {
     home: 'الرئيسية',
@@ -63,6 +70,62 @@
   function setPassword(p) {
     try { localStorage.setItem(KEY_PASSWORD, p); } catch (e) {}
   }
+
+  /* أقفال الأقسام: كل قسم إما مفتوح، أو true (كلمة المرور العامة)،
+     أو نص (كلمة مرور خاصة). تُحفظ محليًا، ولا تُعرض إلا للأدمن. */
+  function getSectionLocks() {
+    try {
+      var raw = localStorage.getItem(KEY_SECTION_LOCKS);
+      if (raw) {
+        var data = JSON.parse(raw);
+        var src = data && data.locks ? data.locks : data;
+        if (src && typeof src === 'object' && !Array.isArray(src)) {
+          var out = {};
+          SECTION_LOCKABLE.forEach(function (id) {
+            if (src[id]) out[id] = src[id] === true ? true : String(src[id]);
+          });
+          return out;
+        }
+      }
+    } catch (e) {}
+    var seed = {};
+    Object.keys(DEFAULT_LOCKED).forEach(function (id) {
+      if (DEFAULT_LOCKED[id]) seed[id] = true;
+    });
+    return seed;
+  }
+
+  function saveSectionLocks(locks) {
+    try {
+      localStorage.setItem(KEY_SECTION_LOCKS, JSON.stringify({ version: 1, locks: locks || {} }));
+    } catch (e) {}
+  }
+
+  function sectionPassword(id) {
+    var v = getSectionLocks()[id];
+    if (v === true) return getPassword();
+    return (typeof v === 'string' && v) ? v : '';
+  }
+
+  function isSectionLocked(id) {
+    return !!getSectionLocks()[id];
+  }
+
+  function lockedSectionCount() {
+    var locks = getSectionLocks();
+    return SECTION_LOCKABLE.filter(function (id) { return !!locks[id]; }).length;
+  }
+
+  function isAdminUi() {
+    try {
+      if (window.APP_TRUSTED_RUNTIME === true) return true;
+      if (document.documentElement.getAttribute('data-viewer-mode') === '1') return false;
+      var role = localStorage.getItem('app_user_role');
+      if (role === 'viewer') return false;
+      if (role === 'admin') return true;
+    } catch (e) {}
+    return true; /* مالك محلي غير مربوط */
+  }
   /* قراءة قائمة سليمة من التخزين:
      - لو المحتوى مش مصفوفة نرجع الافتراضي بدل ما يقع الرسم كله
      - ولو فيه عناصر مش كائنات نتجاهلها، عشان أي عنصر تالف
@@ -72,7 +135,7 @@
      (قطع السكربت كان بيمنع الإقلاع فتظهر الشاشة فاضية). */
   function safeRun(run, label) {
     try { run(); } catch (e) {
-      try { console.error('فشل «' + label + '»: ' + (e && e.message ? e.message : e)); } catch (e2) {}
+      try { console.error('فشل «' + label + '»: ' + (e && e.stack ? e.stack : (e && e.message ? e.message : e))); } catch (e2) {}
     }
   }
 
@@ -160,7 +223,7 @@
     function step(run, label) {
       try { run(); } catch (e) {
         renderFailed.push(label);
-        try { console.error('فشل رسم «' + label + '»: ' + (e && e.message ? e.message : e)); } catch (e2) {}
+        try { console.error('فشل رسم «' + label + '»: ' + (e && e.stack ? e.stack : (e && e.message ? e.message : e))); } catch (e2) {}
       }
     }
     if (id === 'customers') step(function () { renderCustomers(); }, 'العملاء');
@@ -177,6 +240,7 @@
     if (id === 'member-profile') step(function () { renderMemberProfile(); }, 'ملف العضو');
     if (id === 'operations') step(function () { renderOperations(); }, 'العمليات');
     if (id === 'settings') step(function () { renderDataSafety(); }, 'سلامة البيانات');
+    if (id === 'settings') step(function () { renderSectionLocks(); }, 'أقفال الأقسام');
     if (id === 'supplier-profile') step(function () { fillPartyLists(); }, 'قوائم الأطراف');
     if (id === 'settings') step(function () { renderExportGrid(); refreshDriveStatus(); loadSyncFolder(); renderNetworkToggle(); renderLocalBackup(); }, 'الإعدادات');
     if (id === 'suppliers') step(function () {
@@ -203,18 +267,37 @@
   }
 
   function navigate(id) {
-    if (PROTECTED[id] && !unlocked[id]) { openPasswordModal(id); return; }
+    if (isSectionLocked(id) && !unlocked[id]) { openPasswordModal(id); return; }
     showView(id);
   }
 
   /* ---------- نافذة كلمة المرور ---------- */
   var modal = $('#pwdModal');
   var dots = $$('#pwdDots i');
+  var dotsBox = $('#pwdDots');
   var errorEl = $('#pwdError');
   var buffer = '';
 
+  /* طول كلمة مرور القسم الحالي: 4 أرقام للخاصة، أو طول كلمة المرور العامة
+     إن كانت أطول. ده يمنع قفل المستخدم خارج الأقسام لو غيّر كلمة المرور العامة. */
+  function passwordLength() {
+    var target = pendingView ? String(sectionPassword(pendingView)) : '';
+    return Math.max(4, Math.min(8, target.length || 4));
+  }
+
   function renderDots() {
-    dots.forEach(function (d, i) { d.classList.toggle('on', i < buffer.length); });
+    var need = passwordLength();
+    if (dotsBox) {
+      while (dots.length < need) {
+        var extra = document.createElement('i');
+        dotsBox.appendChild(extra);
+        dots.push(extra);
+      }
+    }
+    dots.forEach(function (d, i) {
+      d.hidden = i >= need;
+      d.classList.toggle('on', i < buffer.length);
+    });
   }
 
   function openPasswordModal(view) {
@@ -222,12 +305,17 @@
     buffer = '';
     renderDots();
     errorEl.hidden = true;
-    $('#pwdSub').textContent = 'أدخل كلمة المرور لفتح «' + PROTECTED[view] + '»';
+    $('#pwdSub').textContent = 'أدخل كلمة المرور لفتح «' + (SECTION_NAMES[view] || view) + '»';
     modal.classList.add('is-open');
     modal.setAttribute('aria-hidden', 'false');
   }
 
-  function closePasswordModal() {
+  function closePasswordModal(force) {
+    /* قفل الرئيسية لا يُغلق بالخطأ قبل إدخال كلمة المرور، وإلا تظهر محتوياتها خلف النافذة. */
+    if (!force && pendingView === 'home' && !unlocked.home) {
+      toast('الرئيسية مقفولة — أدخل كلمة المرور لفتحها', true);
+      return;
+    }
     modal.classList.remove('is-open');
     modal.setAttribute('aria-hidden', 'true');
     pendingView = null;
@@ -244,12 +332,12 @@
 
   function checkPassword() {
     if (buffer.length < 4) return;
-    if (buffer === getPassword()) {
+    if (buffer === sectionPassword(pendingView)) {
       var target = pendingView;
       unlocked[target] = true;
       closePasswordModal();
       showView(target);
-      toast('تم فتح قسم «' + PROTECTED[target] + '» بنجاح');
+      toast('تم فتح قسم «' + (SECTION_NAMES[target] || target) + '» بنجاح');
     } else {
       errorEl.hidden = false;
       shake();
@@ -263,10 +351,10 @@
     errorEl.hidden = true;
     if (key === 'clr') { buffer = ''; renderDots(); return; }
     if (key === 'ok') { checkPassword(); return; }
-    if (/^[0-9]$/.test(key) && buffer.length < 4) {
+    if (/^[0-9]$/.test(key) && buffer.length < passwordLength()) {
       buffer += key;
       renderDots();
-      if (buffer.length === 4) setTimeout(checkPassword, 160);
+      if (buffer.length === passwordLength()) setTimeout(checkPassword, 160);
     }
   }
 
@@ -304,10 +392,83 @@
 
   function renderHomeStats() {
     var count = getCustomers().length;
+    var suppliers = 0;
+    try { suppliers = getSuppliers().length; } catch (e) {}
+    var locked = lockedSectionCount();
     var a = $('#statCustomers');
     var b = $('#cardCustomers');
     if (a) a.textContent = count;
     if (b) b.textContent = count;
+    var supA = $('#statSuppliers');
+    if (supA) supA.textContent = suppliers;
+    var lockA = $('#statLocked');
+    if (lockA) lockA.textContent = locked;
+    refreshLockBadges();
+  }
+
+  /* تحديث علامات القفل على بطاقات الرئيسية والأقسام حسب إعدادات الأدمن */
+  function refreshLockBadges() {
+    $$('.card[data-go]').forEach(function (card) {
+      var id = card.getAttribute('data-go');
+      var locked = isSectionLocked(id);
+      card.classList.toggle('card--locked', !!locked);
+      var icon = card.querySelector('.ico--lock');
+      if (icon) icon.style.display = locked ? '' : 'none';
+    });
+    $$('.protected-pill').forEach(function (pill) {
+      var view = pill.closest ? pill.closest('.view') : null;
+      var id = view && view.id ? view.id.replace(/^view-/, '') : '';
+      if (id) pill.hidden = !isSectionLocked(id);
+    });
+  }
+
+  /* لوحة إعدادات أقفال الأقسام — للأدمن فقط */
+  function renderSectionLocks() {
+    var panel = $('#sectionLocksPanel');
+    var list = $('#sectionLocksList');
+    if (!panel || !list) return;
+    if (!isAdminUi()) { panel.hidden = true; return; }
+    panel.hidden = false;
+    var locks = getSectionLocks();
+    list.innerHTML = SECTION_LOCKABLE.map(function (id) {
+      var locked = !!locks[id];
+      var custom = (typeof locks[id] === 'string' && !!locks[id]);
+      var note = locked ? (custom ? 'كلمة مرور خاصة' : 'كلمة المرور العامة') : 'مفتوح بدون كلمة مرور';
+      return '<div class="lock-row" data-lock-row="' + id + '">' +
+        '<label class="lock-row__main"><input type="checkbox" data-lock-enabled="' + id + '"' + (locked ? ' checked' : '') + ' />' +
+        '<span><b>' + escapeHtml(SECTION_NAMES[id] || id) + '</b><small>' + escapeHtml(note) + '</small></span></label>' +
+        '<input class="lock-row__pass" type="password" inputmode="numeric" autocomplete="new-password" maxlength="4" data-lock-pass="' + id + '" placeholder="' + (custom ? 'اتركه فارغًا للإبقاء على الخاصة' : 'اتركه فارغًا للعامة') + '"' + (locked ? '' : ' disabled') + ' />' +
+        '</div>';
+    }).join('');
+  }
+
+  function saveSectionLocksFromUI() {
+    if (!isAdminUi()) { toast('هذه الإعدادات للأدمن فقط', true); return; }
+    var old = getSectionLocks();
+    var next = {};
+    var bad = '';
+    $$('#sectionLocksList .lock-row').forEach(function (row) {
+      var cb = row.querySelector('[data-lock-enabled]');
+      var input = row.querySelector('[data-lock-pass]');
+      if (!cb || !cb.checked) return;
+      var id = cb.getAttribute('data-lock-enabled');
+      var pass = String((input && input.value) || '').trim();
+      if (pass) {
+        if (!/^\d{4}$/.test(pass)) { bad = 'كلمة مرور «' + (SECTION_NAMES[id] || id) + '» لازم 4 أرقام بالضبط'; return; }
+        next[id] = pass;
+      } else if (old[id] === true) {
+        next[id] = true;
+      } else if (typeof old[id] === 'string' && old[id]) {
+        next[id] = old[id];
+      } else {
+        bad = 'اكتب كلمة مرور للقسم «' + (SECTION_NAMES[id] || id) + '»';
+      }
+    });
+    if (bad) { toast(bad, true); return; }
+    saveSectionLocks(next);
+    renderSectionLocks();
+    renderHomeStats();
+    toast('تم حفظ أقفال الأقسام');
   }
 
   function renderCustomers(filter) {
@@ -2560,12 +2721,13 @@
       function fail(msg) { err.textContent = msg; err.hidden = false; }
 
       if (current !== getPassword()) return fail('كلمة المرور الحالية غير صحيحة');
-      if (next.length < 4) return fail('كلمة المرور الجديدة يجب أن تكون 4 أرقام على الأقل');
+      if (!/^\d{4,8}$/.test(next)) return fail('كلمة المرور الجديدة يجب أن تكون من 4 إلى 8 أرقام');
       if (next !== confirm) return fail('كلمتا المرور الجديدتان غير متطابقتين');
 
       setPassword(next);
       err.hidden = true;
       pwdForm.reset();
+      renderSectionLocks();
       toast('تم تحديث كلمة المرور بنجاح');
     });
 
@@ -2580,6 +2742,28 @@
     });
   }
 
+  var sectionLocksListEl = $('#sectionLocksList');
+  if (sectionLocksListEl) {
+    sectionLocksListEl.addEventListener('change', function (e) {
+      var cb = e.target && e.target.closest ? e.target.closest('[data-lock-enabled]') : null;
+      if (!cb) return;
+      var row = cb.closest ? cb.closest('.lock-row') : null;
+      var input = row ? row.querySelector('[data-lock-pass]') : null;
+      if (input) input.disabled = !cb.checked;
+    });
+  }
+  var saveSectionLocksBtn = $('#saveSectionLocks');
+  if (saveSectionLocksBtn) saveSectionLocksBtn.addEventListener('click', saveSectionLocksFromUI);
+  var resetSectionLocksBtn = $('#resetSectionLocks');
+  if (resetSectionLocksBtn) {
+    resetSectionLocksBtn.addEventListener('click', function () {
+      saveSectionLocks(JSON.parse(JSON.stringify(DEFAULT_LOCKED)));
+      renderSectionLocks();
+      renderHomeStats();
+      toast('تمت استعادة أقفال الأقسام الافتراضية');
+    });
+  }
+
   /* ---------- تنبيهات (قابلة للإغلاق بـ × والسحب للجنب) ---------- */
   var toastTimer = null;
   function hideToast() {
@@ -2587,6 +2771,7 @@
     if (!el) return;
     clearTimeout(toastTimer);
     el.classList.remove('show', 'is-dragging');
+    el.setAttribute('aria-hidden', 'true');
     el.style.setProperty('--tx', '0px');
     el.style.setProperty('--ty', '0px');
   }
@@ -2603,6 +2788,7 @@
     el.style.setProperty('--tx', '0px');
     el.style.setProperty('--ty', '0px');
     el.classList.add('show');
+    el.setAttribute('aria-hidden', 'false');
     /* نفس الرسالة وهي ظاهرة ما بتجدّدش العدّاد — عشان تختفي بعد 15ث مهما اتكررت */
     if (!same) {
       clearTimeout(toastTimer);
@@ -2670,6 +2856,22 @@
     }
     el.addEventListener('pointerup', endDrag);
     el.addEventListener('pointercancel', endDrag);
+
+    /* طبقة إغلاق مبكرة: × تقفل الإشعار قبل أي معالج آخر (بوابة المشاهد
+       أو أي كود تاني) ممكن يعيد فتحه بنفس الرسالة. */
+    function captureClose(e) {
+      var t = e.target;
+      if (!t || !t.closest || !t.closest('#toastClose, .toast__x')) return;
+      if (e.preventDefault) e.preventDefault();
+      if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+      hideToast();
+    }
+    document.addEventListener('click', captureClose, true);
+    document.addEventListener('pointerup', captureClose, true);
+    document.addEventListener('touchend', captureClose, true);
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') hideToast();
+    });
   })();
 
   /* ---------- الساعة والتواريخ (12 ساعة + هجري وميلادي) ---------- */
@@ -2792,6 +2994,7 @@
       '<div class="summary__box"><small>المبلغ الإجمالي قبل خصم المقدم</small><b>' + money(t.total) + '</b></div>' +
       '<div class="summary__box summary__box--in"><small>إجمالي المدفوع (مقدم + تحصيل)</small><b>' + money(t.paid) + '</b></div>' +
       '<div class="summary__box summary__box--out"><small>المبلغ الاجمالي المتبقي للتحصيل</small><b>' + money(t.rest) + '</b></div>';
+    renderCollectionGlance();
   }
 
   function collectionDetailHTML(c, idx) {
@@ -2894,6 +3097,59 @@
     form.elements.restAfter.value = money(Math.max(d.rest - amt, 0));
   }
 
+  /* شريط شهور مختصر يظهر في صف العميل: أخضر مدفوع، أحمر غير مدفوع،
+     أصفر مستحق الآن — عشان تعرف الشهر المتأخر من نظرة واحدة. */
+  function monthStripHTML(plan) {
+    if (!plan || !plan.active) return '<span class="month-strip__none">بدون يوم تحصيل</span>';
+    var months = Array.isArray(plan.months) ? plan.months : [];
+    if (!months.length) return '<span class="month-strip__none">لا توجد شهور</span>';
+    var paid = 0, late = 0;
+    var cells = months.map(function (m) {
+      var cls = m.state === 'paid' ? (m.latePaid ? 'is-late-paid' : 'is-paid')
+        : m.state === 'overdue' ? 'is-overdue'
+          : m.state === 'due' ? 'is-due' : 'is-upcoming';
+      var stateText = m.state === 'paid' ? (m.latePaid ? 'مدفوع بعد التأخير' : 'مدفوع')
+        : m.state === 'overdue' ? 'غير مدفوع — متأخر'
+          : m.state === 'due' ? 'مستحق الآن' : 'لم يحن بعد';
+      if (m.state === 'paid') paid++;
+      if (m.state === 'overdue') late++;
+      var tip = monthLabel(m.key) + ' — ' + stateText;
+      if (m.state !== 'paid') tip += ' · المتبقي ' + money(m.remaining || m.amount || 0);
+      var current = plan.current && plan.current.key === m.key;
+      return '<span class="mcell ' + cls + (current ? ' is-current' : '') + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '">' +
+        esc(String(m.key || '').slice(5)) + '</span>';
+    }).join('');
+    return '<div class="month-strip">' +
+      '<div class="month-strip__meta"><span class="' + (late ? 'neg' : 'pos') + '">' +
+        (late ? late + ' شهر غير مدفوع' : 'كل الشهور مدفوعة') + '</span>' +
+        '<small>' + paid + '/' + months.length + ' مدفوع</small></div>' +
+      '<div class="month-strip__cells">' + cells + '</div></div>';
+  }
+
+  /* ملخص سريع أعلى التحصيل: أرقام قابلة للنقر تفلتر الجدول فورًا */
+  function renderCollectionGlance() {
+    var box = $('#collectionGlance');
+    if (!box) return;
+    var list = getCustomers();
+    var total = list.length, active = 0, late = 0, paid = 0, noPlan = 0, overdueMonths = 0;
+    list.forEach(function (c) {
+      var p = monthlyPlan(c);
+      if (!p.active) { noPlan++; return; }
+      active++;
+      overdueMonths += p.overdueMonths.length;
+      if (p.isLate) late++;
+      else if (p.settled || (p.current && p.current.state === 'paid')) paid++;
+    });
+    var regular = Math.max(active - late - paid, 0);
+    box.innerHTML = '<div class="glance-row">' +
+      '<button type="button" class="glance-chip" data-col-quick="all"><b>' + total + '</b><span>كل العملاء</span></button>' +
+      '<button type="button" class="glance-chip is-late" data-col-quick="late"><b>' + late + '</b><span>متأخرون</span></button>' +
+      '<button type="button" class="glance-chip is-paid" data-col-quick="paid"><b>' + (paid + regular) + '</b><span>دفعوا / منتظمون</span></button>' +
+      '<button type="button" class="glance-chip is-due" data-col-quick="prev"><b>' + overdueMonths + '</b><span>شهور غير مدفوعة</span></button>' +
+      '</div><p class="glance-note">اضغط على أي رقم لعرض الفئة فورًا' +
+      (noPlan ? ' · ' + noPlan + ' عميل بدون يوم تحصيل' : '') + '</p>';
+  }
+
   function renderCollection(filter) {
     var tbody = $('#collectTbody');
     if (!tbody) return;
@@ -2940,16 +3196,17 @@
         '<td>' + esc(c.phone || '—') + '</td>' +
         '<td>' + esc(c.address || '—') + '</td>' +
         '<td class="amount' + (d.rest > 0 ? ' neg' : '') + '">' + money(d.rest) + '</td>' +
+        '<td class="col-months">' + monthStripHTML(plan) + '</td>' +
         '<td class="col-status">' + planPill(plan) + '</td>' +
         '<td class="col-arrow"><span class="chev"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-arrow"></use></svg></span></td>' +
         '</tr>';
       if (open) {
-        html += '<tr class="collection-detail"><td colspan="7">' + collectionDetailHTML(c, entry.i) + '</td></tr>';
+        html += '<tr class="collection-detail"><td colspan="8">' + collectionDetailHTML(c, entry.i) + '</td></tr>';
       }
     });
 
     if (!list.length) {
-      html = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:26px">' +
+      html = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:26px">' +
         (q ? 'لا توجد نتائج مطابقة' : 'لا يوجد عملاء بعد — أضف عميلاً أولاً') + '</td></tr>';
     }
 
@@ -3051,6 +3308,15 @@
 
   var collectionStatusFilter = $('#collectionStatusFilter');
   if (collectionStatusFilter) collectionStatusFilter.addEventListener('change', function () {
+    collectionOpen = null;
+    renderCollection(colFilter());
+  });
+
+  document.addEventListener('click', function (e) {
+    var q = e.target && e.target.closest ? e.target.closest('[data-col-quick]') : null;
+    if (!q) return;
+    var f = $('#collectionStatusFilter');
+    if (f) f.value = q.getAttribute('data-col-quick') || 'all';
     collectionOpen = null;
     renderCollection(colFilter());
   });
@@ -3832,8 +4098,6 @@
      • حصيلة الشهر = قيمة السهم × عدد الأعضاء وتُقبض لصاحب الدور
      • الدور يُحدَّد من ترتيب الأعضاء وشهر بداية الدورة
      ---------------------------------------------------------- */
-  var AR_MONTH_NAMES = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
-    'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
   function currentMonthKey() {
     var d = new Date();
@@ -8769,6 +9033,10 @@
     try { console.error('فشل فتح الرئيسية: ' + (e && e.message ? e.message : e)); } catch (e2) {}
     $$('.view').forEach(function (v) { v.classList.toggle('is-active', v.id === 'view-home'); });
   }
+  /* لو الأدمن قفل الرئيسية نفسها، نطلب كلمة مرورها عند الإقلاع */
+  try {
+    if (isSectionLocked('home') && !unlocked.home) openPasswordModal('home');
+  } catch (eLockHome) {}
   /* علامة للمراقب: الإقلاع وصل للنهاية */
   try { window.__appBooted = true; } catch (e) {}
   if (bootFailed.length) {
@@ -8782,6 +9050,14 @@
       try { toast('حدث خطأ غير متوقع: ' + m, true); } catch (e) {}
     });
   } catch (e) {}
+
+  /* إعادة رسم لوحة الأقفال لو تغيّر دور الحساب بعد فحص Google */
+  try {
+    window.addEventListener('nizam:role', function () {
+      safeRun(renderSectionLocks, 'أقفال الأقسام بعد تغيّر الدور');
+      safeRun(renderHomeStats, 'إحصاءات الرئيسية بعد تغيّر الدور');
+    });
+  } catch (eRole) {}
 
   /* جسر بسيط للوحدات المنفصلة (الموظفون / المصنعية / تصنيف المخازن) */
   window.NizamApp = {
@@ -8798,6 +9074,10 @@
       try { renderLedger(); renderLedgerSummary(); } catch (e) {}
     },
     renderHomeStats: renderHomeStats,
+    getSectionLocks: getSectionLocks,
+    renderSectionLocks: renderSectionLocks,
+    isSectionLocked: isSectionLocked,
+    lockedSectionCount: lockedSectionCount,
     toast: toast,
     money: money,
     esc: esc,

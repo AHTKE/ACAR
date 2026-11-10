@@ -357,10 +357,10 @@ const server = http.createServer(async (req, res) => {
     if (!isIndex) { res.end(buf); return; }
     /* نحقن تحميل SQLite قبل سكربتات التطبيق (بدون تغيير ملفات الويب) */
     let html = buf.toString('utf8');
-    if (html.indexOf('APP_TRUSTED_RUNTIME') < 0) {
-      /* بيئة موثوقة (جهاز المالك) = صلاحيات كاملة فوراً بدون أي طلب شبكة */
-      html = html.replace('<head>', '<head>\n  <script>window.APP_TRUSTED_RUNTIME = true;</script>');
-    }
+    /* بيئة موثوقة (جهاز المالك) = صلاحيات كاملة فوراً بدون أي طلب شبكة.
+       نحقنها دائمًا: الصفحة نفسها بتشير للاسم في منطق الـgate، فوجود
+       الاسم في النص مش معناه إنه متعرّف وقت التشغيل. */
+    html = html.replace('<head>', '<head>\n  <script>window.APP_TRUSTED_RUNTIME = true;</script>');
     if (html.indexOf('/local/boot.js') < 0) {
       html = html.replace(/<script\s+src="export\.js"/,
         '<script src="/local/boot.js"></script>\n  <script src="export.js"');

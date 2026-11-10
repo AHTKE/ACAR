@@ -173,8 +173,8 @@
           <p>كل أعمالك في مكان واحد: العملاء، الموردون، الدواخل والخوارج، التحصيل، الشركاء والجمعيات.</p>
           <div class="hero__stats">
             <div class="stat"><b id="statCustomers">0</b><small>عميل</small></div>
-            <div class="stat"><b>12</b><small>مورّد</small></div>
-            <div class="stat"><b>3</b><small>أقسام محمية</small></div>
+            <div class="stat"><b id="statSuppliers">0</b><small>مورّد</small></div>
+            <div class="stat"><b id="statLocked">0</b><small>أقسام مقفولة</small></div>
           </div>
         </div>
         <div class="hero__art" aria-hidden="true">
@@ -890,6 +890,7 @@
       </div>
 
       <div class="summary" id="collectionSummary"></div>
+      <div class="collection-glance" id="collectionGlance"></div>
 
       <div class="panel" id="waPanel">
         <div class="page-head" style="padding:0;border:0;background:none">
@@ -968,6 +969,7 @@
                 <th>الهاتف</th>
                 <th>العنوان</th>
                 <th>المتبقي</th>
+                <th class="col-months-head">حالة الشهور</th>
                 <th>الحالة الشهرية</th>
                 <th style="width:64px"><span class="sr-only">فتح التفاصيل</span></th>
               </tr>
@@ -1432,8 +1434,8 @@
           <form id="passwordForm" class="form" novalidate>
             <label class="field"><span>كلمة المرور الحالية *</span><input type="password" name="current" inputmode="numeric" required placeholder="••••" /></label>
             <div class="form__row">
-              <label class="field"><span>كلمة المرور الجديدة *</span><input type="password" name="next" inputmode="numeric" required placeholder="••••" /></label>
-              <label class="field"><span>تأكيد كلمة المرور *</span><input type="password" name="confirm" inputmode="numeric" required placeholder="••••" /></label>
+              <label class="field"><span>كلمة المرور الجديدة (4–8 أرقام) *</span><input type="password" name="next" inputmode="numeric" maxlength="8" required placeholder="••••" /></label>
+              <label class="field"><span>تأكيد كلمة المرور *</span><input type="password" name="confirm" inputmode="numeric" maxlength="8" required placeholder="••••" /></label>
             </div>
             <p class="form__error" id="pwdFormError" hidden></p>
             <div class="form__actions">
@@ -1443,17 +1445,15 @@
           </form>
         </div>
 
-        <div class="panel">
-          <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-shield"/></svg> الأقسام المحمية</h3>
-          <p class="panel__hint">تُطلب كلمة المرور عند فتح هذه الأقسام، وتبقى الأقسام مفتوحة حتى إعادة التشغيل أو إعادة القفل.</p>
-          <ul class="protect-list">
-            <li><span class="card__icon card__icon--amber sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-coins"/></svg></span><div><b>التحصيل</b><small>يُقفل بكلمة المرور</small></div><svg viewBox="0 0 24 24" class="ico ico--lock"><use href="#ic-lock"/></svg></li>
-            <li><span class="card__icon card__icon--pink sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-link"/></svg></span><div><b>الشركاء</b><small>يُقفل بكلمة المرور</small></div><svg viewBox="0 0 24 24" class="ico ico--lock"><use href="#ic-lock"/></svg></li>
-            <li><span class="card__icon card__icon--blue sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-group"/></svg></span><div><b>جمعيات</b><small>يُقفل بكلمة المرور</small></div><svg viewBox="0 0 24 24" class="ico ico--lock"><use href="#ic-lock"/></svg></li>
-            <li><span class="card__icon card__icon--violet sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-exchange"/></svg></span><div><b>العمليات</b><small>يُقفل بكلمة المرور — سجل التغييرات والتراجع</small></div><svg viewBox="0 0 24 24" class="ico ico--lock"><use href="#ic-lock"/></svg></li>
-            <li><span class="card__icon card__icon--amber sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-coins"/></svg></span><div><b>التفاصيل</b><small>يُقفل بكلمة المرور — الإجماليات المرتبطة</small></div><svg viewBox="0 0 24 24" class="ico ico--lock"><use href="#ic-lock"/></svg></li>
-          </ul>
-          <p class="panel__note">تُحفظ كلمة المرور محلياً على هذا الجهاز فقط.</p>
+        <div class="panel" id="sectionLocksPanel" hidden>
+          <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-shield"/></svg> الأقسام المحمية وكلمات المرور</h3>
+          <p class="panel__hint">لوحة الأدمن: اختر أي قسم رئيسي وحدّد كلمة مرور خاصة به. كلمة المرور الخاصة تُطلب عند فتح القسم، والقسم غير المحدد يفتح بدون كلمة مرور. كلمة المرور 4 أرقام.</p>
+          <div id="sectionLocksList" class="lock-grid"></div>
+          <div class="form__actions" style="margin-top:14px">
+            <button type="button" class="btn btn--primary" id="saveSectionLocks"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-check"/></svg> حفظ أقفال الأقسام</button>
+            <button type="button" class="btn btn--ghost" id="resetSectionLocks">استعادة الافتراضي</button>
+          </div>
+          <p class="panel__note">الأقسام المفعّلة بدون كلمة مرور خاصة تستخدم كلمة المرور العامة. الإعدادات تُحفظ على هذا الجهاز، وتظهر للأدمن فقط.</p>
         </div>
 
         <div class="panel" style="grid-column:1/-1">

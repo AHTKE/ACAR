@@ -1200,3 +1200,70 @@ label.btn{cursor:pointer;user-select:none}
 @media (max-width:900px){.wh-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.wh-detail-grid{grid-template-columns:1fr}}
 @media (max-width:700px){.wh-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.wh-view-head,.wh-head{flex-direction:column}.wh-head__actions{width:100%}.wh-store-grid,.wh-cat-grid{grid-template-columns:1fr}.wh-inline-form input{min-width:0;width:100%}.wh-form__head{flex-direction:column}.wh-form__head .btn{align-self:flex-start}}
 @media (max-width:460px){.wh-kpis{grid-template-columns:1fr}.wh-crumb{font-size:11.5px}.wh-store-card__stats small,.wh-cat-card__stats small{font-size:9.5px}}
+
+/* ===== تحسين التحصيل: ملخص سريع وشريط الشهور ===== */
+.collection-glance{margin:-4px 0 18px}
+.glance-row{display:flex;gap:10px;flex-wrap:wrap}
+.glance-chip{
+  flex:1 1 150px;min-width:130px;display:flex;flex-direction:column;align-items:flex-start;gap:3px;
+  padding:12px 15px;border-radius:14px;border:1px solid var(--line);background:var(--panel-2);
+  color:var(--text);cursor:pointer;text-align:right;transition:.2s;
+}
+.glance-chip:hover{transform:translateY(-2px);border-color:rgba(79,140,255,.5);box-shadow:0 10px 24px rgba(0,0,0,.25)}
+.glance-chip b{font-size:23px;font-weight:800;line-height:1.1}
+.glance-chip span{font-size:12px;color:var(--muted)}
+.glance-chip.is-late{border-color:rgba(248,113,113,.35);background:rgba(248,113,113,.07)}
+.glance-chip.is-late b{color:#fca5a5}
+.glance-chip.is-paid{border-color:rgba(52,211,153,.35);background:rgba(52,211,153,.07)}
+.glance-chip.is-paid b{color:#6ee7b7}
+.glance-chip.is-due{border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.07)}
+.glance-chip.is-due b{color:#fcd34d}
+.glance-note{margin:8px 2px 0;color:var(--muted-2);font-size:11.5px}
+
+.col-months-head{min-width:250px}
+.col-months{min-width:250px;max-width:360px;white-space:normal!important;vertical-align:middle}
+.month-strip{display:flex;flex-direction:column;gap:5px;min-width:0}
+.month-strip__meta{display:flex;justify-content:space-between;gap:8px;font-size:10.5px;color:var(--muted);white-space:nowrap}
+.month-strip__meta .neg{color:#fca5a5;font-weight:700}
+.month-strip__meta .pos{color:#6ee7b7;font-weight:700}
+.month-strip__cells{display:flex;gap:3px;overflow-x:auto;padding:1px 0 3px;scrollbar-width:thin}
+.month-strip__cells::-webkit-scrollbar{height:4px}
+.month-strip__cells::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:99px}
+.mcell{
+  flex:0 0 25px;height:25px;display:grid;place-items:center;border-radius:7px;
+  border:1px solid var(--line);background:rgba(0,0,0,.2);color:var(--muted);
+  font-size:10.5px;font-weight:700;font-variant-numeric:tabular-nums;cursor:help;
+}
+.mcell.is-paid{background:rgba(52,211,153,.16);border-color:rgba(52,211,153,.45);color:#6ee7b7}
+.mcell.is-late-paid{background:rgba(245,158,11,.16);border-color:rgba(245,158,11,.5);color:#fcd34d}
+.mcell.is-overdue{background:rgba(248,113,113,.18);border-color:rgba(248,113,113,.6);color:#fecaca;box-shadow:0 0 0 2px rgba(248,113,113,.08)}
+.mcell.is-due{background:rgba(245,158,11,.14);border-color:rgba(245,158,11,.55);color:#fde68a}
+.mcell.is-upcoming{opacity:.55}
+.mcell.is-current{outline:2px solid rgba(79,140,255,.75);outline-offset:1px}
+.month-strip__none{font-size:11.5px;color:var(--muted-2)}
+
+/* ===== إعدادات أقفال الأقسام (أدمن فقط) ===== */
+#sectionLocksPanel[hidden]{display:none!important}
+[data-viewer-mode="1"] #sectionLocksPanel{display:none!important}
+.lock-grid{display:flex;flex-direction:column;gap:9px}
+.lock-row{
+  display:grid;grid-template-columns:1fr 170px;gap:12px;align-items:center;
+  padding:10px 12px;border:1px solid var(--line);border-radius:13px;background:rgba(0,0,0,.2);
+}
+.lock-row__main{display:flex;align-items:center;gap:11px;cursor:pointer;min-width:0}
+.lock-row__main input{width:18px;height:18px;accent-color:var(--primary);flex:none;cursor:pointer}
+.lock-row__main span{min-width:0}
+.lock-row__main b{display:block;font-size:13.5px}
+.lock-row__main small{display:block;color:var(--muted);font-size:11.5px;margin-top:2px}
+.lock-row__pass{
+  width:100%;background:rgba(0,0,0,.28);border:1px solid var(--line);border-radius:10px;
+  padding:9px 10px;color:var(--text);font-size:12.5px;outline:none;font-family:inherit;
+}
+.lock-row__pass:focus{border-color:rgba(79,140,255,.7);box-shadow:0 0 0 3px rgba(79,140,255,.12)}
+.lock-row__pass:disabled{opacity:.45;cursor:not-allowed}
+@media (max-width:760px){
+  .lock-row{grid-template-columns:1fr}
+  .glance-chip{flex:1 1 calc(50% - 10px);min-width:0}
+  .col-months-head,.col-months{min-width:200px}
+  .month-strip__cells{max-width:210px}
+}

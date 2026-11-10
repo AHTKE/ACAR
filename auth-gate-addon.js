@@ -152,6 +152,8 @@
     if (!VIEWER) return;
     var t = e.target;
     if (!t || !t.closest) return;
+    /* زر إغلاق الإشعار ليس إجراءً على التطبيق — لا تعيد فتح الإشعار */
+    if (t.closest('#toast, #toastClose, .toast__x')) return;
     var el = t.closest('button, label, input[type="file"], .switch-row, [data-add], [data-del], [data-edit], [data-delete], [data-save], [data-push]');
     if (!el || !blocked(el)) return;
     e.preventDefault();
