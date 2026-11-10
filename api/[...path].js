@@ -10,26 +10,13 @@
    اتشالت لأنها كانت مجرد أغلفة رقيقة لنفس worker.js.
    ============================================================ */
 import run from '../vercel-run.js';
+import { ROUTES } from '../api-routes.js';
 
 /* كل المسارات اللي worker.js بيدعمها. مفيش مسار بيتحول هنا إلا لو
-   موجود في القائمة، فأي /api/غير معروف بيرجع 404 JSON. */
-export const ROUTES = [
-  '/api/google/status',
-  '/api/google/ping',
-  '/api/google/check',
-  '/api/google/capabilities',
-  '/api/google/login',
-  '/api/google/callback',
-  '/api/google/access-token',
-  '/api/google/upload',
-  '/api/google/notify',
-  '/api/google/disconnect',
-  '/api/sync/pull',
-  '/api/sync/push',
-  '/api/sync/folder',
-  '/api/sync/versions',
-  '/api/sync/version'
-];
+   موجود في القائمة، فأي /api/غير معروف بيرجع 404 JSON.
+   المسارات المتداخلة ليها دوال صريحة في api/google/[action].js
+   و api/sync/[action].js لأن Vercel مش بيمرّرها للـcatch-all. */
+export { ROUTES };
 
 const ALLOWED = new Set(ROUTES);
 
