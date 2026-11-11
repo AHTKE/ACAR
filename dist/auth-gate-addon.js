@@ -73,7 +73,8 @@
   function allowed(el) {
     if (!el) return false;
     /* أزرار الربط بجوجل (شاشة البدء ولوحة الإعدادات) تبقى ظاهرة وعملياً للجميع */
-    if (el.id === 'gateConnect' || el.id === 'driveConnect' || el.id === 'viewerDriveBtn') return true;
+    if (el.id === 'gateConnect' || el.id === 'driveConnect' || el.id === 'viewerDriveBtn' ||
+      el.id === 'driveDisconnect' || el.id === 'viewerDriveDisconnect') return true;
     if (el.tagName === 'A' && String(el.getAttribute('href') || '').indexOf('/api/google/login') === 0) return true;
     if (el.classList && (el.classList.contains('chev') || el.classList.contains('back-btn'))) return true;
     for (var i = 0; i < SEL_ALLOW_ATTR.length; i++) {
@@ -121,7 +122,7 @@
     for (var i = 0; i < els.length; i++) {
       var el = els[i];
       // Keep drive connect buttons visible for all users (gate + settings)
-      if (el.id && (el.id === 'driveConnect' || el.id === 'gateConnect')) continue;
+      if (el.id && (el.id === 'driveConnect' || el.id === 'gateConnect' || el.id === 'driveDisconnect')) continue;
       if (sensitive(el)) continue;
       if (el.style.display !== 'none') {
         el.style.display = 'none';
@@ -198,6 +199,26 @@
         try { if (typeof window.syncCheck === 'function') window.syncCheck(false); } catch (e) {}
       };
     }
+    var out = document.getElementById('viewerDriveDisconnect');
+    if (out) {
+      out.style.display = driveConnected ? 'inline-block' : 'none';
+      out.onclick = function () {
+        if (!driveConnected || typeof fetch !== 'function') return;
+        fetch('/api/google/disconnect', { method: 'POST', credentials: 'same-origin' })
+          .then(function (r) {
+            if (!r || !r.ok) throw new Error('disconnect ' + (r && r.status));
+            return r.json().catch(function () { return {}; });
+          })
+          .then(function (j) {
+            if (j && j.ok === false) throw new Error(j.error || 'disconnect');
+            driveConnected = false;
+            renderViewerBar();
+            try { window.dispatchEvent(new CustomEvent('nizam:drive-disconnected')); } catch (e) {}
+            toastMsg('تم فصل الربط — تقدر تختار حساب Google تاني');
+          })
+          .catch(function () { toastMsg('تعذّر فصل الربط — حاول مرة أخرى', true); });
+      };
+    }
     var txt = document.getElementById('viewerDriveText');
     if (txt) {
       txt.textContent = driveConnected
@@ -205,6 +226,14 @@
         : 'وضع المشاهد — اربط حساب Google لعرض البيانات ومتابعة أحدث نسخة';
     }
   }
+
+  /* أي فصل ربط ناجح من الإعدادات أو الشريط يحدّث شريط المشاهد فوراً */
+  try {
+    window.addEventListener('nizam:drive-disconnected', function () {
+      driveConnected = false;
+      renderViewerBar();
+    });
+  } catch (eDis) {}
 
   function applyViewer(connected) {
     driveConnected = !!connected;
@@ -314,9 +343,11 @@
     return null;
   }
   function applyAdminFast() {
+    VIEWER = false;
     document.documentElement.removeAttribute('data-viewer-mode');
     var bar = document.getElementById('viewerDriveBar');
     if (bar) bar.style.display = 'none';
+    restoreAllControls();
   }
 
   /* رجّع أي زر خفيناه في وضع المشاهد (لو الدور اتغيّر في نفس الجلسة) */
@@ -391,11 +422,6 @@
     verifyRole();
   }
 
-  /* فصل الربط أثناء الجلسة → يبقى مشاهداً فوراً */
-  document.addEventListener('click', function (e) {
-    var d = e.target && e.target.closest && e.target.closest('#driveDisconnect');
-    /* مشاهد فاصل الربط يفضل مشاهد (مايترقّاش لمالك بالفصل)،
-       والمالك المحلي يفضل مالك. */
-    if (d) { if (VIEWER) applyViewer(false); else applyAdminLocal(); }
-  }, true);
+  /* فصل الربط بيتم في app.js بعد نجاح الطلب، وبعدها بيتبعت
+     nizam:drive-disconnected — ممنوع نغيّر الحالة قبل النتيجة. */
 })();

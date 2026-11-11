@@ -774,12 +774,15 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   ok('login فيه drive scope', loc.indexOf('auth%2Fdrive') > -1 || loc.indexOf('auth/drive') > -1);
   ok('login فيه gmail.send scope عشان تنبيهات البريد', loc.indexOf('gmail.send') > -1, loc.slice(0, 400));
   ok('login فيه access_type=offline', loc.indexOf('access_type=offline') > -1);
-  ok('login فيه prompt=consent', loc.indexOf('prompt=consent') > -1);
+  ok('login بيفرض اختيار الحساب والموافقة',
+     loc.indexOf('prompt=select_account') > -1 && loc.indexOf('consent') > -1, loc.slice(0, 500));
   ok('login بيحط كوكي الحالة', (r.headers.get('set-cookie') || '').indexOf('gstate=') > -1,
      r.headers.get('set-cookie') || '');
 
   r = await worker.fetch(new Request('https://site.test/api/google/login'), mkEnv());
-  ok('login بدون مفاتيح → 503', r.status === 503, 'status=' + r.status);
+  ok('login بدون مفاتيح يرجّع للواجهة برسالة واضحة',
+     r.status === 302 && decodeURIComponent(r.headers.get('location') || '').indexOf('g=err') > -1,
+     'status=' + r.status + ' location=' + (r.headers.get('location') || ''));
 
   r = await worker.fetch(new Request('https://site.test/api/google/callback?code=abc&state=xyz'), mkEnv(SEC));
   ok('callback بدون كوكي الحالة → رجوع بخطأ',
@@ -787,8 +790,10 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
      r.headers.get('location'));
 
   r = await worker.fetch(new Request('https://site.test/api/google/callback?error=access_denied'), mkEnv(SEC));
-  ok('callback برفض المستخدم → رجوع بالسبب',
-     (r.headers.get('location') || '').indexOf('access_denied') > -1, r.headers.get('location'));
+  const deniedLoc = decodeURIComponent(r.headers.get('location') || '');
+  ok('callback برفض المستخدم → رسالة عربية واضحة',
+     deniedLoc.indexOf('الحساب غير مسموح') > -1 || deniedLoc.indexOf('تم إلغاء') > -1,
+     deniedLoc);
 
   r = await worker.fetch(new Request('https://site.test/api/google/upload', {
     method: 'POST',

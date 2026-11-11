@@ -26,6 +26,7 @@ const dom = new JSDOM(html, {
     window.fetch = (url) => {
       if (String(url).indexOf('/api/google/status') > -1) {
         return Promise.resolve({
+          ok: true, status: 200,
           json: () => Promise.resolve({ configured: true, connected: true, email: 'viewer@example.com' })
         });
       }
@@ -83,10 +84,24 @@ const ok = (name, cond, extra) => {
   if (uploadBtns.length) ok('أزرار «رفع» لا تُخفى (منع بالنقر فقط)', uploadBtns.every((b) => b.style.display !== 'none'),
      'total=' + uploadBtns.length);
   const disconnectBtn = $('#driveDisconnect');
+  ok('زر «فصل الربط» ظاهر للمشاهد', !!disconnectBtn && disconnectBtn.hidden === false &&
+     disconnectBtn.style.display !== 'none', disconnectBtn ? 'hidden=' + disconnectBtn.hidden + ' display=' + disconnectBtn.style.display : 'missing');
   if (disconnectBtn) {
+    let disconnectCalled = false;
+    const prevFetch = window.fetch;
+    window.fetch = function (url, init) {
+      if (String(url).indexOf('/api/google/disconnect') > -1) {
+        disconnectCalled = true;
+        return Promise.resolve({ ok: true, status: 200, json: function () { return Promise.resolve({ ok: true }); } });
+      }
+      return prevFetch(url, init);
+    };
     const dev = new window.MouseEvent('click', { bubbles: true, cancelable: true });
     disconnectBtn.dispatchEvent(dev);
-    ok('زر «فصل الربط» محظور على المشاهد', dev.defaultPrevented === true);
+    await wait(50);
+    ok('زر «فصل الربط» مسموح للمشاهد', dev.defaultPrevented === false);
+    ok('فصل الربط بينادي المسار الصحيح', disconnectCalled);
+    window.fetch = prevFetch;
   }
 
   console.log('\n[3] منع النقر حتى لو زر ظاهر');

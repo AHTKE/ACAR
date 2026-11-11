@@ -5517,35 +5517,11 @@
 
   function startGoogleLogin(e) {
     if (e && e.preventDefault) e.preventDefault();
-    var go = function () {
-      watchDriveConnect();
-      if (typeof location !== 'undefined') location.href = '/api/google/login';
-    };
-    if (typeof fetch !== 'function') { go(); return; }
-    fetch('/api/google/status', { credentials: 'same-origin' })
-      .then(function (r) {
-        if (!r) throw new Error('NOAPI');
-        if (r.status === 404 || r.status === 501) {
-          var noApi = new Error('NOAPI');
-          noApi.status = r.status;
-          throw noApi;
-        }
-        if (!r.ok) {
-          var bad = new Error('HTTP ' + r.status);
-          bad.status = r.status;
-          throw bad;
-        }
-        if (typeof r.clone !== 'function') return null;
-        return r.clone().json().catch(function () { throw new Error('NOAPI'); });
-      })
-      .then(function () { go(); })
-      .catch(function (err) {
-        if (err && (err.status === 404 || err.status === 501 || err.message === 'NOAPI')) {
-          toast('خادم ربط Google غير منشور على هذا الموقع (404) — لازم مجلد api/ يكون ضمن المشروع المنشور على Vercel، وبعدها اعمل Redeploy.', true);
-        } else {
-          toast('تعذّر الوصول لخادم ربط Google — راجع اتصال الموقع أو إعدادات النشر ثم جرّب تاني.', true);
-        }
-      });
+    watchDriveConnect();
+    /* توجيه مباشر لصفحة اختيار حساب Google.
+       ممنوع نعمل أي طلب /status قبل كده: أي تعطّل مؤقت كان بيمنع
+       المستخدم من الوصول لصفحة Google ويحبسه في «إعادة المحاولة». */
+    if (typeof location !== 'undefined') location.href = '/api/google/login';
   }
   window.startGoogleLogin = startGoogleLogin;
 
@@ -5558,9 +5534,29 @@
   if (driveDisconnectBtn) driveDisconnectBtn.addEventListener('click', function () {
     if (typeof fetch !== 'function') return;
     fetch('/api/google/disconnect', { method: 'POST', credentials: 'same-origin' })
-      .then(function () { toast('تم فصل الربط'); applyDriveState(driveState.configured, false, ''); })
+      .then(function (r) {
+        if (!r || !r.ok) throw new Error('disconnect ' + (r && r.status));
+        return r.json().catch(function () { return {}; });
+      })
+      .then(function (j) {
+        if (j && j.ok === false) throw new Error(j.error || 'disconnect');
+        try { localStorage.removeItem('app_drive_conn'); } catch (eL) {}
+        toast('تم فصل الربط — تقدر تربط حساب Google تاني');
+        applyDriveState(driveState.configured, false, '');
+        try { window.dispatchEvent(new CustomEvent('nizam:drive-disconnected')); } catch (eD2) {}
+      })
       .catch(function () { toast('تعذّر فصل الربط', true); });
   });
+
+  /* فصل الربط من شريط المشاهد يحدّث نفس واجهة الإعدادات فوراً */
+  try {
+    window.addEventListener('nizam:drive-disconnected', function () {
+      try {
+        driveState.connected = false;
+        applyDriveState(driveState.configured, false, '');
+      } catch (eD) {}
+    });
+  } catch (eEv) {}
 
   var driveFile = $('#driveFile');
   if (driveFile) driveFile.addEventListener('change', function () {

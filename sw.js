@@ -1,7 +1,7 @@
 /* ============================================================
    نظام الإدارة المتكامل — Service Worker (عمل بدون إنترنت)
    ============================================================ */
-var CACHE = 'nizam-idara-v21';
+var CACHE = 'nizam-idara-v22';
 
 var SHELL = [
   './',
@@ -50,8 +50,15 @@ self.addEventListener('fetch', function (event) {
   try { url = new URL(req.url); } catch (e) { return; }
   if (url.origin !== self.location.origin) return;
 
+  /* مسارات API (ومنها بدء OAuth) لازم تروح للشبكة مباشرة.
+     اعتراضها هنا كان بيمنع تحويل Google ويخلّي المتصفح يعرض
+     نسخة الكاش تحت رابط /api/google/login. */
+  if (url.pathname.indexOf('/api/') === 0) return;
+
   /* الصفحات: الشبكة أولاً مع الرجوع لنسخة محفوظة عند فقد الإنترنت */
   if (req.mode === 'navigate') {
+    /* أي مسار غير الجذر مش صفحة من التطبيق — سيبه للشبكة */
+    if (url.pathname !== '/' && url.pathname !== '/index.html') return;
     event.respondWith(
       fetch(req).then(function (res) {
         /* لا نخزّن استجابة مُعاد توجيهها تحت رابط الجذر حتى لا تُرفض عند التشغيل دون إنترنت */

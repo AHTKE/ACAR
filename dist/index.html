@@ -41,14 +41,18 @@
     <img src="icons/logo-amw.png" alt="AMW Code" width="120" height="120" style="display:block;margin:0 auto 6px;opacity:.95;" />
     <h2 style="color:#f2f6fb;margin-bottom:10px;font-size:24px;">ربط حساب Google Drive</h2>
     <p style="color:#9fadc2;margin-bottom:30px;">يجب ربط حساب Google Drive للدخول إلى التطبيق</p>
-    <label style="display:block;text-align:right;color:#f2f6fb;margin-bottom:8px;">رابط المجلد العام</label>
-    <input type="text" id="forceFolderUrl" style="width:100%;padding:12px;background:#0a0e15;border:1px solid #4f8cff;border-radius:12px;color:#f2f6fb;margin-bottom:20px;" placeholder="https://drive.google.com/drive/folders/...">
-    <button type="button" id="gateConnect" onclick="var __u=document.getElementById('forceFolderUrl').value;localStorage.setItem('app_shared_folder_url',__u);localStorage.setItem('app_sync_custom_folder',__u);window.startGoogleLogin?window.startGoogleLogin(event):(window.location.href='/api/google/login');" style="width:100%;padding:14px;background:linear-gradient(90deg,#4f8cff,#7aa8ff);color:#fff;border:none;border-radius:12px;font-weight:700;cursor:pointer;">ربط حساب Google Drive</button>
+    <button type="button" id="gateConnect" style="width:100%;padding:14px;background:linear-gradient(90deg,#4f8cff,#7aa8ff);color:#fff;border:none;border-radius:12px;font-weight:700;cursor:pointer;">ربط حساب Google Drive</button>
+    <p id="gateHint" style="color:#9fadc2;margin:14px 0 0;font-size:13px;line-height:1.8;">هيفتح لك اختيار حساب Google على طول — اختر الحساب واضغط «السماح».</p>
     <div id="gateError" style="display:none;margin-top:16px;padding:12px 14px;border-radius:12px;border:1px solid #f87171;background:rgba(248,113,113,.12);color:#fecaca;font-size:13px;line-height:1.9;text-align:right;"></div>
+    <details id="gateAdvanced" style="margin-top:16px;text-align:right;">
+      <summary style="color:#9fadc2;font-size:12.5px;cursor:pointer;">إعدادات متقدمة (اختياري)</summary>
+      <label style="display:block;text-align:right;color:#f2f6fb;margin:12px 0 8px;">رابط المجلد العام (اختياري)</label>
+      <input type="text" id="forceFolderUrl" style="width:100%;padding:12px;background:#0a0e15;border:1px solid #4f8cff;border-radius:12px;color:#f2f6fb;margin-bottom:12px;" placeholder="https://drive.google.com/drive/folders/...">
+      <button type="button" id="gateDiag" style="width:100%;padding:10px;background:transparent;border:1px solid #33415a;border-radius:10px;color:#9fadc2;font-weight:600;font-size:12.5px;cursor:pointer;">🔍 فحص إعدادات Google</button>
+      <div id="gateDiagBox" style="display:none;margin-top:10px;padding:12px 14px;border-radius:12px;border:1px solid #33415a;background:#0d1420;color:#cbd5e1;font-size:12.5px;line-height:1.9;text-align:right;word-break:break-word;"></div>
+    </details>
     <button type="button" id="gateRetry" style="display:none;width:100%;margin-top:12px;padding:11px;background:transparent;border:1px solid #4f8cff;color:#9fadc2;border-radius:10px;cursor:pointer;font-weight:600;">إعادة المحاولة</button>
     <button type="button" id="gateSkip" style="display:none;width:100%;margin-top:10px;padding:11px;background:transparent;border:1px dashed #33415a;color:#9fadc2;border-radius:10px;cursor:pointer;font-weight:600;font-size:12.5px;">الدخول بدون ربط (وضع محلي)</button>
-    <button type="button" id="gateDiag" style="margin-top:14px;width:100%;padding:10px;background:transparent;border:1px solid #33415a;border-radius:10px;color:#9fadc2;font-weight:600;font-size:12.5px;cursor:pointer;">🔍 فحص المفاتيح (لو بيقول إنها ناقصة)</button>
-    <div id="gateDiagBox" style="display:none;margin-top:10px;padding:12px 14px;border-radius:12px;border:1px solid #33415a;background:#0d1420;color:#cbd5e1;font-size:12.5px;line-height:1.9;text-align:right;word-break:break-word;"></div>
   </div>
 </div>
 
@@ -56,6 +60,7 @@
 <div id="viewerDriveBar">
   <span id="viewerDriveText">وضع المشاهد — تُطبَّق أحدث نسخة من المجلد العام تلقائياً</span>
   <button type="button" id="viewerDriveBtn">ربط حساب Google Drive</button>
+  <button type="button" id="viewerDriveDisconnect" style="display:none;padding:9px 14px;border:1px solid #f87171;border-radius:10px;background:transparent;color:#fecaca;font-weight:600;cursor:pointer;white-space:nowrap;">فصل الربط</button>
 </div>
 
 <!-- ===== أيقونات SVG ===== -->
@@ -1891,6 +1896,9 @@ window.__retryAsset = function (el, name) {
      واحد نظيف، وبعدها نعرض بطاقة الإنقاذ بدل صفحة ميتة. */
   var rescueTries = 0;
   function rescue() {
+    /* مسارات /api مش صفحات تطبيق — لو المتصفح عرض فيها HTML بالغلط
+       ما نعرضش شاشة «الواجهة ما اشتغلتش» فوق رابط OAuth. */
+    if (location.pathname.indexOf('/api/') === 0) return;
     if (window.__appBooted) {
       try { sessionStorage.removeItem('app_boot_retry'); } catch (e) {}
       return;
@@ -1953,18 +1961,54 @@ window.__retryAsset = function (el, name) {
     var __skip0 = document.getElementById('gateSkip');
     if (__skip0) __skip0.style.display = 'block';
   }
-  if (typeof fetch === 'function' && !gateTrustedFast) {
-    function gateStatusError(msg) {
-      var e = document.getElementById('gateError');
-      var retryBtn = document.getElementById('gateRetry');
-      if (retryBtn) retryBtn.style.display = 'block';
-      if (!e) return;
-      e.style.display = 'block';
-      e.textContent = msg;
+  var gateConnectBtn = document.getElementById('gateConnect');
+  if (gateConnectBtn) gateConnectBtn.addEventListener('click', function () {
+    var input = document.getElementById('forceFolderUrl');
+    try {
+      var u = input ? String(input.value || '').trim() : '';
+      if (u) {
+        localStorage.setItem('app_shared_folder_url', u);
+        localStorage.setItem('app_sync_custom_folder', u);
+      }
+    } catch (eU) {}
+    if (typeof location !== 'undefined') location.href = '/api/google/login';
+  });
+
+  /* لو رجعنا من Google بخطأ، نحافظ على رسالته الحقيقية بدل ما نستبدلها
+     برسالة عامة. */
+  var gateInitialError = '';
+  (function () {
+    var eb = document.getElementById('gateError');
+    if (eb && eb.style.display === 'block' && String(eb.textContent || '').trim()) {
+      gateInitialError = String(eb.textContent || '').trim();
     }
+  })();
+
+  function gateShowError(msg) {
+    var hint = document.getElementById('gateHint');
+    var e = document.getElementById('gateError');
+    if (hint) hint.style.display = 'none';
+    if (!e) return;
+    e.style.display = 'block';
+    e.textContent = msg;
+  }
+  function gateShowHint(msg) {
+    var hint = document.getElementById('gateHint');
+    var e = document.getElementById('gateError');
+    if (e) e.style.display = 'none';
+    if (!hint) return;
+    hint.style.display = 'block';
+    hint.textContent = msg;
+  }
+  function gateOpenAdvanced() {
+    var adv = document.getElementById('gateAdvanced');
+    if (adv) adv.open = true;
+  }
+
+  if (typeof fetch === 'function' && !gateTrustedFast) {
     function checkGate() {
       var e = document.getElementById('gateError');
-      if (e) e.style.display = 'none';
+      if (!gateInitialError && e) e.style.display = 'none';
       fetch('/api/google/status', { credentials: 'same-origin' })
         .then(function (r) {
           if (r && r.ok === false) throw new Error('HTTP ' + (r.status || '?'));
@@ -1978,8 +2022,9 @@ window.__retryAsset = function (el, name) {
           if (s && s.connected && gate) { hideGate(); return; }
           if (s && s.configured === false) {
             var miss = (s.missing && s.missing.length) ? s.missing.join('، ') : 'Client ID، Client Secret';
-            gateStatusError('مفاتيح Google غير مضبوطة على الخادم: ' + miss +
-              ' — أضِفها في إعدادات الاستضافة ثم اضغط «إعادة المحاولة».');
+            gateShowError('مفاتيح Google غير مضبوطة على الخادم: ' + miss +
+              ' — أضِفها في إعدادات Vercel ثم أعد النشر.');
+            gateOpenAdvanced();
             return;
           }
           /* مش مربوط ومفيش خطأ إعدادات ظاهر — نقول السبب الحقيقي لو متاح */
@@ -1990,10 +2035,12 @@ window.__retryAsset = function (el, name) {
           if (s && s.secretValid === false) det.push('Client Secret غير صالح');
           if (s && s.verdict && !/^(ok|keys_ready|connected)$/i.test(s.verdict)) det.push('السبب: ' + s.verdict);
           if (det.length) {
-            gateStatusError('تعذّر الربط — ' + det.join(' · ') + '. راجع إعدادات Google ثم اضغط «إعادة المحاولة».');
-          } else {
-            gateStatusError('لم يتم ربط حساب Google Drive بعد — اربط الحساب للمتابعة.');
+            gateShowError('تعذّر الربط — ' + det.join(' · ') + '. راجع إعدادات Google ثم أعد النشر.');
+            gateOpenAdvanced();
+            return;
           }
+          if (gateInitialError) { gateShowError(gateInitialError); return; }
+          gateShowHint('لسه مش مربوط — اضغط «ربط حساب Google Drive» وهيفتح لك اختيار الحساب على طول.');
         })
         .catch(function (err) {
           /* لو الربط كان ناجح قبل كده والاستضافة ردّت بخطأ مؤقت: منقفلش التطبيق،
@@ -2007,8 +2054,12 @@ window.__retryAsset = function (el, name) {
             setTimeout(checkGate, 4000);
             return;
           }
-          gateStatusError('تعذّر التحقق من حالة الربط (' + (err && err.message ? err.message : 'خطأ') +
-            ') — البيانات محفوظة، اضغط «إعادة المحاولة».');
+          if (gateInitialError) {
+            gateShowError(gateInitialError);
+          } else {
+            gateShowHint('تعذّر التحقق من حالة الربط الآن (' + (err && err.message ? err.message : 'خطأ') +
+              ') — يمكنك الضغط على زر الربط مباشرة، والبيانات محفوظة.');
+          }
           var skipBtn = document.getElementById('gateSkip');
           if (skipBtn) skipBtn.style.display = 'block';
         });
@@ -2075,6 +2126,7 @@ window.__retryAsset = function (el, name) {
       return true;
     }
     function check() {
+      if (location.pathname.indexOf('/api/') === 0) return;
       var box = document.getElementById('bootHelp');
       if (!box) return;
       var err = document.getElementById('bootHelpErr');

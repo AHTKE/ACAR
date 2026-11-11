@@ -819,7 +819,7 @@ async function handleApi(request, env, pathname) {
     }, 200);
   }
 
-  if (!reqCreds.configured) {
+  if (!reqCreds.configured && pathname !== '/api/google/login' && pathname !== '/api/google/callback') {
     return json({ ok: false, error: 'لم يتم ضبط مفاتيح Google بعد (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET)' }, 503);
   }
 
@@ -828,30 +828,14 @@ async function handleApi(request, env, pathname) {
     const creds = reqCreds;
     const redirectUri = redirectUriFor(request, env);
 
-    /* ما نبعتش المستخدم لصفحة خطأ جوجل: نفحص الـclient_id الأول */
+    /* فحص محلي سريع لصيغة المفاتيح فقط — مفيش أي طلب لجوجل قبل التحويل،
+       عشان الضغط على «ربط» يفتح اختيار الحساب فوراً. */
     var early = '';
-    if (!creds.idValid) {
+    if (!creds.configured) {
+      early = 'مفاتيح Google غير مضبوطة على الخادم — أضِف GOOGLE_CLIENT_ID و GOOGLE_CLIENT_SECRET في Vercel ثم أعد النشر.';
+    } else if (!creds.idValid) {
       early = 'GOOGLE_CLIENT_ID في Vercel غير صالح — لازم ينتهي بـ .apps.googleusercontent.com (طوله الحالي ' +
         creds.id.length + ' حرف). انسخه كامل من Google Cloud ← Clients ثم أعد النشر.';
-    } else {
-      try {
-        const probe = new URL(AUTH_URL);
-        probe.searchParams.set('client_id', creds.id);
-        probe.searchParams.set('redirect_uri', redirectUri);
-        probe.searchParams.set('response_type', 'code');
-        probe.searchParams.set('scope', 'openid email');
-        probe.searchParams.set('prompt', 'none');
-        const pr = await fetch(probe.toString(), { redirect: 'manual' });
-        const ploc = pr.headers.get('location') || '';
-        let pbody = '';
-        if (!ploc && pr.status >= 400) pbody = (await pr.text().catch(() => '')).slice(0, 6000);
-        if (/invalid_client/i.test(pbody) || /OAuth client was not found/i.test(pbody) || /deleted_client/i.test(pbody)) {
-          early = 'Google لا يعرف الـClient ID الموجود في Vercel (' +
-            creds.id.slice(-10) + ') — إمّا محذوف أو من مشروع تاني. راجع Google Cloud ← Clients وانسخ الـClient ID والسر من نفس العميل.';
-        } else if (/redirect_uri_mismatch/i.test(ploc) || /redirect_uri_mismatch/i.test(pbody)) {
-          early = 'رابط الإرجاع غير مسجّل في Google Cloud. أضف: ' + redirectUri;
-        }
-      } catch (e) { /* فحص الشبكة فشل — نكمل عادي */ }
     }
     const deskPort = desktopPortFrom(request);
     if (early) {
@@ -866,11 +850,11 @@ async function handleApi(request, env, pathname) {
     url.searchParams.set('response_type', 'code');
     url.searchParams.set('scope', SCOPES);
     url.searchParams.set('access_type', 'offline');
-    url.searchParams.set('prompt', 'consent');
+    url.searchParams.set('prompt', 'select_account consent');
     url.searchParams.set('state', state);
-    var cookies = [cookie('gstate', state, 600)];
+    var cookies = [cookie('gstate', state, 3600)];
     /* نحفظ منفذ التطبيق المكتبي في كوكي عشان نعرفه وقت الرجوع من Google */
-    if (deskPort) cookies.push(cookie('gdesk', String(deskPort), 900));
+    if (deskPort) cookies.push(cookie('gdesk', String(deskPort), 3600));
     return redirect(url.toString(), cookies);
   }
 
@@ -890,9 +874,18 @@ async function handleApi(request, env, pathname) {
 
     if (err) {
       const desc = u.searchParams.get('error_description') || '';
-      const errText = err === 'access_denied'
-        ? 'تم إلغاء منح الإذن من حساب Google (access_denied) — جرّب تختار حسابك وتضغط «السماح».'
-        : 'Google رد بخطأ: ' + err + (desc ? ' — ' + desc : '');
+      var errText;
+      if (err === 'access_denied') {
+        errText = 'تم إلغاء الربط أو الحساب غير مسموح. لو الحساب جديد، اختاره من صفحة Google أو أضفه كـTest user في مشروع Google Cloud ثم جرّب تاني.';
+      } else if (err === 'org_internal') {
+        errText = 'الحساب تابع لمؤسسة ولا يسمح له بالدخول لهذا التطبيق — استخدم حساب Google شخصي أو عدّل إعدادات المؤسسة.';
+      } else if (err === 'admin_policy_enforced') {
+        errText = 'سياسة مسؤول Google Workspace منعت الربط — استخدم حساب شخصي أو اطلب من المسؤول السماح.';
+      } else if (err === 'redirect_uri_mismatch') {
+        errText = 'رابط الإرجاع غير مسجّل في Google Cloud. أضف: ' + redirectUriFor(request, env);
+      } else {
+        errText = 'Google رد بخطأ: ' + err + (desc ? ' — ' + desc : '');
+      }
       return redirect(back('?g=err&m=' + encodeURIComponent(errText)), [cookie('gstate', '', -1)]);
     }
     if (!code) return redirect(back('?g=err&m=' + encodeURIComponent('لم يصل رمز التفويض')), [cookie('gstate', '', -1)]);

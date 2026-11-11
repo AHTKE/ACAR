@@ -102,6 +102,10 @@ let j = json(r);
 ok('status يرجّع 200 و JSON', r.status === 200 && !!j, r.status + ' ' + r.body.slice(0, 80));
 ok('configured=false من السيرفر (مش من الواجهة)', j && j.configured === false, JSON.stringify(j));
 ok('Content-Type JSON', String(r.headers['content-type']).indexOf('json') > -1, r.headers['content-type']);
+r = await run(makeReq({ url: '/api/google/login' }));
+ok('login بدون مفاتيح يرجّع للواجهة برسالة، مش JSON أصفر',
+   r.status === 302 && decodeURIComponent(r.headers.location || '').indexOf('g=err') > -1,
+   r.status + ' ' + (r.headers.location || ''));
 
 console.log('\n[V2] بالمفتاحين المضبوطين');
 const TEST_CID = '123456789012-testclientidforchecks.apps.googleusercontent.com';
@@ -122,6 +126,8 @@ ok('فيه client_id', loc.indexOf('client_id=' + encodeURIComponent(TEST_CID)) 
 ok('redirect_uri على نفس الدومين',
    loc.indexOf(encodeURIComponent('https://app.example.com/api/google/callback')) > -1, loc);
 ok('كوكي gstate اتحط', cookiesOf(r).join(' ').indexOf('gstate=') > -1, cookiesOf(r).join('|'));
+ok('اختيار الحساب إجباري + الموافقة', /prompt=select_account(?:\+|%20)consent/.test(loc), loc);
+ok('جلسة state صالحة لمدة ساعة', /gstate=.*Max-Age=3600/.test(cookiesOf(r).join(' ')), cookiesOf(r).join('|'));
 
 console.log('\n[V4] مسار خاطئ → 404 JSON (مش صفحة HTML)');
 r = await run(makeReq({ url: '/api/google/nope' }));
