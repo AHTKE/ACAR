@@ -563,6 +563,41 @@ function buildMailMessage(o) {
 /* ---------- رموز الوصول ---------- */
 const tokenCache = new Map();
 
+/* آخر نتائج فحص المفاتيح — تُستخدم فقط لتجنّب صفحة خطأ Google
+   بعد فحص صريح، من غير إضافة أي طلب شبكة إلى مسار الدخول العادي. */
+const googleProbeCache = new Map();
+const GOOGLE_PROBE_TTL_MS = 2 * 60 * 1000;
+const GOOGLE_BAD_VERDICTS = {
+  client_id_not_found: true,
+  redirect_uri_mismatch: true,
+  bad_client_secret: true
+};
+
+function rememberGoogleProbe(id, redirectUri, verdict, advice) {
+  const key = String(id || '') + '|' + String(redirectUri || '');
+  if (!key || key === '|') return;
+  if (GOOGLE_BAD_VERDICTS[verdict]) {
+    googleProbeCache.set(key, { at: Date.now(), verdict: verdict, advice: advice || '' });
+    if (googleProbeCache.size > 20) {
+      const oldest = googleProbeCache.keys().next().value;
+      if (oldest) googleProbeCache.delete(oldest);
+    }
+  } else {
+    googleProbeCache.delete(key);
+  }
+}
+
+function cachedGoogleProbe(id, redirectUri) {
+  const key = String(id || '') + '|' + String(redirectUri || '');
+  const hit = googleProbeCache.get(key);
+  if (!hit) return '';
+  if (Date.now() - hit.at > GOOGLE_PROBE_TTL_MS) {
+    googleProbeCache.delete(key);
+    return '';
+  }
+  return hit.advice || '';
+}
+
 async function accessToken(env, conn, creds) {
   const c = creds || googleCreds(env);
   const key = String(conn.client_token) + '|' + c.id;
@@ -800,6 +835,7 @@ async function handleApi(request, env, pathname) {
       out.verdict = 'unknown';
       out.advice = 'ما قدرناش نحدّد السبب — جرّب تعمل Redeploy وتتأكد إن المتغيّرين في Production.';
     }
+    rememberGoogleProbe(c.id, redirectUri, out.verdict, out.advice);
     return json(out, 200);
   }
 
@@ -836,6 +872,12 @@ async function handleApi(request, env, pathname) {
     } else if (!creds.idValid) {
       early = 'GOOGLE_CLIENT_ID في Vercel غير صالح — لازم ينتهي بـ .apps.googleusercontent.com (طوله الحالي ' +
         creds.id.length + ' حرف). انسخه كامل من Google Cloud ← Clients ثم أعد النشر.';
+    } else if (!creds.secretValid) {
+      early = 'GOOGLE_CLIENT_SECRET في Vercel غير صالح — لازم يبدأ بـ GOCSPX- أو يكون بطول صحيح. انسخ السر من Google Cloud ← Clients ثم أعد النشر.';
+    }
+    if (!early) {
+      const cachedAdvice = cachedGoogleProbe(creds.id, redirectUri);
+      if (cachedAdvice) early = cachedAdvice;
     }
     const deskPort = desktopPortFrom(request);
     if (early) {

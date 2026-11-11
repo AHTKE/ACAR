@@ -63,7 +63,10 @@ global.fetch = async function (url, opts) {
 
   console.log('\n[2] نفس المسار من الموقع يستخدم مفاتيح الموقع');
   r = await worker.fetch(new Request(SITE + '/api/google/login'), noKeys);
-  ok('بدون مفاتيح الموقع → 503', r.status === 503, r.status);
+  const noKeysLoc = String(r.headers.get('location') || '');
+  ok('بدون مفاتيح الموقع → رسالة عربية بدل صفحة جوجل',
+    r.status === 302 && noKeysLoc.indexOf('/?g=err') === 0 && decodeURIComponent(noKeysLoc).indexOf('مفاتيح Google') > -1,
+    r.status + ' ' + noKeysLoc);
 
   r = await worker.fetch(new Request(SITE + '/api/google/login'), env);
   const q2 = new URL(r.headers.get('location') || 'https://x/').searchParams;

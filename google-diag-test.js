@@ -79,7 +79,10 @@ async function main() {
     ok('الفحص يقول missing_keys', c.verdict === 'missing_keys', c.verdict);
     ok('الفحص فيه نصيحة عربية', String(c.advice || '').indexOf('Vercel') > -1, c.advice);
     const lg = await get('/api/google/login', env());
-    ok('الدخول بدون مفاتيح → 503 (مش صفحة جوجل)', lg.status === 503, lg.status);
+    const lgLoc = String(lg.headers.get('location') || '');
+    ok('الدخول بدون مفاتيح يرجع لرسالة عربية (مش صفحة جوجل)',
+      lg.status === 302 && lgLoc.indexOf('/?g=err') === 0 && decodeURIComponent(lgLoc).indexOf('مفاتيح Google') > -1,
+      lg.status + ' ' + lgLoc);
   }
 
   console.log('\n[2] تنظيف المسافات/الاقتباسات/أسطر جديدة من المتغيّرات');
