@@ -74,7 +74,8 @@
     if (!el) return false;
     /* أزرار الربط بجوجل (شاشة البدء ولوحة الإعدادات) تبقى ظاهرة وعملياً للجميع */
     if (el.id === 'gateConnect' || el.id === 'driveConnect' || el.id === 'viewerDriveBtn' ||
-      el.id === 'driveDisconnect' || el.id === 'viewerDriveDisconnect') return true;
+      el.id === 'driveDisconnect' || el.id === 'viewerDriveDisconnect' ||
+      el.id === 'notifBtn' || el.id === 'notifClose' || el.id === 'notifOpenCollection') return true;
     if (el.tagName === 'A' && String(el.getAttribute('href') || '').indexOf('/api/google/login') === 0) return true;
     if (el.classList && (el.classList.contains('chev') || el.classList.contains('back-btn'))) return true;
     for (var i = 0; i < SEL_ALLOW_ATTR.length; i++) {
@@ -185,6 +186,22 @@
   }
 
   var driveConnected = false;
+
+  function askDisconnect(onYes) {
+    var message = 'هل أنت متأكد من فصل الربط بالحساب ده؟ تقدر تربط حساب Google تاني في أي وقت.';
+    if (typeof window.nizamConfirm === 'function') {
+      window.nizamConfirm({
+        title: 'فصل ربط حساب Google',
+        message: message,
+        yes: 'موافق',
+        no: 'تراجع',
+        onYes: onYes
+      });
+      return;
+    }
+    try { if (window.confirm(message)) onYes(); } catch (e) {}
+  }
+
   function renderViewerBar() {
     var bar = document.getElementById('viewerDriveBar');
     if (bar) bar.style.display = 'flex';
@@ -204,19 +221,21 @@
       out.style.display = driveConnected ? 'inline-block' : 'none';
       out.onclick = function () {
         if (!driveConnected || typeof fetch !== 'function') return;
-        fetch('/api/google/disconnect', { method: 'POST', credentials: 'same-origin' })
-          .then(function (r) {
-            if (!r || !r.ok) throw new Error('disconnect ' + (r && r.status));
-            return r.json().catch(function () { return {}; });
-          })
-          .then(function (j) {
-            if (j && j.ok === false) throw new Error(j.error || 'disconnect');
-            driveConnected = false;
-            renderViewerBar();
-            try { window.dispatchEvent(new CustomEvent('nizam:drive-disconnected')); } catch (e) {}
-            toastMsg('تم فصل الربط — تقدر تختار حساب Google تاني');
-          })
-          .catch(function () { toastMsg('تعذّر فصل الربط — حاول مرة أخرى', true); });
+        askDisconnect(function () {
+          fetch('/api/google/disconnect', { method: 'POST', credentials: 'same-origin' })
+            .then(function (r) {
+              if (!r || !r.ok) throw new Error('disconnect ' + (r && r.status));
+              return r.json().catch(function () { return {}; });
+            })
+            .then(function (j) {
+              if (j && j.ok === false) throw new Error(j.error || 'disconnect');
+              driveConnected = false;
+              renderViewerBar();
+              try { window.dispatchEvent(new CustomEvent('nizam:drive-disconnected')); } catch (e) {}
+              toastMsg('تم فصل الربط — تقدر تختار حساب Google تاني');
+            })
+            .catch(function () { toastMsg('تعذّر فصل الربط — حاول مرة أخرى', true); });
+        });
       };
     }
     var txt = document.getElementById('viewerDriveText');

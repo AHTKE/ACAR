@@ -81,7 +81,7 @@ button{background:none;border:none;cursor:pointer}
 
 /* ===== شريط العنوان ===== */
 .titlebar{
-  display:flex;align-items:center;gap:18px;
+  display:flex;align-items:center;gap:18px;position:relative;z-index:40;
   padding:12px 20px;
   background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02));
   border-bottom:1px solid var(--line);
@@ -125,6 +125,73 @@ button{background:none;border:none;cursor:pointer}
   background:var(--panel);border:1px solid var(--line);color:var(--muted);transition:.2s;
 }
 .icon-btn:hover{color:var(--text);border-color:var(--line-strong);transform:translateY(-2px)}
+
+/* ===== جرس تنبيهات التحصيل ===== */
+.notif-wrap{position:relative;display:flex}
+.notif-btn{position:relative}
+.notif-badge{
+  position:absolute;top:-5px;inset-inline-end:-5px;min-width:20px;height:20px;padding:0 5px;
+  display:grid;place-items:center;border-radius:999px;background:#f87171;color:#1a0505;
+  font-size:11px;font-weight:800;line-height:1;border:2px solid #10151f;
+}
+.notif-badge[hidden]{display:none}
+.notif-pop{
+  position:absolute;top:calc(100% + 10px);inset-inline-end:0;width:380px;max-width:calc(100vw - 24px);
+  z-index:99999;border-radius:18px;border:1px solid var(--line-strong);
+  background:linear-gradient(180deg,#171e2b,#0d131d);box-shadow:0 20px 50px rgba(0,0,0,.55);
+  overflow:hidden;direction:rtl;text-align:right;
+}
+.notif-pop[hidden]{display:none}
+.notif-pop__head{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:14px 16px;border-bottom:1px solid var(--line);
+}
+.notif-pop__head b{display:block;font-size:14.5px}
+.notif-pop__head small{display:block;color:var(--muted);font-size:11.5px;margin-top:3px}
+.notif-pop__close{
+  width:30px;height:30px;border-radius:9px;border:1px solid var(--line);background:transparent;
+  color:var(--muted);font-size:20px;line-height:1;cursor:pointer;flex:none;
+}
+.notif-pop__close:hover{color:var(--text);border-color:var(--line-strong)}
+.notif-list{max-height:360px;overflow-y:auto}
+.notif-list::-webkit-scrollbar{width:7px}
+.notif-list::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:99px}
+.notif-item{
+  width:100%;display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:0;
+  border-bottom:1px solid var(--line);background:transparent;color:var(--text);
+  font-family:inherit;text-align:right;cursor:pointer;transition:background .15s;
+}
+.notif-item:hover{background:rgba(79,140,255,.08)}
+.notif-item:last-child{border-bottom:0}
+.notif-item__icon{
+  flex:none;width:36px;height:36px;border-radius:11px;display:grid;place-items:center;
+  background:rgba(248,113,113,.14);border:1px solid rgba(248,113,113,.32);
+  color:#fecaca;font-size:11.5px;font-weight:800;
+}
+.notif-item__main{min-width:0;flex:1}
+.notif-item__main b{display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.notif-item__main small{display:block;color:var(--muted);font-size:11.5px;margin-top:3px}
+.notif-item__main em{display:block;color:#fca5a5;font-style:normal;font-size:10.5px;margin-top:4px;line-height:1.6}
+.notif-item__amount{flex:none;text-align:left;min-width:92px}
+.notif-item__amount b{display:block;font-size:12.5px;color:#fca5a5;white-space:nowrap}
+.notif-item__amount small{display:block;color:var(--muted);font-size:10px;margin-top:2px}
+.notif-item__amount i{display:block;color:var(--muted-2);font-style:normal;font-size:10px;margin-top:3px;white-space:nowrap}
+.notif-empty{padding:30px 20px;text-align:center}
+.notif-empty b{display:block;color:#6ee7b7;font-size:14px}
+.notif-empty span{display:block;color:var(--muted);font-size:12px;margin-top:6px}
+.notif-pop__all{
+  width:100%;padding:12px;border:0;border-top:1px solid var(--line);background:rgba(79,140,255,.08);
+  color:#cfe0f7;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;
+}
+.notif-pop__all:hover{background:rgba(79,140,255,.14);color:#fff}
+
+.col-actions{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:nowrap}
+.collection-detail .col-cell{white-space:nowrap}
+#mainCollectForm.is-editing{outline:2px solid rgba(79,140,255,.55);outline-offset:4px;border-radius:16px}
+.collect-edit-note{
+  margin:0;padding:10px 13px;border-radius:12px;font-size:12.5px;line-height:1.7;
+  color:#dbeafe;background:rgba(79,140,255,.12);border:1px solid rgba(79,140,255,.38);
+}
 
 /* ===== المحتوى ===== */
 .content{overflow-y:auto;padding:26px 34px 30px;scroll-behavior:smooth}
@@ -705,7 +772,7 @@ label.btn{cursor:pointer;user-select:none}
   .content{padding:18px}
 }
 
-/* ===== بطاقة المطوّر AMW Code والتواصل عبر واتساب ===== */
+/* ===== بطاقة AW والتواصل عبر واتساب ===== */
 .amw-badge {
   margin: 24px auto 34px;
   max-width: 680px;
@@ -745,17 +812,21 @@ label.btn{cursor:pointer;user-select:none}
   flex: 0 0 auto;
   width: 88px;
   height: 88px;
-  border-radius: 16px;
-  background: #0a0e15;
+  border-radius: 18px;
+  background: #08082b;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, .45);
+  overflow: hidden;
+  border: 1px solid rgba(160, 120, 255, .35);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .45), 0 0 18px rgba(120, 80, 255, .16);
 }
-.amw-badge__logo svg {
-  width: 64px;
-  height: 40px;
+.amw-badge__logo img {
+  width: 76px;
+  height: 76px;
+  border-radius: 14px;
   display: block;
+  object-fit: cover;
 }
 .amw-badge__wa {
   margin-top: 18px;
@@ -779,7 +850,7 @@ label.btn{cursor:pointer;user-select:none}
   .amw-badge { padding: 18px; margin: 16px auto 24px; }
   .amw-badge__text b { font-size: 21px; }
   .amw-badge__logo { width: 70px; height: 70px; }
-  .amw-badge__logo svg { width: 52px; height: 34px; }
+  .amw-badge__logo img { width: 60px; height: 60px; }
   .amw-badge__wa { font-size: 16px; }
 }
 

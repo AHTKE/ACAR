@@ -676,6 +676,15 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   window.fetch = (url, init) => { lastCall = { url: url, init: init }; return jsonResponse({ ok: true }); };
   click($('#driveDisconnect'));
   await wait(40);
+  ok('فصل الربط يطلب تأكيد المستخدم أولاً', $('#confirmModal').classList.contains('is-open'));
+  ok('لا يُرسل طلب الفصل قبل التأكيد', lastCall === null);
+  click($('#confirmNo'));
+  await wait(30);
+  ok('التراجع يلغي فصل الربط', lastCall === null && !$('#confirmModal').classList.contains('is-open'));
+  click($('#driveDisconnect'));
+  await wait(30);
+  click($('#confirmYes'));
+  await wait(60);
   ok('فصل الربط بينادي المسار الصحيح', !!lastCall && String(lastCall.url).indexOf('/api/google/disconnect') > -1,
      lastCall && String(lastCall.url));
   ok('فصل الربط POST', !!lastCall && lastCall.init && lastCall.init.method === 'POST');

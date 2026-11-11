@@ -10,15 +10,22 @@
   var DEFAULT_PASSWORD = '2468';
   var KEY_PASSWORD = 'app_password';
   var KEY_CUSTOMERS = 'app_customers';
+  var KEY_SECTION_LOCKS = 'app_section_locks_v1';
 
-  /* الأقسام المحمية بكلمة المرور */
-  var PROTECTED = {
-    collection: 'التحصيل',
-    partners: 'الشركاء',
-    associations: 'جمعيات',
-    operations: 'العمليات',
-    details: 'التفاصيل'
+  /* كل الأقسام الرئيسية القابلة للقفل من الإعدادات (للأدمن فقط) */
+  var SECTION_LOCKABLE = [
+    'home', 'customers', 'add-customer', 'suppliers', 'add-supplier',
+    'ledger', 'collection', 'partners', 'associations', 'stores',
+    'employees', 'details', 'operations'
+  ];
+  /* الأقسام المقفولة افتراضيًا بكلمة المرور العامة — نفس سلوك النسخة القديمة */
+  var DEFAULT_LOCKED = {
+    collection: true, partners: true, associations: true, operations: true, details: true
   };
+
+  /* أسماء الشهور تُستخدم في أول رسم للتحصيل، فلازم تتعرف قبل أي رسم. */
+  var AR_MONTH_NAMES = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+    'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
   var SECTION_NAMES = {
     home: 'الرئيسية',
@@ -63,6 +70,62 @@
   function setPassword(p) {
     try { localStorage.setItem(KEY_PASSWORD, p); } catch (e) {}
   }
+
+  /* أقفال الأقسام: كل قسم إما مفتوح، أو true (كلمة المرور العامة)،
+     أو نص (كلمة مرور خاصة). تُحفظ محليًا، ولا تُعرض إلا للأدمن. */
+  function getSectionLocks() {
+    try {
+      var raw = localStorage.getItem(KEY_SECTION_LOCKS);
+      if (raw) {
+        var data = JSON.parse(raw);
+        var src = data && data.locks ? data.locks : data;
+        if (src && typeof src === 'object' && !Array.isArray(src)) {
+          var out = {};
+          SECTION_LOCKABLE.forEach(function (id) {
+            if (src[id]) out[id] = src[id] === true ? true : String(src[id]);
+          });
+          return out;
+        }
+      }
+    } catch (e) {}
+    var seed = {};
+    Object.keys(DEFAULT_LOCKED).forEach(function (id) {
+      if (DEFAULT_LOCKED[id]) seed[id] = true;
+    });
+    return seed;
+  }
+
+  function saveSectionLocks(locks) {
+    try {
+      localStorage.setItem(KEY_SECTION_LOCKS, JSON.stringify({ version: 1, locks: locks || {} }));
+    } catch (e) {}
+  }
+
+  function sectionPassword(id) {
+    var v = getSectionLocks()[id];
+    if (v === true) return getPassword();
+    return (typeof v === 'string' && v) ? v : '';
+  }
+
+  function isSectionLocked(id) {
+    return !!getSectionLocks()[id];
+  }
+
+  function lockedSectionCount() {
+    var locks = getSectionLocks();
+    return SECTION_LOCKABLE.filter(function (id) { return !!locks[id]; }).length;
+  }
+
+  function isAdminUi() {
+    try {
+      if (window.APP_TRUSTED_RUNTIME === true) return true;
+      if (document.documentElement.getAttribute('data-viewer-mode') === '1') return false;
+      var role = localStorage.getItem('app_user_role');
+      if (role === 'viewer') return false;
+      if (role === 'admin') return true;
+    } catch (e) {}
+    return true; /* مالك محلي غير مربوط */
+  }
   /* قراءة قائمة سليمة من التخزين:
      - لو المحتوى مش مصفوفة نرجع الافتراضي بدل ما يقع الرسم كله
      - ولو فيه عناصر مش كائنات نتجاهلها، عشان أي عنصر تالف
@@ -72,7 +135,7 @@
      (قطع السكربت كان بيمنع الإقلاع فتظهر الشاشة فاضية). */
   function safeRun(run, label) {
     try { run(); } catch (e) {
-      try { console.error('فشل «' + label + '»: ' + (e && e.message ? e.message : e)); } catch (e2) {}
+      try { console.error('فشل «' + label + '»: ' + (e && e.stack ? e.stack : (e && e.message ? e.message : e))); } catch (e2) {}
     }
   }
 
@@ -153,14 +216,14 @@
     if (content) content.scrollTop = 0;
     var status = $('#statusSection');
     if (status) status.textContent = SECTION_NAMES[id] || '';
-    document.title = (SECTION_NAMES[id] ? SECTION_NAMES[id] + ' — ' : '') + 'نظام الإدارة المتكامل';
+    document.title = (SECTION_NAMES[id] ? SECTION_NAMES[id] + ' — ' : '') + 'WorkFlow';
     /* كل عملية رسم مُغلّفة بـ try: لو قسم واحد فشل لأي سبب (بيانات تالفة مثلاً)
        باقي الأقسام بتتعرض عادي وبيظهر تنبيه بدل الشاشة الفاضية. */
     var renderFailed = [];
     function step(run, label) {
       try { run(); } catch (e) {
         renderFailed.push(label);
-        try { console.error('فشل رسم «' + label + '»: ' + (e && e.message ? e.message : e)); } catch (e2) {}
+        try { console.error('فشل رسم «' + label + '»: ' + (e && e.stack ? e.stack : (e && e.message ? e.message : e))); } catch (e2) {}
       }
     }
     if (id === 'customers') step(function () { renderCustomers(); }, 'العملاء');
@@ -177,6 +240,7 @@
     if (id === 'member-profile') step(function () { renderMemberProfile(); }, 'ملف العضو');
     if (id === 'operations') step(function () { renderOperations(); }, 'العمليات');
     if (id === 'settings') step(function () { renderDataSafety(); }, 'سلامة البيانات');
+    if (id === 'settings') step(function () { renderSectionLocks(); }, 'أقفال الأقسام');
     if (id === 'supplier-profile') step(function () { fillPartyLists(); }, 'قوائم الأطراف');
     if (id === 'settings') step(function () { renderExportGrid(); refreshDriveStatus(); loadSyncFolder(); renderNetworkToggle(); renderLocalBackup(); }, 'الإعدادات');
     if (id === 'suppliers') step(function () {
@@ -203,18 +267,37 @@
   }
 
   function navigate(id) {
-    if (PROTECTED[id] && !unlocked[id]) { openPasswordModal(id); return; }
+    if (isSectionLocked(id) && !unlocked[id]) { openPasswordModal(id); return; }
     showView(id);
   }
 
   /* ---------- نافذة كلمة المرور ---------- */
   var modal = $('#pwdModal');
   var dots = $$('#pwdDots i');
+  var dotsBox = $('#pwdDots');
   var errorEl = $('#pwdError');
   var buffer = '';
 
+  /* طول كلمة مرور القسم الحالي: 4 أرقام للخاصة، أو طول كلمة المرور العامة
+     إن كانت أطول. ده يمنع قفل المستخدم خارج الأقسام لو غيّر كلمة المرور العامة. */
+  function passwordLength() {
+    var target = pendingView ? String(sectionPassword(pendingView)) : '';
+    return Math.max(4, Math.min(8, target.length || 4));
+  }
+
   function renderDots() {
-    dots.forEach(function (d, i) { d.classList.toggle('on', i < buffer.length); });
+    var need = passwordLength();
+    if (dotsBox) {
+      while (dots.length < need) {
+        var extra = document.createElement('i');
+        dotsBox.appendChild(extra);
+        dots.push(extra);
+      }
+    }
+    dots.forEach(function (d, i) {
+      d.hidden = i >= need;
+      d.classList.toggle('on', i < buffer.length);
+    });
   }
 
   function openPasswordModal(view) {
@@ -222,12 +305,17 @@
     buffer = '';
     renderDots();
     errorEl.hidden = true;
-    $('#pwdSub').textContent = 'أدخل كلمة المرور لفتح «' + PROTECTED[view] + '»';
+    $('#pwdSub').textContent = 'أدخل كلمة المرور لفتح «' + (SECTION_NAMES[view] || view) + '»';
     modal.classList.add('is-open');
     modal.setAttribute('aria-hidden', 'false');
   }
 
-  function closePasswordModal() {
+  function closePasswordModal(force) {
+    /* قفل الرئيسية لا يُغلق بالخطأ قبل إدخال كلمة المرور، وإلا تظهر محتوياتها خلف النافذة. */
+    if (!force && pendingView === 'home' && !unlocked.home) {
+      toast('الرئيسية مقفولة — أدخل كلمة المرور لفتحها', true);
+      return;
+    }
     modal.classList.remove('is-open');
     modal.setAttribute('aria-hidden', 'true');
     pendingView = null;
@@ -244,12 +332,12 @@
 
   function checkPassword() {
     if (buffer.length < 4) return;
-    if (buffer === getPassword()) {
+    if (buffer === sectionPassword(pendingView)) {
       var target = pendingView;
       unlocked[target] = true;
       closePasswordModal();
       showView(target);
-      toast('تم فتح قسم «' + PROTECTED[target] + '» بنجاح');
+      toast('تم فتح قسم «' + (SECTION_NAMES[target] || target) + '» بنجاح');
     } else {
       errorEl.hidden = false;
       shake();
@@ -263,10 +351,10 @@
     errorEl.hidden = true;
     if (key === 'clr') { buffer = ''; renderDots(); return; }
     if (key === 'ok') { checkPassword(); return; }
-    if (/^[0-9]$/.test(key) && buffer.length < 4) {
+    if (/^[0-9]$/.test(key) && buffer.length < passwordLength()) {
       buffer += key;
       renderDots();
-      if (buffer.length === 4) setTimeout(checkPassword, 160);
+      if (buffer.length === passwordLength()) setTimeout(checkPassword, 160);
     }
   }
 
@@ -304,10 +392,193 @@
 
   function renderHomeStats() {
     var count = getCustomers().length;
+    var suppliers = 0;
+    try { suppliers = getSuppliers().length; } catch (e) {}
+    var locked = lockedSectionCount();
     var a = $('#statCustomers');
     var b = $('#cardCustomers');
     if (a) a.textContent = count;
     if (b) b.textContent = count;
+    var supA = $('#statSuppliers');
+    if (supA) supA.textContent = suppliers;
+    var lockA = $('#statLocked');
+    if (lockA) lockA.textContent = locked;
+    refreshLockBadges();
+    try { renderOverdueBell(); } catch (eBell) {}
+  }
+
+  /* ---------- جرس تنبيهات التحصيل ---------- */
+  function overdueItems() {
+    var out = [];
+    getCustomers().forEach(function (c, i) {
+      if (!c || typeof c !== 'object') return;
+      var plan;
+      try { plan = monthlyPlan(c); } catch (e) { return; }
+      if (!plan || !plan.active || !plan.isLate) return;
+      var d = derive(c);
+      var months = Array.isArray(plan.overdueMonths) ? plan.overdueMonths : [];
+      out.push({
+        idx: i, name: c.name || 'بدون اسم', phone: c.phone || '',
+        months: months.length,
+        monthsText: months.map(function (m) { return monthLabel(m.key); }).join('، '),
+        amount: Number(plan.requiredNow || plan.overdueAmount || 0),
+        rest: Number(d.rest || 0)
+      });
+    });
+    out.sort(function (a, b) {
+      return (b.months - a.months) || (b.amount - a.amount) ||
+        String(a.name).localeCompare(String(b.name), 'ar');
+    });
+    return out;
+  }
+
+  function renderOverdueBell() {
+    var badge = $('#notifBadge');
+    var list = $('#notifList');
+    var count = $('#notifCount');
+    if (!badge || !list) return;
+    var items = overdueItems();
+    badge.textContent = items.length > 99 ? '99+' : String(items.length);
+    badge.hidden = items.length === 0;
+    var btn = $('#notifBtn');
+    if (btn) {
+      var title = items.length
+        ? ('تنبيهات التحصيل — ' + items.length + ' عميل متأخر')
+        : 'تنبيهات التحصيل — لا يوجد متأخرون';
+      btn.title = title;
+      btn.setAttribute('aria-label', title);
+    }
+    if (count) count.textContent = items.length ? (items.length + ' عميل متأخر') : 'لا يوجد متأخرون';
+    if (!items.length) {
+      list.innerHTML = '<div class="notif-empty"><b>كل التحصيلات منتظمة ✓</b><span>لا يوجد عملاء متأخرون في السداد الآن.</span></div>';
+      return;
+    }
+    list.innerHTML = items.map(function (it) {
+      var monthsShort = it.monthsText || '—';
+      if (monthsShort.length > 64) monthsShort = monthsShort.slice(0, 62) + '…';
+      return '<button type="button" class="notif-item" data-notif-idx="' + it.idx + '">' +
+        '<span class="notif-item__icon">' + esc(colInitials(it.name)) + '</span>' +
+        '<span class="notif-item__main">' +
+          '<b>' + esc(it.name) + '</b>' +
+          '<small>' + esc(it.phone || 'بدون هاتف') + ' · متأخر ' + it.months + (it.months === 1 ? ' شهر' : ' شهور') + '</small>' +
+          '<em>' + esc(monthsShort) + '</em>' +
+        '</span>' +
+        '<span class="notif-item__amount"><b>' + money(it.amount) + '</b><small>المطلوب الآن</small>' +
+          (it.rest > it.amount ? '<i>المتبقي ' + money(it.rest) + '</i>' : '') +
+        '</span>' +
+      '</button>';
+    }).join('');
+  }
+
+  function setNotifOpen(open) {
+    var pop = $('#notifPop'), btn = $('#notifBtn');
+    if (!pop) return;
+    pop.hidden = !open;
+    if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
+  var notifBtnEl = $('#notifBtn');
+  if (notifBtnEl) notifBtnEl.addEventListener('click', function (e) {
+    e.stopPropagation();
+    renderOverdueBell();
+    var pop = $('#notifPop');
+    if (pop) setNotifOpen(pop.hidden);
+  });
+  var notifCloseEl = $('#notifClose');
+  if (notifCloseEl) notifCloseEl.addEventListener('click', function (e) {
+    e.stopPropagation();
+    setNotifOpen(false);
+  });
+  var notifAllEl = $('#notifOpenCollection');
+  if (notifAllEl) notifAllEl.addEventListener('click', function () {
+    setNotifOpen(false);
+    navigate('collection');
+  });
+  document.addEventListener('click', function (e) {
+    var pop = $('#notifPop');
+    if (!pop || pop.hidden) return;
+    if (e.target && e.target.closest && e.target.closest('#notifPop, #notifBtn')) return;
+    setNotifOpen(false);
+  });
+  document.addEventListener('click', function (e) {
+    var it = e.target && e.target.closest ? e.target.closest('[data-notif-idx]') : null;
+    if (!it) return;
+    var idx = Number(it.getAttribute('data-notif-idx'));
+    setNotifOpen(false);
+    if (isFinite(idx) && idx > -1) openProfile(idx);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    var pop = $('#notifPop');
+    if (pop && !pop.hidden) { setNotifOpen(false); e.preventDefault(); }
+  });
+  setInterval(function () {
+    try { renderOverdueBell(); } catch (e) {}
+  }, 60 * 1000);
+
+  /* تحديث علامات القفل على بطاقات الرئيسية والأقسام حسب إعدادات الأدمن */
+  function refreshLockBadges() {
+    $$('.card[data-go]').forEach(function (card) {
+      var id = card.getAttribute('data-go');
+      var locked = isSectionLocked(id);
+      card.classList.toggle('card--locked', !!locked);
+      var icon = card.querySelector('.ico--lock');
+      if (icon) icon.style.display = locked ? '' : 'none';
+    });
+    $$('.protected-pill').forEach(function (pill) {
+      var view = pill.closest ? pill.closest('.view') : null;
+      var id = view && view.id ? view.id.replace(/^view-/, '') : '';
+      if (id) pill.hidden = !isSectionLocked(id);
+    });
+  }
+
+  /* لوحة إعدادات أقفال الأقسام — للأدمن فقط */
+  function renderSectionLocks() {
+    var panel = $('#sectionLocksPanel');
+    var list = $('#sectionLocksList');
+    if (!panel || !list) return;
+    if (!isAdminUi()) { panel.hidden = true; return; }
+    panel.hidden = false;
+    var locks = getSectionLocks();
+    list.innerHTML = SECTION_LOCKABLE.map(function (id) {
+      var locked = !!locks[id];
+      var custom = (typeof locks[id] === 'string' && !!locks[id]);
+      var note = locked ? (custom ? 'كلمة مرور خاصة' : 'كلمة المرور العامة') : 'مفتوح بدون كلمة مرور';
+      return '<div class="lock-row" data-lock-row="' + id + '">' +
+        '<label class="lock-row__main"><input type="checkbox" data-lock-enabled="' + id + '"' + (locked ? ' checked' : '') + ' />' +
+        '<span><b>' + escapeHtml(SECTION_NAMES[id] || id) + '</b><small>' + escapeHtml(note) + '</small></span></label>' +
+        '<input class="lock-row__pass" type="password" inputmode="numeric" autocomplete="new-password" maxlength="4" data-lock-pass="' + id + '" placeholder="' + (custom ? 'اتركه فارغًا للإبقاء على الخاصة' : 'اتركه فارغًا للعامة') + '"' + (locked ? '' : ' disabled') + ' />' +
+        '</div>';
+    }).join('');
+  }
+
+  function saveSectionLocksFromUI() {
+    if (!isAdminUi()) { toast('هذه الإعدادات للأدمن فقط', true); return; }
+    var old = getSectionLocks();
+    var next = {};
+    var bad = '';
+    $$('#sectionLocksList .lock-row').forEach(function (row) {
+      var cb = row.querySelector('[data-lock-enabled]');
+      var input = row.querySelector('[data-lock-pass]');
+      if (!cb || !cb.checked) return;
+      var id = cb.getAttribute('data-lock-enabled');
+      var pass = String((input && input.value) || '').trim();
+      if (pass) {
+        if (!/^\d{4}$/.test(pass)) { bad = 'كلمة مرور «' + (SECTION_NAMES[id] || id) + '» لازم 4 أرقام بالضبط'; return; }
+        next[id] = pass;
+      } else if (old[id] === true) {
+        next[id] = true;
+      } else if (typeof old[id] === 'string' && old[id]) {
+        next[id] = old[id];
+      } else {
+        bad = 'اكتب كلمة مرور للقسم «' + (SECTION_NAMES[id] || id) + '»';
+      }
+    });
+    if (bad) { toast(bad, true); return; }
+    saveSectionLocks(next);
+    renderSectionLocks();
+    renderHomeStats();
+    toast('تم حفظ أقفال الأقسام');
   }
 
   function renderCustomers(filter) {
@@ -975,6 +1246,9 @@
     m.classList.remove('is-open');
     m.setAttribute('aria-hidden', 'true');
   }
+
+  /* متاح للوحدات المنفصلة (شريط المشاهد) لتستخدم نفس نافذة التأكيد */
+  try { window.nizamConfirm = openConfirm; } catch (eConfirm) {}
 
   function shakeConfirm() {
     var m = $('#confirmModal');
@@ -2560,12 +2834,13 @@
       function fail(msg) { err.textContent = msg; err.hidden = false; }
 
       if (current !== getPassword()) return fail('كلمة المرور الحالية غير صحيحة');
-      if (next.length < 4) return fail('كلمة المرور الجديدة يجب أن تكون 4 أرقام على الأقل');
+      if (!/^\d{4,8}$/.test(next)) return fail('كلمة المرور الجديدة يجب أن تكون من 4 إلى 8 أرقام');
       if (next !== confirm) return fail('كلمتا المرور الجديدتان غير متطابقتين');
 
       setPassword(next);
       err.hidden = true;
       pwdForm.reset();
+      renderSectionLocks();
       toast('تم تحديث كلمة المرور بنجاح');
     });
 
@@ -2580,6 +2855,28 @@
     });
   }
 
+  var sectionLocksListEl = $('#sectionLocksList');
+  if (sectionLocksListEl) {
+    sectionLocksListEl.addEventListener('change', function (e) {
+      var cb = e.target && e.target.closest ? e.target.closest('[data-lock-enabled]') : null;
+      if (!cb) return;
+      var row = cb.closest ? cb.closest('.lock-row') : null;
+      var input = row ? row.querySelector('[data-lock-pass]') : null;
+      if (input) input.disabled = !cb.checked;
+    });
+  }
+  var saveSectionLocksBtn = $('#saveSectionLocks');
+  if (saveSectionLocksBtn) saveSectionLocksBtn.addEventListener('click', saveSectionLocksFromUI);
+  var resetSectionLocksBtn = $('#resetSectionLocks');
+  if (resetSectionLocksBtn) {
+    resetSectionLocksBtn.addEventListener('click', function () {
+      saveSectionLocks(JSON.parse(JSON.stringify(DEFAULT_LOCKED)));
+      renderSectionLocks();
+      renderHomeStats();
+      toast('تمت استعادة أقفال الأقسام الافتراضية');
+    });
+  }
+
   /* ---------- تنبيهات (قابلة للإغلاق بـ × والسحب للجنب) ---------- */
   var toastTimer = null;
   function hideToast() {
@@ -2587,6 +2884,7 @@
     if (!el) return;
     clearTimeout(toastTimer);
     el.classList.remove('show', 'is-dragging');
+    el.setAttribute('aria-hidden', 'true');
     el.style.setProperty('--tx', '0px');
     el.style.setProperty('--ty', '0px');
   }
@@ -2603,6 +2901,7 @@
     el.style.setProperty('--tx', '0px');
     el.style.setProperty('--ty', '0px');
     el.classList.add('show');
+    el.setAttribute('aria-hidden', 'false');
     /* نفس الرسالة وهي ظاهرة ما بتجدّدش العدّاد — عشان تختفي بعد 15ث مهما اتكررت */
     if (!same) {
       clearTimeout(toastTimer);
@@ -2670,6 +2969,22 @@
     }
     el.addEventListener('pointerup', endDrag);
     el.addEventListener('pointercancel', endDrag);
+
+    /* طبقة إغلاق مبكرة: × تقفل الإشعار قبل أي معالج آخر (بوابة المشاهد
+       أو أي كود تاني) ممكن يعيد فتحه بنفس الرسالة. */
+    function captureClose(e) {
+      var t = e.target;
+      if (!t || !t.closest || !t.closest('#toastClose, .toast__x')) return;
+      if (e.preventDefault) e.preventDefault();
+      if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+      hideToast();
+    }
+    document.addEventListener('click', captureClose, true);
+    document.addEventListener('pointerup', captureClose, true);
+    document.addEventListener('touchend', captureClose, true);
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') hideToast();
+    });
   })();
 
   /* ---------- الساعة والتواريخ (12 ساعة + هجري وميلادي) ---------- */
@@ -2792,6 +3107,7 @@
       '<div class="summary__box"><small>المبلغ الإجمالي قبل خصم المقدم</small><b>' + money(t.total) + '</b></div>' +
       '<div class="summary__box summary__box--in"><small>إجمالي المدفوع (مقدم + تحصيل)</small><b>' + money(t.paid) + '</b></div>' +
       '<div class="summary__box summary__box--out"><small>المبلغ الاجمالي المتبقي للتحصيل</small><b>' + money(t.rest) + '</b></div>';
+    renderCollectionGlance();
   }
 
   function collectionDetailHTML(c, idx) {
@@ -2813,7 +3129,10 @@
         '<td>' + esc(p.no || (i + 1)) + '</td>' +
         '<td class="amount">' + money(running) + '</td>' +
         '<td>' + (p.note ? esc(p.note) : ((Array.isArray(p.months) && p.months.length) ? ('شهور: ' + esc(p.months.map(monthLabel).join('، '))) : '—')) + '</td>' +
-        '<td class="col-cell"><button type="button" class="btn btn--ghost btn--sm btn--danger" data-del-colpay="' + i + '" data-cidx="' + idx + '">حذف</button></td>' +
+        '<td class="col-cell"><div class="col-actions">' +
+          '<button type="button" class="btn btn--ghost btn--sm" data-edit-colpay="' + i + '" data-cidx="' + idx + '">تعديل</button>' +
+          '<button type="button" class="btn btn--ghost btn--sm btn--danger" data-del-colpay="' + i + '" data-cidx="' + idx + '">حذف</button>' +
+        '</div></td>' +
         '</tr>';
     });
     (d.ledList || []).forEach(function (o, k) {
@@ -2857,6 +3176,7 @@
       planDetailHTML(c) +
 
       '<form class="form" id="mainCollectForm" data-idx="' + idx + '" novalidate>' +
+        '<p class="collect-edit-note" data-edit-note hidden></p>' +
         '<div class="form__row form__row--3">' +
           '<label class="field"><span>التاريخ *</span><input type="date" name="date" value="' + todayISO() + '" required /></label>' +
           '<label class="field"><span>المبلغ المدفوع *</span><input type="number" name="amount" min="0" step="any" required placeholder="' + (plan.requiredNow > 0 ? money(plan.requiredNow) : '0') + '" /></label>' +
@@ -2872,13 +3192,14 @@
         '<p class="form__error" hidden></p>' +
         '<div class="form__actions">' +
           (plan.requiredNow > 0 ? '<button type="button" class="btn btn--ghost" data-fill-required="' + plan.requiredNow + '">دفع المطلوب الآن (' + money(plan.requiredNow) + ')</button>' : '') +
+          '<button type="button" class="btn btn--ghost" data-cancel-edit hidden>إلغاء التعديل</button>' +
           '<button type="submit" class="btn btn--primary"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-plus"></use></svg> إضافة تحصيل</button>' +
         '</div>' +
       '</form>' +
 
       '<div class="table-wrap">' +
         '<table class="table">' +
-          '<thead><tr><th>#</th><th>التاريخ</th><th>المبلغ قبل الدفعة</th><th>المبلغ المدفوع</th><th>المرة في الدفع</th><th>المتبقي بعد الدفعة</th><th>ملاحظات</th><th style="width:64px"><span class="sr-only">حذف</span></th></tr></thead>' +
+          '<thead><tr><th>#</th><th>التاريخ</th><th>المبلغ قبل الدفعة</th><th>المبلغ المدفوع</th><th>المرة في الدفع</th><th>المتبقي بعد الدفعة</th><th>ملاحظات</th><th style="width:150px">الإجراءات</th></tr></thead>' +
           '<tbody>' + rows + '</tbody>' +
         '</table>' +
       '</div>' +
@@ -2890,8 +3211,129 @@
     if (!c) return;
     var d = derive(c);
     var amt = parseFloat(form.elements.amount.value) || 0;
+    var editAttr = form.getAttribute('data-edit-pay');
+    var editPi = (editAttr !== null && editAttr !== '') ? Number(editAttr) : -1;
+    var oldAmt = 0;
+    if (editPi > -1 && Array.isArray(c.payments) && c.payments[editPi]) {
+      oldAmt = Number(c.payments[editPi].amount || 0);
+    }
     form.elements.restBefore.value = money(d.rest);
-    form.elements.restAfter.value = money(Math.max(d.rest - amt, 0));
+    form.elements.restAfter.value = money(Math.max(d.rest + oldAmt - amt, 0));
+  }
+
+  function resetMainCollectForm(form) {
+    if (!form) return;
+    var c = getCustomers()[Number(form.getAttribute('data-idx'))];
+    var d = c ? derive(c) : null;
+    form.removeAttribute('data-edit-pay');
+    form.classList.remove('is-editing');
+    var note = form.querySelector('[data-edit-note]');
+    if (note) { note.hidden = true; note.textContent = ''; }
+    var cancel = form.querySelector('[data-cancel-edit]');
+    if (cancel) cancel.hidden = true;
+    var submit = form.querySelector('button[type="submit"]');
+    if (submit) submit.innerHTML = '<svg viewBox="0 0 24 24" class="ico"><use href="#ic-plus"></use></svg> إضافة تحصيل';
+    if (form.elements.date) form.elements.date.value = todayISO();
+    if (form.elements.amount) form.elements.amount.value = '';
+    if (form.elements.note) form.elements.note.value = '';
+    if (form.elements.no) form.elements.no.value = d ? String(d.pays.length + 1) : '1';
+    var err = form.querySelector('.form__error');
+    if (err) err.hidden = true;
+    if (c) updateMainCalc(form);
+  }
+
+  /* تعديل دفعة قائمة: نستخدم نفس نموذج الإضافة بدل نموذج جديد */
+  document.addEventListener('click', function (e) {
+    var btn = e.target && e.target.closest ? e.target.closest('[data-edit-colpay]') : null;
+    if (!btn) return;
+    var ci = Number(btn.getAttribute('data-cidx'));
+    var pi = Number(btn.getAttribute('data-edit-colpay'));
+    var list = getCustomers();
+    var c = list[ci];
+    var p = c && Array.isArray(c.payments) ? c.payments[pi] : null;
+    if (!p) { toast('الدفعة غير موجودة — أعد فتح القائمة', true); return; }
+    if (collectionOpen !== ci) {
+      collectionOpen = ci;
+      renderCollection(colFilter());
+    }
+    var form = $('#mainCollectForm');
+    if (!form) return;
+    form.setAttribute('data-edit-pay', String(pi));
+    form.classList.add('is-editing');
+    if (form.elements.date) form.elements.date.value = p.date || todayISO();
+    if (form.elements.amount) form.elements.amount.value = String(Number(p.amount || 0));
+    if (form.elements.no) form.elements.no.value = String(p.no || (pi + 1));
+    if (form.elements.note) form.elements.note.value = p.note || '';
+    var note = form.querySelector('[data-edit-note]');
+    if (note) {
+      note.hidden = false;
+      note.textContent = 'تعديل الدفعة رقم ' + (p.no || (pi + 1)) + ' — عدّل القيم ثم اضغط «حفظ التعديل».';
+    }
+    var cancel = form.querySelector('[data-cancel-edit]');
+    if (cancel) cancel.hidden = false;
+    var submit = form.querySelector('button[type="submit"]');
+    if (submit) submit.textContent = 'حفظ التعديل';
+    updateMainCalc(form);
+    try { form.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e2) {}
+  });
+
+  document.addEventListener('click', function (e) {
+    var btn = e.target && e.target.closest ? e.target.closest('[data-cancel-edit]') : null;
+    if (!btn) return;
+    resetMainCollectForm($('#mainCollectForm'));
+  });
+
+  /* شريط شهور مختصر يظهر في صف العميل: أخضر مدفوع، أحمر غير مدفوع،
+     أصفر مستحق الآن — عشان تعرف الشهر المتأخر من نظرة واحدة. */
+  function monthStripHTML(plan) {
+    if (!plan || !plan.active) return '<span class="month-strip__none">بدون يوم تحصيل</span>';
+    var months = Array.isArray(plan.months) ? plan.months : [];
+    if (!months.length) return '<span class="month-strip__none">لا توجد شهور</span>';
+    var paid = 0, late = 0;
+    var cells = months.map(function (m) {
+      var cls = m.state === 'paid' ? (m.latePaid ? 'is-late-paid' : 'is-paid')
+        : m.state === 'overdue' ? 'is-overdue'
+          : m.state === 'due' ? 'is-due' : 'is-upcoming';
+      var stateText = m.state === 'paid' ? (m.latePaid ? 'مدفوع بعد التأخير' : 'مدفوع')
+        : m.state === 'overdue' ? 'غير مدفوع — متأخر'
+          : m.state === 'due' ? 'مستحق الآن' : 'لم يحن بعد';
+      if (m.state === 'paid') paid++;
+      if (m.state === 'overdue') late++;
+      var tip = monthLabel(m.key) + ' — ' + stateText;
+      if (m.state !== 'paid') tip += ' · المتبقي ' + money(m.remaining || m.amount || 0);
+      var current = plan.current && plan.current.key === m.key;
+      return '<span class="mcell ' + cls + (current ? ' is-current' : '') + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '">' +
+        esc(String(m.key || '').slice(5)) + '</span>';
+    }).join('');
+    return '<div class="month-strip">' +
+      '<div class="month-strip__meta"><span class="' + (late ? 'neg' : 'pos') + '">' +
+        (late ? late + ' شهر غير مدفوع' : 'كل الشهور مدفوعة') + '</span>' +
+        '<small>' + paid + '/' + months.length + ' مدفوع</small></div>' +
+      '<div class="month-strip__cells">' + cells + '</div></div>';
+  }
+
+  /* ملخص سريع أعلى التحصيل: أرقام قابلة للنقر تفلتر الجدول فورًا */
+  function renderCollectionGlance() {
+    var box = $('#collectionGlance');
+    if (!box) return;
+    var list = getCustomers();
+    var total = list.length, active = 0, late = 0, paid = 0, noPlan = 0, overdueMonths = 0;
+    list.forEach(function (c) {
+      var p = monthlyPlan(c);
+      if (!p.active) { noPlan++; return; }
+      active++;
+      overdueMonths += p.overdueMonths.length;
+      if (p.isLate) late++;
+      else if (p.settled || (p.current && p.current.state === 'paid')) paid++;
+    });
+    var regular = Math.max(active - late - paid, 0);
+    box.innerHTML = '<div class="glance-row">' +
+      '<button type="button" class="glance-chip" data-col-quick="all"><b>' + total + '</b><span>كل العملاء</span></button>' +
+      '<button type="button" class="glance-chip is-late" data-col-quick="late"><b>' + late + '</b><span>متأخرون</span></button>' +
+      '<button type="button" class="glance-chip is-paid" data-col-quick="paid"><b>' + (paid + regular) + '</b><span>دفعوا / منتظمون</span></button>' +
+      '<button type="button" class="glance-chip is-due" data-col-quick="prev"><b>' + overdueMonths + '</b><span>شهور غير مدفوعة</span></button>' +
+      '</div><p class="glance-note">اضغط على أي رقم لعرض الفئة فورًا' +
+      (noPlan ? ' · ' + noPlan + ' عميل بدون يوم تحصيل' : '') + '</p>';
   }
 
   function renderCollection(filter) {
@@ -2940,16 +3382,17 @@
         '<td>' + esc(c.phone || '—') + '</td>' +
         '<td>' + esc(c.address || '—') + '</td>' +
         '<td class="amount' + (d.rest > 0 ? ' neg' : '') + '">' + money(d.rest) + '</td>' +
+        '<td class="col-months">' + monthStripHTML(plan) + '</td>' +
         '<td class="col-status">' + planPill(plan) + '</td>' +
         '<td class="col-arrow"><span class="chev"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-arrow"></use></svg></span></td>' +
         '</tr>';
       if (open) {
-        html += '<tr class="collection-detail"><td colspan="7">' + collectionDetailHTML(c, entry.i) + '</td></tr>';
+        html += '<tr class="collection-detail"><td colspan="8">' + collectionDetailHTML(c, entry.i) + '</td></tr>';
       }
     });
 
     if (!list.length) {
-      html = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:26px">' +
+      html = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:26px">' +
         (q ? 'لا توجد نتائج مطابقة' : 'لا يوجد عملاء بعد — أضف عميلاً أولاً') + '</td></tr>';
     }
 
@@ -2991,18 +3434,52 @@
     var date = el.date.value;
     var amt = parseFloat(el.amount.value);
     var no = parseInt(el.no.value, 10);
+    var editAttr = form.getAttribute('data-edit-pay');
+    var editPi = (editAttr !== null && editAttr !== '') ? Number(editAttr) : -1;
+    var oldPay = editPi > -1 && Array.isArray(c.payments) ? c.payments[editPi] : null;
+    if (editPi > -1 && !oldPay) {
+      resetMainCollectForm(form);
+      return fail('الدفعة المطلوب تعديلها غير موجودة — أعد فتح القائمة');
+    }
 
     var miss = [];
     if (!date) miss.push('التاريخ');
     if (!(amt > 0)) miss.push('المبلغ المدفوع');
     if (!(no > 0)) miss.push('المرة في الدفع');
     if (miss.length) return fail('الرجاء إدخال: ' + miss.join('، '));
-    if (amt > d.rest) return fail('المبلغ المدفوع أكبر من المتبقي (' + money(d.rest) + ')');
+    var maxAllowed = d.rest + (oldPay ? Number(oldPay.amount || 0) : 0);
+    if (amt > maxAllowed + 0.005) return fail('المبلغ المدفوع أكبر من المتاح (' + money(maxAllowed) + ')');
     if (err) err.hidden = true;
 
     if (!c.scheduleStart) {
       c.scheduleStart = monthKeyFromISO(c.startDate) || monthKeyOf(new Date().getFullYear(), new Date().getMonth());
     }
+
+    /* حفظ التعديل: نفس الدفعة تُستبدل، والرصيد يُحسب من جديد */
+    if (editPi > -1) {
+      var paysEdit = d.pays.slice();
+      var payEdit = {};
+      Object.keys(oldPay).forEach(function (k) { payEdit[k] = oldPay[k]; });
+      payEdit.date = date;
+      payEdit.amount = amt;
+      payEdit.no = no;
+      payEdit.note = String(el.note.value || '').trim();
+      delete payEdit.months;
+      paysEdit[editPi] = payEdit;
+      paysEdit.sort(function (a, b) { return String(a.date).localeCompare(String(b.date)); });
+      c.payments = paysEdit;
+      var dEdit = derive(c);
+      c.rest = dEdit.rest;
+      c.balance = dEdit.rest;
+      if (c.due == null) c.due = dEdit.due;
+      saveCustomers(list);
+      renderCollection(colFilter());
+      renderCollectionSummary();
+      renderHomeStats();
+      toast('تم تعديل الدفعة — المتبقي: ' + money(dEdit.rest));
+      return;
+    }
+
     var planBefore = monthlyPlan(c);
     var pays = d.pays.slice();
     var pay = { date: date, amount: amt, no: no, note: String(el.note.value || '').trim() };
@@ -3051,6 +3528,15 @@
 
   var collectionStatusFilter = $('#collectionStatusFilter');
   if (collectionStatusFilter) collectionStatusFilter.addEventListener('change', function () {
+    collectionOpen = null;
+    renderCollection(colFilter());
+  });
+
+  document.addEventListener('click', function (e) {
+    var q = e.target && e.target.closest ? e.target.closest('[data-col-quick]') : null;
+    if (!q) return;
+    var f = $('#collectionStatusFilter');
+    if (f) f.value = q.getAttribute('data-col-quick') || 'all';
     collectionOpen = null;
     renderCollection(colFilter());
   });
@@ -3832,8 +4318,6 @@
      • حصيلة الشهر = قيمة السهم × عدد الأعضاء وتُقبض لصاحب الدور
      • الدور يُحدَّد من ترتيب الأعضاء وشهر بداية الدورة
      ---------------------------------------------------------- */
-  var AR_MONTH_NAMES = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
-    'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
   function currentMonthKey() {
     var d = new Date();
@@ -5008,7 +5492,9 @@
       setDriveStatus('is-warn', 'المفاتيح موجودة لكن ' + googleVerdictText(verdict) +
         (tail ? ' — القيمة الحالية تنتهي بـ ' + tail + ')' : '') + ' — اضغط «فحص المفاتيح»');
     } else if (conn) {
+      var admin = /^(gstsyusudg@gmail\.com|mahmoed181186@gmail\.com)$/i.test(String(email || '').trim());
       setDriveStatus('is-ok', 'متصل بحساب Google Drive' + (email ? ' — ' + email : '') +
+        ' — الدور: ' + (admin ? 'أدمن (صلاحيات كاملة)' : 'مشاهد (تصفح فقط)') +
         (viaSite ? ' (الربط عبر الموقع)' : ''));
     } else if (siteLink) {
       setDriveStatus('', 'الربط بيتم من الموقع الرسمي — اضغط «ربط حساب Google» وهيفتح المتصفح');
@@ -5251,21 +5737,11 @@
 
   function startGoogleLogin(e) {
     if (e && e.preventDefault) e.preventDefault();
-    var go = function () {
-      watchDriveConnect();
-      if (typeof location !== 'undefined') location.href = '/api/google/login';
-    };
-    if (typeof fetch !== 'function') { go(); return; }
-    fetch('/api/google/status', { credentials: 'same-origin' })
-      .then(function (r) {
-        if (!r || r.status === 404 || r.status === 501) throw new Error('NOAPI');
-        if (typeof r.clone !== 'function') return null;
-        return r.clone().json().catch(function () { throw new Error('NOAPI'); });
-      })
-      .then(function () { go(); })
-      .catch(function () {
-        toast('مسار ربط Google غير متاح على هذه الصفحة — شغّل المعاينة الكاملة (preview-local.mjs) أو افتح الموقع المنشور.', true);
-      });
+    watchDriveConnect();
+    /* توجيه مباشر لصفحة اختيار حساب Google.
+       ممنوع نعمل أي طلب /status قبل كده: أي تعطّل مؤقت كان بيمنع
+       المستخدم من الوصول لصفحة Google ويحبسه في «إعادة المحاولة». */
+    if (typeof location !== 'undefined') location.href = '/api/google/login';
   }
   window.startGoogleLogin = startGoogleLogin;
 
@@ -5274,13 +5750,43 @@
     startGoogleLogin();
   });
 
-  var driveDisconnectBtn = $('#driveDisconnect');
-  if (driveDisconnectBtn) driveDisconnectBtn.addEventListener('click', function () {
+  function disconnectDriveNow() {
     if (typeof fetch !== 'function') return;
     fetch('/api/google/disconnect', { method: 'POST', credentials: 'same-origin' })
-      .then(function () { toast('تم فصل الربط'); applyDriveState(driveState.configured, false, ''); })
+      .then(function (r) {
+        if (!r || !r.ok) throw new Error('disconnect ' + (r && r.status));
+        return r.json().catch(function () { return {}; });
+      })
+      .then(function (j) {
+        if (j && j.ok === false) throw new Error(j.error || 'disconnect');
+        try { localStorage.removeItem('app_drive_conn'); } catch (eL) {}
+        toast('تم فصل الربط — تقدر تربط حساب Google تاني');
+        applyDriveState(driveState.configured, false, '');
+        try { window.dispatchEvent(new CustomEvent('nizam:drive-disconnected')); } catch (eD2) {}
+      })
       .catch(function () { toast('تعذّر فصل الربط', true); });
+  }
+
+  var driveDisconnectBtn = $('#driveDisconnect');
+  if (driveDisconnectBtn) driveDisconnectBtn.addEventListener('click', function () {
+    openConfirm({
+      title: 'فصل ربط Google Drive',
+      message: 'هل أنت متأكد من فصل الربط بالحساب ده؟ تقدر تربط حساب Google تاني في أي وقت.',
+      yes: 'موافق',
+      no: 'تراجع',
+      onYes: disconnectDriveNow
+    });
   });
+
+  /* فصل الربط من شريط المشاهد يحدّث نفس واجهة الإعدادات فوراً */
+  try {
+    window.addEventListener('nizam:drive-disconnected', function () {
+      try {
+        driveState.connected = false;
+        applyDriveState(driveState.configured, false, '');
+      } catch (eD) {}
+    });
+  } catch (eEv) {}
 
   var driveFile = $('#driveFile');
   if (driveFile) driveFile.addEventListener('change', function () {
@@ -6193,6 +6699,12 @@
     syncFolderSave.addEventListener('click', function () {
       var v = syncFolderInput ? syncFolderInput.value.trim() : '';
       if (!v) { toast('الصق رابط الفولدر أولاً', true); return; }
+      /* الحفظ المحلي أولاً — لازم ينجح حتى لو الموقع/الـAPI مش متاح. */
+      try {
+        localStorage.setItem('app_sync_custom_folder', v);
+        localStorage.setItem('app_shared_folder_url', v);
+      } catch (e) {}
+      showCustomFolder(v);
       syncFolderSave.disabled = true;
       fetch('/api/sync/folder', {
         method: 'POST',
@@ -6200,35 +6712,37 @@
         body: JSON.stringify({ folderId: v })
       }).then(function (r) { return r.json(); }).then(function (j) {
         syncFolderSave.disabled = false;
-        if (j.ok) {
-          /* نحفظه محلياً كمان — عشان يفضل ظاهر حتى لو قراءة السيرفر فشلت */
-          try { localStorage.setItem('app_sync_custom_folder', v); } catch (e) {}
+        if (j && j.ok) {
           toast('اتحفظ الفولدر المشترك ✓');
           showCustomFolder(v);
         } else {
-          toast(j.error || 'فشل حفظ الفولدر', true);
-          syncFolderShow(j.error || 'فشل الحفظ', false);
+          toast('اتحفظ الفولدر على جهازك ✓ — هيتزامن مع السحابة أول ما الاتصال يرجع', true);
         }
-      }).catch(function (e) {
+      }).catch(function () {
         syncFolderSave.disabled = false;
-        toast('خطأ في الاتصال', true);
+        toast('اتحفظ الفولدر على جهازك ✓ — هيتزامن مع السحابة أول ما الاتصال يرجع', true);
       });
     });
   }
 
   if (syncFolderClear) {
     syncFolderClear.addEventListener('click', function () {
+      try {
+        localStorage.removeItem('app_sync_custom_folder');
+        localStorage.removeItem('app_shared_folder_url');
+      } catch (e) {}
+      if (syncFolderInput) syncFolderInput.value = '';
+      syncFolderClear.hidden = true;
+      syncFolderShow('اترجع للفولدر التلقائي', true);
       fetch('/api/sync/folder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ folderId: '' })
-      }).then(function (r) { return r.json(); }).then(function (j) {
-        try { localStorage.removeItem('app_sync_custom_folder'); } catch (e) {}
-        if (syncFolderInput) syncFolderInput.value = '';
-        syncFolderClear.hidden = true;
-        syncFolderShow('اترجع للفولدر التلقائي', true);
+      }).then(function (r) { return r.json(); }).then(function () {
         toast('اتحذف الفولدر المشترك');
-      }).catch(function () { toast('خطأ في الاتصال', true); });
+      }).catch(function () {
+        toast('اتحذف الفولدر من جهازك — هيتزامن الحذف أول ما الاتصال يرجع', true);
+      });
     });
   }
 
@@ -8745,6 +9259,10 @@
     try { console.error('فشل فتح الرئيسية: ' + (e && e.message ? e.message : e)); } catch (e2) {}
     $$('.view').forEach(function (v) { v.classList.toggle('is-active', v.id === 'view-home'); });
   }
+  /* لو الأدمن قفل الرئيسية نفسها، نطلب كلمة مرورها عند الإقلاع */
+  try {
+    if (isSectionLocked('home') && !unlocked.home) openPasswordModal('home');
+  } catch (eLockHome) {}
   /* علامة للمراقب: الإقلاع وصل للنهاية */
   try { window.__appBooted = true; } catch (e) {}
   if (bootFailed.length) {
@@ -8758,6 +9276,14 @@
       try { toast('حدث خطأ غير متوقع: ' + m, true); } catch (e) {}
     });
   } catch (e) {}
+
+  /* إعادة رسم لوحة الأقفال لو تغيّر دور الحساب بعد فحص Google */
+  try {
+    window.addEventListener('nizam:role', function () {
+      safeRun(renderSectionLocks, 'أقفال الأقسام بعد تغيّر الدور');
+      safeRun(renderHomeStats, 'إحصاءات الرئيسية بعد تغيّر الدور');
+    });
+  } catch (eRole) {}
 
   /* جسر بسيط للوحدات المنفصلة (الموظفون / المصنعية / تصنيف المخازن) */
   window.NizamApp = {
@@ -8774,6 +9300,12 @@
       try { renderLedger(); renderLedgerSummary(); } catch (e) {}
     },
     renderHomeStats: renderHomeStats,
+    renderOverdueBell: renderOverdueBell,
+    overdueItems: overdueItems,
+    getSectionLocks: getSectionLocks,
+    renderSectionLocks: renderSectionLocks,
+    isSectionLocked: isSectionLocked,
+    lockedSectionCount: lockedSectionCount,
     toast: toast,
     money: money,
     esc: esc,

@@ -4,8 +4,8 @@
   <script>window.APP_TRUSTED_RUNTIME = true;</script>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>نظام الإدارة المتكامل</title>
-<meta name="description" content="نظام الإدارة المتكامل — العملاء، الموردون، الدواخل والخوارج، التحصيل، الشركاء والجمعيات" />
+<title>WorkFlow — نظام الإدارة المتكامل</title>
+<meta name="description" content="WorkFlow — نظام الإدارة المتكامل — العملاء، الموردون، الدواخل والخوارج، التحصيل، الشركاء والجمعيات" />
 <meta name="theme-color" content="#0a0d1a" />
 <meta name="color-scheme" content="dark" />
 <link rel="manifest" href="manifest.webmanifest" />
@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-title" content="نظام الإدارة" />
+<meta name="apple-mobile-web-app-title" content="WorkFlow" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -38,8 +38,8 @@
 <!-- شاشة الربط الإلزامية -->
 <div id="forceAuthGate" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:#0a0e15;z-index:999999;display:flex;align-items:center;justify-content:center;">
   <div style="background:linear-gradient(180deg,#151b26,#0a0e15);border:1px solid #4f8cff;border-radius:24px;padding:32px 40px 40px;max-width:500px;width:90%;text-align:center;">
-    <img src="icons/icon-512.png" alt="غلاف التطبيق" width="132" height="132" style="display:block;margin:0 auto 12px;border-radius:30px;box-shadow:0 16px 36px rgba(0,0,0,.5);" />
-    <img src="icons/logo-amw.png" alt="AMW Code" width="120" height="120" style="display:block;margin:0 auto 6px;opacity:.95;" />
+    <img src="icons/icon-512.png" alt="غلاف تطبيق WorkFlow" width="132" height="132" style="display:block;margin:0 auto 12px;border-radius:30px;box-shadow:0 16px 36px rgba(0,0,0,.5);" />
+    <img src="icons/logo-amw.png" alt="AW" width="120" height="120" style="display:block;margin:0 auto 6px;opacity:.95;border-radius:26px;" />
     <h2 style="color:#f2f6fb;margin-bottom:10px;font-size:24px;">ربط حساب Google Drive</h2>
     <p style="color:#9fadc2;margin-bottom:30px;">يجب ربط حساب Google Drive للدخول إلى التطبيق</p>
     <label style="display:block;text-align:right;color:#f2f6fb;margin-bottom:8px;">رابط المجلد العام</label>
@@ -131,10 +131,10 @@
 
     <button class="brand" data-go="home" title="الصفحة الرئيسية">
       <span class="brand__logo">
-        <img src="icons/logo-amw.png" alt="AMW Code" width="38" height="38" />
+        <img src="icons/icon-512.png" alt="WorkFlow" width="38" height="38" />
       </span>
       <span class="brand__text">
-        <strong>نظام الإدارة</strong>
+        <strong>WorkFlow</strong>
         <small>الإصدار 1.0 · b20261101a</small>
       </span>
     </button>
@@ -170,7 +170,7 @@
       <div class="hero">
         <div class="hero__text">
           <span class="badge"><span class="dot"></span> كل الأقسام جاهزة</span>
-          <h1>مرحباً بك في <span>نظام الإدارة</span></h1>
+          <h1>مرحباً بك في <span>WorkFlow</span></h1>
           <p>كل أعمالك في مكان واحد: العملاء، الموردون، الدواخل والخوارج، التحصيل، الشركاء والجمعيات.</p>
           <div class="hero__stats">
             <div class="stat"><b id="statCustomers">0</b><small>عميل</small></div>
@@ -1684,28 +1684,11 @@
       <div class="amw-badge__top">
         <div class="amw-badge__text">
           <small>Designed & Developed by</small>
-          <b>AMW Code Company</b>
-          <span>Eng. Ahmed Mohamed</span>
+          <b>AW</b>
+          <span>WorkFlow — نظام الإدارة المتكامل</span>
         </div>
-        <div class="amw-badge__logo" aria-label="AMW Code">
-          <svg viewBox="0 0 134 68" role="img" aria-hidden="true">
-            <defs>
-              <linearGradient id="amwG1" x1="0" y1="1" x2="1" y2="0">
-                <stop offset="0" stop-color="#e935c1"/>
-                <stop offset="1" stop-color="#7c3aed"/>
-              </linearGradient>
-              <linearGradient id="amwG2" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0" stop-color="#7dd3fc"/>
-                <stop offset="1" stop-color="#4f8cff"/>
-              </linearGradient>
-            </defs>
-            <path d="M6 62 C 16 44 30 20 46 11 C 55 6 59 15 56 31 C 53 45 51 53 51 62"
-                  fill="none" stroke="url(#amwG1)" stroke-width="9" stroke-linecap="round"/>
-            <path d="M25 62 C 30 50 38 36 47 27"
-                  fill="none" stroke="url(#amwG1)" stroke-width="9" stroke-linecap="round"/>
-            <path d="M70 20 C 70 46 77 58 85 58 C 93 58 97 46 97 22 M97 22 C 97 46 101 58 109 58 C 117 58 125 46 125 18"
-                  fill="none" stroke="url(#amwG2)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
+        <div class="amw-badge__logo" aria-label="AW">
+          <img src="icons/logo-amw.png" alt="AW" width="88" height="88" />
         </div>
       </div>
       <a class="amw-badge__wa" id="amwWhats" href="https://wa.me/201013318895" target="_blank" rel="noopener">

@@ -88,7 +88,7 @@ const ok = (name, cond, extra) => {
   console.log('\n[3ب] Service Worker ما يعترضش OAuth');
   const sw = fs.readFileSync('dist/sw.js', 'utf8');
   ok('مسارات /api مستثناة من الاعتراض', /url\.pathname\.indexOf\('\/api\/'\) === 0\) return/.test(sw));
-  ok('نسخة الكاش اتغيّرت', /nizam-idara-v22/.test(sw));
+  ok('نسخة الكاش اتغيّرت', /nizam-idara-v24/.test(sw));
 
   console.log('\n[4] لا أخطاء تشغيل');
   ok('لا أخطاء JS', errors.length === 0, errors.join(' | ').slice(0, 300));

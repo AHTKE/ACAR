@@ -216,7 +216,7 @@
     if (content) content.scrollTop = 0;
     var status = $('#statusSection');
     if (status) status.textContent = SECTION_NAMES[id] || '';
-    document.title = (SECTION_NAMES[id] ? SECTION_NAMES[id] + ' — ' : '') + 'نظام الإدارة المتكامل';
+    document.title = (SECTION_NAMES[id] ? SECTION_NAMES[id] + ' — ' : '') + 'WorkFlow';
     /* كل عملية رسم مُغلّفة بـ try: لو قسم واحد فشل لأي سبب (بيانات تالفة مثلاً)
        باقي الأقسام بتتعرض عادي وبيظهر تنبيه بدل الشاشة الفاضية. */
     var renderFailed = [];
@@ -404,7 +404,117 @@
     var lockA = $('#statLocked');
     if (lockA) lockA.textContent = locked;
     refreshLockBadges();
+    try { renderOverdueBell(); } catch (eBell) {}
   }
+
+  /* ---------- جرس تنبيهات التحصيل ---------- */
+  function overdueItems() {
+    var out = [];
+    getCustomers().forEach(function (c, i) {
+      if (!c || typeof c !== 'object') return;
+      var plan;
+      try { plan = monthlyPlan(c); } catch (e) { return; }
+      if (!plan || !plan.active || !plan.isLate) return;
+      var d = derive(c);
+      var months = Array.isArray(plan.overdueMonths) ? plan.overdueMonths : [];
+      out.push({
+        idx: i, name: c.name || 'بدون اسم', phone: c.phone || '',
+        months: months.length,
+        monthsText: months.map(function (m) { return monthLabel(m.key); }).join('، '),
+        amount: Number(plan.requiredNow || plan.overdueAmount || 0),
+        rest: Number(d.rest || 0)
+      });
+    });
+    out.sort(function (a, b) {
+      return (b.months - a.months) || (b.amount - a.amount) ||
+        String(a.name).localeCompare(String(b.name), 'ar');
+    });
+    return out;
+  }
+
+  function renderOverdueBell() {
+    var badge = $('#notifBadge');
+    var list = $('#notifList');
+    var count = $('#notifCount');
+    if (!badge || !list) return;
+    var items = overdueItems();
+    badge.textContent = items.length > 99 ? '99+' : String(items.length);
+    badge.hidden = items.length === 0;
+    var btn = $('#notifBtn');
+    if (btn) {
+      var title = items.length
+        ? ('تنبيهات التحصيل — ' + items.length + ' عميل متأخر')
+        : 'تنبيهات التحصيل — لا يوجد متأخرون';
+      btn.title = title;
+      btn.setAttribute('aria-label', title);
+    }
+    if (count) count.textContent = items.length ? (items.length + ' عميل متأخر') : 'لا يوجد متأخرون';
+    if (!items.length) {
+      list.innerHTML = '<div class="notif-empty"><b>كل التحصيلات منتظمة ✓</b><span>لا يوجد عملاء متأخرون في السداد الآن.</span></div>';
+      return;
+    }
+    list.innerHTML = items.map(function (it) {
+      var monthsShort = it.monthsText || '—';
+      if (monthsShort.length > 64) monthsShort = monthsShort.slice(0, 62) + '…';
+      return '<button type="button" class="notif-item" data-notif-idx="' + it.idx + '">' +
+        '<span class="notif-item__icon">' + esc(colInitials(it.name)) + '</span>' +
+        '<span class="notif-item__main">' +
+          '<b>' + esc(it.name) + '</b>' +
+          '<small>' + esc(it.phone || 'بدون هاتف') + ' · متأخر ' + it.months + (it.months === 1 ? ' شهر' : ' شهور') + '</small>' +
+          '<em>' + esc(monthsShort) + '</em>' +
+        '</span>' +
+        '<span class="notif-item__amount"><b>' + money(it.amount) + '</b><small>المطلوب الآن</small>' +
+          (it.rest > it.amount ? '<i>المتبقي ' + money(it.rest) + '</i>' : '') +
+        '</span>' +
+      '</button>';
+    }).join('');
+  }
+
+  function setNotifOpen(open) {
+    var pop = $('#notifPop'), btn = $('#notifBtn');
+    if (!pop) return;
+    pop.hidden = !open;
+    if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
+  var notifBtnEl = $('#notifBtn');
+  if (notifBtnEl) notifBtnEl.addEventListener('click', function (e) {
+    e.stopPropagation();
+    renderOverdueBell();
+    var pop = $('#notifPop');
+    if (pop) setNotifOpen(pop.hidden);
+  });
+  var notifCloseEl = $('#notifClose');
+  if (notifCloseEl) notifCloseEl.addEventListener('click', function (e) {
+    e.stopPropagation();
+    setNotifOpen(false);
+  });
+  var notifAllEl = $('#notifOpenCollection');
+  if (notifAllEl) notifAllEl.addEventListener('click', function () {
+    setNotifOpen(false);
+    navigate('collection');
+  });
+  document.addEventListener('click', function (e) {
+    var pop = $('#notifPop');
+    if (!pop || pop.hidden) return;
+    if (e.target && e.target.closest && e.target.closest('#notifPop, #notifBtn')) return;
+    setNotifOpen(false);
+  });
+  document.addEventListener('click', function (e) {
+    var it = e.target && e.target.closest ? e.target.closest('[data-notif-idx]') : null;
+    if (!it) return;
+    var idx = Number(it.getAttribute('data-notif-idx'));
+    setNotifOpen(false);
+    if (isFinite(idx) && idx > -1) openProfile(idx);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    var pop = $('#notifPop');
+    if (pop && !pop.hidden) { setNotifOpen(false); e.preventDefault(); }
+  });
+  setInterval(function () {
+    try { renderOverdueBell(); } catch (e) {}
+  }, 60 * 1000);
 
   /* تحديث علامات القفل على بطاقات الرئيسية والأقسام حسب إعدادات الأدمن */
   function refreshLockBadges() {
@@ -1136,6 +1246,9 @@
     m.classList.remove('is-open');
     m.setAttribute('aria-hidden', 'true');
   }
+
+  /* متاح للوحدات المنفصلة (شريط المشاهد) لتستخدم نفس نافذة التأكيد */
+  try { window.nizamConfirm = openConfirm; } catch (eConfirm) {}
 
   function shakeConfirm() {
     var m = $('#confirmModal');
@@ -3016,7 +3129,10 @@
         '<td>' + esc(p.no || (i + 1)) + '</td>' +
         '<td class="amount">' + money(running) + '</td>' +
         '<td>' + (p.note ? esc(p.note) : ((Array.isArray(p.months) && p.months.length) ? ('شهور: ' + esc(p.months.map(monthLabel).join('، '))) : '—')) + '</td>' +
-        '<td class="col-cell"><button type="button" class="btn btn--ghost btn--sm btn--danger" data-del-colpay="' + i + '" data-cidx="' + idx + '">حذف</button></td>' +
+        '<td class="col-cell"><div class="col-actions">' +
+          '<button type="button" class="btn btn--ghost btn--sm" data-edit-colpay="' + i + '" data-cidx="' + idx + '">تعديل</button>' +
+          '<button type="button" class="btn btn--ghost btn--sm btn--danger" data-del-colpay="' + i + '" data-cidx="' + idx + '">حذف</button>' +
+        '</div></td>' +
         '</tr>';
     });
     (d.ledList || []).forEach(function (o, k) {
@@ -3060,6 +3176,7 @@
       planDetailHTML(c) +
 
       '<form class="form" id="mainCollectForm" data-idx="' + idx + '" novalidate>' +
+        '<p class="collect-edit-note" data-edit-note hidden></p>' +
         '<div class="form__row form__row--3">' +
           '<label class="field"><span>التاريخ *</span><input type="date" name="date" value="' + todayISO() + '" required /></label>' +
           '<label class="field"><span>المبلغ المدفوع *</span><input type="number" name="amount" min="0" step="any" required placeholder="' + (plan.requiredNow > 0 ? money(plan.requiredNow) : '0') + '" /></label>' +
@@ -3075,13 +3192,14 @@
         '<p class="form__error" hidden></p>' +
         '<div class="form__actions">' +
           (plan.requiredNow > 0 ? '<button type="button" class="btn btn--ghost" data-fill-required="' + plan.requiredNow + '">دفع المطلوب الآن (' + money(plan.requiredNow) + ')</button>' : '') +
+          '<button type="button" class="btn btn--ghost" data-cancel-edit hidden>إلغاء التعديل</button>' +
           '<button type="submit" class="btn btn--primary"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-plus"></use></svg> إضافة تحصيل</button>' +
         '</div>' +
       '</form>' +
 
       '<div class="table-wrap">' +
         '<table class="table">' +
-          '<thead><tr><th>#</th><th>التاريخ</th><th>المبلغ قبل الدفعة</th><th>المبلغ المدفوع</th><th>المرة في الدفع</th><th>المتبقي بعد الدفعة</th><th>ملاحظات</th><th style="width:64px"><span class="sr-only">حذف</span></th></tr></thead>' +
+          '<thead><tr><th>#</th><th>التاريخ</th><th>المبلغ قبل الدفعة</th><th>المبلغ المدفوع</th><th>المرة في الدفع</th><th>المتبقي بعد الدفعة</th><th>ملاحظات</th><th style="width:150px">الإجراءات</th></tr></thead>' +
           '<tbody>' + rows + '</tbody>' +
         '</table>' +
       '</div>' +
@@ -3093,9 +3211,77 @@
     if (!c) return;
     var d = derive(c);
     var amt = parseFloat(form.elements.amount.value) || 0;
+    var editAttr = form.getAttribute('data-edit-pay');
+    var editPi = (editAttr !== null && editAttr !== '') ? Number(editAttr) : -1;
+    var oldAmt = 0;
+    if (editPi > -1 && Array.isArray(c.payments) && c.payments[editPi]) {
+      oldAmt = Number(c.payments[editPi].amount || 0);
+    }
     form.elements.restBefore.value = money(d.rest);
-    form.elements.restAfter.value = money(Math.max(d.rest - amt, 0));
+    form.elements.restAfter.value = money(Math.max(d.rest + oldAmt - amt, 0));
   }
+
+  function resetMainCollectForm(form) {
+    if (!form) return;
+    var c = getCustomers()[Number(form.getAttribute('data-idx'))];
+    var d = c ? derive(c) : null;
+    form.removeAttribute('data-edit-pay');
+    form.classList.remove('is-editing');
+    var note = form.querySelector('[data-edit-note]');
+    if (note) { note.hidden = true; note.textContent = ''; }
+    var cancel = form.querySelector('[data-cancel-edit]');
+    if (cancel) cancel.hidden = true;
+    var submit = form.querySelector('button[type="submit"]');
+    if (submit) submit.innerHTML = '<svg viewBox="0 0 24 24" class="ico"><use href="#ic-plus"></use></svg> إضافة تحصيل';
+    if (form.elements.date) form.elements.date.value = todayISO();
+    if (form.elements.amount) form.elements.amount.value = '';
+    if (form.elements.note) form.elements.note.value = '';
+    if (form.elements.no) form.elements.no.value = d ? String(d.pays.length + 1) : '1';
+    var err = form.querySelector('.form__error');
+    if (err) err.hidden = true;
+    if (c) updateMainCalc(form);
+  }
+
+  /* تعديل دفعة قائمة: نستخدم نفس نموذج الإضافة بدل نموذج جديد */
+  document.addEventListener('click', function (e) {
+    var btn = e.target && e.target.closest ? e.target.closest('[data-edit-colpay]') : null;
+    if (!btn) return;
+    var ci = Number(btn.getAttribute('data-cidx'));
+    var pi = Number(btn.getAttribute('data-edit-colpay'));
+    var list = getCustomers();
+    var c = list[ci];
+    var p = c && Array.isArray(c.payments) ? c.payments[pi] : null;
+    if (!p) { toast('الدفعة غير موجودة — أعد فتح القائمة', true); return; }
+    if (collectionOpen !== ci) {
+      collectionOpen = ci;
+      renderCollection(colFilter());
+    }
+    var form = $('#mainCollectForm');
+    if (!form) return;
+    form.setAttribute('data-edit-pay', String(pi));
+    form.classList.add('is-editing');
+    if (form.elements.date) form.elements.date.value = p.date || todayISO();
+    if (form.elements.amount) form.elements.amount.value = String(Number(p.amount || 0));
+    if (form.elements.no) form.elements.no.value = String(p.no || (pi + 1));
+    if (form.elements.note) form.elements.note.value = p.note || '';
+    var note = form.querySelector('[data-edit-note]');
+    if (note) {
+      note.hidden = false;
+      note.textContent = 'تعديل الدفعة رقم ' + (p.no || (pi + 1)) + ' — عدّل القيم ثم اضغط «حفظ التعديل».';
+    }
+    var cancel = form.querySelector('[data-cancel-edit]');
+    if (cancel) cancel.hidden = false;
+    var submit = form.querySelector('button[type="submit"]');
+    if (submit) submit.textContent = 'حفظ التعديل';
+    updateMainCalc(form);
+    try { form.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e2) {}
+  });
+
+  document.addEventListener('click', function (e) {
+    var btn = e.target && e.target.closest ? e.target.closest('[data-cancel-edit]') : null;
+    if (!btn) return;
+    resetMainCollectForm($('#mainCollectForm'));
+  });
 
   /* شريط شهور مختصر يظهر في صف العميل: أخضر مدفوع، أحمر غير مدفوع،
      أصفر مستحق الآن — عشان تعرف الشهر المتأخر من نظرة واحدة. */
@@ -3248,18 +3434,52 @@
     var date = el.date.value;
     var amt = parseFloat(el.amount.value);
     var no = parseInt(el.no.value, 10);
+    var editAttr = form.getAttribute('data-edit-pay');
+    var editPi = (editAttr !== null && editAttr !== '') ? Number(editAttr) : -1;
+    var oldPay = editPi > -1 && Array.isArray(c.payments) ? c.payments[editPi] : null;
+    if (editPi > -1 && !oldPay) {
+      resetMainCollectForm(form);
+      return fail('الدفعة المطلوب تعديلها غير موجودة — أعد فتح القائمة');
+    }
 
     var miss = [];
     if (!date) miss.push('التاريخ');
     if (!(amt > 0)) miss.push('المبلغ المدفوع');
     if (!(no > 0)) miss.push('المرة في الدفع');
     if (miss.length) return fail('الرجاء إدخال: ' + miss.join('، '));
-    if (amt > d.rest) return fail('المبلغ المدفوع أكبر من المتبقي (' + money(d.rest) + ')');
+    var maxAllowed = d.rest + (oldPay ? Number(oldPay.amount || 0) : 0);
+    if (amt > maxAllowed + 0.005) return fail('المبلغ المدفوع أكبر من المتاح (' + money(maxAllowed) + ')');
     if (err) err.hidden = true;
 
     if (!c.scheduleStart) {
       c.scheduleStart = monthKeyFromISO(c.startDate) || monthKeyOf(new Date().getFullYear(), new Date().getMonth());
     }
+
+    /* حفظ التعديل: نفس الدفعة تُستبدل، والرصيد يُحسب من جديد */
+    if (editPi > -1) {
+      var paysEdit = d.pays.slice();
+      var payEdit = {};
+      Object.keys(oldPay).forEach(function (k) { payEdit[k] = oldPay[k]; });
+      payEdit.date = date;
+      payEdit.amount = amt;
+      payEdit.no = no;
+      payEdit.note = String(el.note.value || '').trim();
+      delete payEdit.months;
+      paysEdit[editPi] = payEdit;
+      paysEdit.sort(function (a, b) { return String(a.date).localeCompare(String(b.date)); });
+      c.payments = paysEdit;
+      var dEdit = derive(c);
+      c.rest = dEdit.rest;
+      c.balance = dEdit.rest;
+      if (c.due == null) c.due = dEdit.due;
+      saveCustomers(list);
+      renderCollection(colFilter());
+      renderCollectionSummary();
+      renderHomeStats();
+      toast('تم تعديل الدفعة — المتبقي: ' + money(dEdit.rest));
+      return;
+    }
+
     var planBefore = monthlyPlan(c);
     var pays = d.pays.slice();
     var pay = { date: date, amount: amt, no: no, note: String(el.note.value || '').trim() };
@@ -5530,8 +5750,7 @@
     startGoogleLogin();
   });
 
-  var driveDisconnectBtn = $('#driveDisconnect');
-  if (driveDisconnectBtn) driveDisconnectBtn.addEventListener('click', function () {
+  function disconnectDriveNow() {
     if (typeof fetch !== 'function') return;
     fetch('/api/google/disconnect', { method: 'POST', credentials: 'same-origin' })
       .then(function (r) {
@@ -5546,6 +5765,17 @@
         try { window.dispatchEvent(new CustomEvent('nizam:drive-disconnected')); } catch (eD2) {}
       })
       .catch(function () { toast('تعذّر فصل الربط', true); });
+  }
+
+  var driveDisconnectBtn = $('#driveDisconnect');
+  if (driveDisconnectBtn) driveDisconnectBtn.addEventListener('click', function () {
+    openConfirm({
+      title: 'فصل ربط Google Drive',
+      message: 'هل أنت متأكد من فصل الربط بالحساب ده؟ تقدر تربط حساب Google تاني في أي وقت.',
+      yes: 'موافق',
+      no: 'تراجع',
+      onYes: disconnectDriveNow
+    });
   });
 
   /* فصل الربط من شريط المشاهد يحدّث نفس واجهة الإعدادات فوراً */
@@ -9070,6 +9300,8 @@
       try { renderLedger(); renderLedgerSummary(); } catch (e) {}
     },
     renderHomeStats: renderHomeStats,
+    renderOverdueBell: renderOverdueBell,
+    overdueItems: overdueItems,
     getSectionLocks: getSectionLocks,
     renderSectionLocks: renderSectionLocks,
     isSectionLocked: isSectionLocked,

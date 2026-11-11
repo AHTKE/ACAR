@@ -26,6 +26,8 @@ const dom = new JSDOM(html, {
   beforeParse(window) {
     window.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ configured: false, connected: false }) });
     window.HTMLAnchorElement.prototype.click = function () {};
+    window.HTMLMediaElement.prototype.play = function () { return Promise.reject(new Error('audio unavailable')); };
+    window.HTMLMediaElement.prototype.pause = function () {};
     window.URL.createObjectURL = () => 'blob:test';
     window.URL.revokeObjectURL = () => {};
   },
@@ -42,7 +44,7 @@ const ok = (n, c, x) => { if (c) { pass++; console.log('  PASS  ' + n); } else {
   await wait(400);
   console.log('\n[1] ظهور شاشة الترحيب');
   ok('الشاشة ظهرت', !!$('#awmSplash'));
-  ok('فيها اسم الشركة', ($('#awmSplash') || {}).textContent.indexOf('AMW Code Company') > -1);
+  ok('فيها اسم التطبيق', ($('#awmSplash') || {}).textContent.indexOf('WorkFlow') > -1);
   ok('فيها WELCOME', ($('#awmSplash') || {}).textContent.indexOf('Welcome') > -1);
   ok('فيها زر تخطي وزر صوت', !!$('#awmSkip') && !!$('#awmSound'));
   ok('شاشة الدخول موجودة تحتها', !!$('#appLock'));
@@ -63,6 +65,8 @@ const ok = (n, c, x) => { if (c) { pass++; console.log('  PASS  ' + n); } else {
     beforeParse(w) {
       w.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ configured: false, connected: false }) });
       w.HTMLAnchorElement.prototype.click = function () {};
+      w.HTMLMediaElement.prototype.play = function () { return Promise.reject(new Error('audio unavailable')); };
+      w.HTMLMediaElement.prototype.pause = function () {};
       w.URL.createObjectURL = () => 'blob:test';
       w.URL.revokeObjectURL = () => {};
     },

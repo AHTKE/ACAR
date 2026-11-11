@@ -73,7 +73,9 @@
   function allowed(el) {
     if (!el) return false;
     /* أزرار الربط بجوجل (شاشة البدء ولوحة الإعدادات) تبقى ظاهرة وعملياً للجميع */
-    if (el.id === 'gateConnect' || el.id === 'driveConnect' || el.id === 'viewerDriveBtn') return true;
+    if (el.id === 'gateConnect' || el.id === 'driveConnect' || el.id === 'viewerDriveBtn' ||
+      el.id === 'driveDisconnect' || el.id === 'viewerDriveDisconnect' ||
+      el.id === 'notifBtn' || el.id === 'notifClose' || el.id === 'notifOpenCollection') return true;
     if (el.tagName === 'A' && String(el.getAttribute('href') || '').indexOf('/api/google/login') === 0) return true;
     if (el.classList && (el.classList.contains('chev') || el.classList.contains('back-btn'))) return true;
     for (var i = 0; i < SEL_ALLOW_ATTR.length; i++) {
@@ -121,7 +123,7 @@
     for (var i = 0; i < els.length; i++) {
       var el = els[i];
       // Keep drive connect buttons visible for all users (gate + settings)
-      if (el.id && (el.id === 'driveConnect' || el.id === 'gateConnect')) continue;
+      if (el.id && (el.id === 'driveConnect' || el.id === 'gateConnect' || el.id === 'driveDisconnect')) continue;
       if (sensitive(el)) continue;
       if (el.style.display !== 'none') {
         el.style.display = 'none';
@@ -152,6 +154,8 @@
     if (!VIEWER) return;
     var t = e.target;
     if (!t || !t.closest) return;
+    /* زر إغلاق الإشعار ليس إجراءً على التطبيق — لا تعيد فتح الإشعار */
+    if (t.closest('#toast, #toastClose, .toast__x')) return;
     var el = t.closest('button, label, input[type="file"], .switch-row, [data-add], [data-del], [data-edit], [data-delete], [data-save], [data-push]');
     if (!el || !blocked(el)) return;
     e.preventDefault();
@@ -182,6 +186,22 @@
   }
 
   var driveConnected = false;
+
+  function askDisconnect(onYes) {
+    var message = 'هل أنت متأكد من فصل الربط بالحساب ده؟ تقدر تربط حساب Google تاني في أي وقت.';
+    if (typeof window.nizamConfirm === 'function') {
+      window.nizamConfirm({
+        title: 'فصل ربط حساب Google',
+        message: message,
+        yes: 'موافق',
+        no: 'تراجع',
+        onYes: onYes
+      });
+      return;
+    }
+    try { if (window.confirm(message)) onYes(); } catch (e) {}
+  }
+
   function renderViewerBar() {
     var bar = document.getElementById('viewerDriveBar');
     if (bar) bar.style.display = 'flex';
@@ -196,6 +216,28 @@
         try { if (typeof window.syncCheck === 'function') window.syncCheck(false); } catch (e) {}
       };
     }
+    var out = document.getElementById('viewerDriveDisconnect');
+    if (out) {
+      out.style.display = driveConnected ? 'inline-block' : 'none';
+      out.onclick = function () {
+        if (!driveConnected || typeof fetch !== 'function') return;
+        askDisconnect(function () {
+          fetch('/api/google/disconnect', { method: 'POST', credentials: 'same-origin' })
+            .then(function (r) {
+              if (!r || !r.ok) throw new Error('disconnect ' + (r && r.status));
+              return r.json().catch(function () { return {}; });
+            })
+            .then(function (j) {
+              if (j && j.ok === false) throw new Error(j.error || 'disconnect');
+              driveConnected = false;
+              renderViewerBar();
+              try { window.dispatchEvent(new CustomEvent('nizam:drive-disconnected')); } catch (e) {}
+              toastMsg('تم فصل الربط — تقدر تختار حساب Google تاني');
+            })
+            .catch(function () { toastMsg('تعذّر فصل الربط — حاول مرة أخرى', true); });
+        });
+      };
+    }
     var txt = document.getElementById('viewerDriveText');
     if (txt) {
       txt.textContent = driveConnected
@@ -203,6 +245,14 @@
         : 'وضع المشاهد — اربط حساب Google لعرض البيانات ومتابعة أحدث نسخة';
     }
   }
+
+  /* أي فصل ربط ناجح من الإعدادات أو الشريط يحدّث شريط المشاهد فوراً */
+  try {
+    window.addEventListener('nizam:drive-disconnected', function () {
+      driveConnected = false;
+      renderViewerBar();
+    });
+  } catch (eDis) {}
 
   function applyViewer(connected) {
     driveConnected = !!connected;
@@ -265,12 +315,19 @@
   /* ---------- رابط المجلد العام ---------- */
   var input = document.getElementById('forceFolderUrl');
   try {
-    var saved = localStorage.getItem('app_shared_folder_url') || '';
+    var saved = localStorage.getItem('app_sync_custom_folder') ||
+      localStorage.getItem('app_shared_folder_url') || '';
     if (input && saved) input.value = saved;
   } catch (e) {}
   if (input) {
     input.addEventListener('input', function () {
-      try { localStorage.setItem('app_shared_folder_url', input.value.trim()); } catch (e) {}
+      var v = input.value.trim();
+      try {
+        localStorage.setItem('app_shared_folder_url', v);
+        /* نفس الرابط بيظهر في إعدادات المزامنة — نحفظه في المفتاحين
+           عشان المستخدم ما يضطرش يلصقه مرتين. */
+        localStorage.setItem('app_sync_custom_folder', v);
+      } catch (e) {}
     });
   }
 
@@ -305,9 +362,11 @@
     return null;
   }
   function applyAdminFast() {
+    VIEWER = false;
     document.documentElement.removeAttribute('data-viewer-mode');
     var bar = document.getElementById('viewerDriveBar');
     if (bar) bar.style.display = 'none';
+    restoreAllControls();
   }
 
   /* رجّع أي زر خفيناه في وضع المشاهد (لو الدور اتغيّر في نفس الجلسة) */
@@ -336,12 +395,11 @@
   }
   if (typeof fetch === 'function') {
     if (TRUSTED) {
+      /* نبدأ مالكًا محليًا فورًا (الجهاز جهازك)، لكن لا نعود قبل قراءة
+         حالة Google: لو الحساب المربوط مش من حسابات الإدارة لازم يظهر
+         «مشاهد» ويتقفل عليه التعديل. */
       applyAdminFast();
-      try {
-        localStorage.setItem('app_user_role', 'admin');
-        localStorage.setItem('app_user_email', ADMIN_EMAIL);
-      } catch (e) {}
-      return;
+      try { localStorage.setItem('app_user_role', 'admin'); } catch (e) {}
     }
     var cachedRole = roleFromCache();
     var checkTries = 0;
@@ -361,6 +419,11 @@
           if (isAdmin) applyAdminFast();
           else if (connected) applyViewer(true);   /* حساب تاني متصل → مشاهد */
           else applyAdminLocal();                   /* مش مربوط = مالك محلي، الكتابة مسموحة */
+          try {
+            window.dispatchEvent(new CustomEvent('nizam:role', {
+              detail: { role: isAdmin ? 'admin' : (connected ? 'viewer' : 'local'), email: email, connected: connected }
+            }));
+          } catch (eR) {}
           if (connected && /[?&]g=ok/.test(location.search)) setTimeout(pullShared, 700);
         })
         .catch(function () {
@@ -378,11 +441,6 @@
     verifyRole();
   }
 
-  /* فصل الربط أثناء الجلسة → يبقى مشاهداً فوراً */
-  document.addEventListener('click', function (e) {
-    var d = e.target && e.target.closest && e.target.closest('#driveDisconnect');
-    /* مشاهد فاصل الربط يفضل مشاهد (مايترقّاش لمالك بالفصل)،
-       والمالك المحلي يفضل مالك. */
-    if (d) { if (VIEWER) applyViewer(false); else applyAdminLocal(); }
-  }, true);
+  /* فصل الربط بيتم في app.js بعد نجاح الطلب، وبعدها بيتبعت
+     nizam:drive-disconnected — ممنوع نغيّر الحالة قبل النتيجة. */
 })();

@@ -46,6 +46,7 @@ const doc = window.document;
 const $ = (s) => doc.querySelector(s);
 const $$ = (s) => Array.from(doc.querySelectorAll(s));
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const click = (el) => el.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra) => {
@@ -54,6 +55,8 @@ const ok = (name, cond, extra) => {
 };
 
 (async function () {
+  let pulled = 0;
+  window.syncCheck = function () { pulled++; return Promise.resolve(null); };
   console.log('\n[1] وضع المشاهد بعد الربط بحساب غير مصرح به');
   await wait(600);
 
@@ -83,6 +86,32 @@ const ok = (name, cond, extra) => {
   const uploadBtns = $$('button').filter((b) => /رفع/.test(b.textContent || ''));
   if (uploadBtns.length) ok('أزرار «رفع» لا تُخفى (منع بالنقر فقط)', uploadBtns.every((b) => b.style.display !== 'none'),
      'total=' + uploadBtns.length);
+  const barOut = $('#viewerDriveDisconnect');
+  ok('زر «فصل الربط» في أعلى وضع المشاهد ظاهر',
+     !!barOut && barOut.style.display !== 'none',
+     barOut ? 'display=' + barOut.style.display : 'missing');
+  if (barOut) {
+    let barCalled = false;
+    const prevBarFetch = window.fetch;
+    window.fetch = function (url, init) {
+      if (String(url).indexOf('/api/google/disconnect') > -1) {
+        barCalled = true;
+        return Promise.resolve({ ok: true, status: 200, json: function () { return Promise.resolve({ ok: true }); } });
+      }
+      return prevBarFetch(url, init);
+    };
+    click(barOut);
+    await wait(50);
+    ok('فصل الربط من شريط المشاهد يفتح تأكيدًا', $('#confirmModal').classList.contains('is-open'));
+    ok('رسالة التأكيد واضحة في شريط المشاهد', ($('#confirmMsg').textContent || '').indexOf('فصل الربط') > -1,
+       $('#confirmMsg').textContent);
+    ok('لم يُرسل طلب من الشريط قبل الموافقة', barCalled === false);
+    click($('#confirmNo'));
+    await wait(30);
+    ok('«تراجع» يمنع الفصل من الشريط', barCalled === false &&
+       !$('#confirmModal').classList.contains('is-open'));
+    window.fetch = prevBarFetch;
+  }
   const disconnectBtn = $('#driveDisconnect');
   ok('زر «فصل الربط» ظاهر للمشاهد', !!disconnectBtn && disconnectBtn.hidden === false &&
      disconnectBtn.style.display !== 'none', disconnectBtn ? 'hidden=' + disconnectBtn.hidden + ' display=' + disconnectBtn.style.display : 'missing');
@@ -100,7 +129,20 @@ const ok = (name, cond, extra) => {
     disconnectBtn.dispatchEvent(dev);
     await wait(50);
     ok('زر «فصل الربط» مسموح للمشاهد', dev.defaultPrevented === false);
-    ok('فصل الربط بينادي المسار الصحيح', disconnectCalled);
+    ok('ضغط فصل الربط يفتح تأكيدًا قبل التنفيذ', $('#confirmModal').classList.contains('is-open'));
+    ok('رسالة التأكيد توضّح فصل الربط', ($('#confirmMsg').textContent || '').indexOf('فصل الربط') > -1,
+       $('#confirmMsg').textContent);
+    ok('لم يُرسل طلب الفصل قبل الموافقة', disconnectCalled === false);
+    click($('#confirmNo'));
+    await wait(30);
+    ok('زر «تراجع» يغلق التأكيد بدون فصل', !$('#confirmModal').classList.contains('is-open') && !disconnectCalled);
+
+    disconnectBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+    await wait(40);
+    ok('التأكيد فتح مرة تانية', $('#confirmModal').classList.contains('is-open'));
+    click($('#confirmYes'));
+    await wait(80);
+    ok('الموافقة تنفّذ الفصل', disconnectCalled === true);
     ok('زر فصل الربط اتخفي من الإعدادات بعد النجاح', disconnectBtn.hidden === true, 'hidden=' + disconnectBtn.hidden);
     ok('شريط المشاهد رجع لزر الربط', /ربط/.test(($('#viewerDriveBtn') || {}).textContent || ''),
        $('#viewerDriveBtn') && $('#viewerDriveBtn').textContent);
@@ -158,9 +200,7 @@ const ok = (name, cond, extra) => {
      vbtn && vbtn.textContent);
   ok('سياسة المزامنة إجبارية auto للمشاهد', window.localStorage.getItem('app_sync_policy') === 'auto',
      window.localStorage.getItem('app_sync_policy'));
-  let pulled = 0;
-  window.syncCheck = function () { pulled++; return Promise.resolve(null); };
-  await wait(900);
+  await wait(1800);
   ok('سحب أحدث نسخة اشتغل تلقائياً', pulled > 0, 'calls=' + pulled);
   ok('المشاهد لا يرفع أي نسخة', typeof window.syncCheck === 'function');
 

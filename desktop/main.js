@@ -118,7 +118,7 @@ function createWindow() {
     minWidth: 940,
     minHeight: 620,
     backgroundColor: '#0a0e15',
-    title: 'نظام الإدارة المتكامل',
+    title: 'WorkFlow — نظام الإدارة المتكامل',
     icon: fs.existsSync(path.join(__dirname, 'icons', 'icon-512.png'))
       ? path.join(__dirname, 'icons', 'icon-512.png')
       : path.join(__dirname, '..', 'icons', 'icon-512.png'),

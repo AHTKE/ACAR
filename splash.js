@@ -154,10 +154,10 @@
           '<div class="awm-splash__ring awm-splash__ring--a"></div>' +
           '<div class="awm-splash__ring awm-splash__ring--b"></div>' +
           '<div class="awm-splash__tile">' +
-            '<img class="awm-splash__mark-img" src="icons/logo-amw.png" alt="AMW Code" width="200" height="200" />' +
+            '<img class="awm-splash__mark-img" src="icons/icon-512.png" alt="WorkFlow" width="200" height="200" />' +
             '<span class="awm-splash__shine"></span></div>' +
         '</div>' +
-        '<h1 class="awm-splash__title">AMW Code Company</h1>' +
+        '<h1 class="awm-splash__title">WorkFlow</h1>' +
         '<p class="awm-splash__sub">Welcome</p>' +
         '<p class="awm-splash__tag">نظام الإدارة المتكامل</p>' +
         '<div class="awm-splash__dots"><i></i><i></i><i></i></div>' +
@@ -166,7 +166,7 @@
         '<button type="button" id="awmSound">🔊 الصوت</button>' +
         '<button type="button" id="awmSkip">تخطّي ›</button>' +
       '</div>' +
-      '<div class="awm-splash__foot">© AMW Code Company</div>';
+      '<div class="awm-splash__foot">© AW</div>';
     document.body.appendChild(el);
 
     particles(el.querySelector('.awm-splash__fx'));
