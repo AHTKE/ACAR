@@ -101,6 +101,12 @@ const ok = (name, cond, extra) => {
     await wait(50);
     ok('زر «فصل الربط» مسموح للمشاهد', dev.defaultPrevented === false);
     ok('فصل الربط بينادي المسار الصحيح', disconnectCalled);
+    ok('زر فصل الربط اتخفي من الإعدادات بعد النجاح', disconnectBtn.hidden === true, 'hidden=' + disconnectBtn.hidden);
+    ok('شريط المشاهد رجع لزر الربط', /ربط/.test(($('#viewerDriveBtn') || {}).textContent || ''),
+       $('#viewerDriveBtn') && $('#viewerDriveBtn').textContent);
+    ok('زر فصل الشريط اتخفي بعد الفصل',
+       $('#viewerDriveDisconnect').style.display === 'none',
+       $('#viewerDriveDisconnect').style.display);
     window.fetch = prevFetch;
   }
 
