@@ -56,9 +56,13 @@ const DEFAULT_PORT = Number(process.env.PORT || 4568);
 const DEFAULT_API_BASE = 'https://workflow-amw-code.vercel.app';
 const API_BASE = String(process.env.NIZAM_API_BASE || DEFAULT_API_BASE).replace(/\/+$/, '');
 
-/* مفاتيح عميل Google الخاص بالديسكتوب (عميل Desktop: يقبل أي منفذ loopback) */
+/* مفاتيح عميل Google الخاص بالديسكتوب (عميل Desktop: يقبل أي منفذ loopback).
+   NIZAM_GOOGLE_CLIENT_FILE بيسمح للاختبارات والبناء باستخدام ملف مؤقت. */
+const GOOGLE_CLIENT_FILE = process.env.NIZAM_GOOGLE_CLIENT_FILE ||
+  path.join(__dirname, 'google-client.json');
 let GOOGLE_CLIENT = {};
-try { GOOGLE_CLIENT = require('./google-client.json') || {}; } catch (e) { GOOGLE_CLIENT = {}; }
+try { GOOGLE_CLIENT = JSON.parse(fs.readFileSync(GOOGLE_CLIENT_FILE, 'utf8')) || {}; }
+catch (e) { GOOGLE_CLIENT = {}; }
 /* بديل آمن للتشغيل والاختبار من غير كتابة السر في ملف: تقدر تمرّر
    NIZAM_GOOGLE_CLIENT_ID و NIZAM_GOOGLE_CLIENT_SECRET في البيئة. */
 if (process.env.NIZAM_GOOGLE_CLIENT_ID || process.env.NIZAM_GOOGLE_CLIENT_SECRET) {

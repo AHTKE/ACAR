@@ -1,5 +1,8 @@
 {
   "client_id": "PUT-YOUR-DESKTOP-CLIENT-ID.apps.googleusercontent.com",
   "client_secret": "PUT-YOUR-DESKTOP-CLIENT-SECRET",
-  "note": "انسخ الملف لـ google-client.json وحط مفاتيح عميل Desktop من Google Cloud. الملف الحقيقي مستبعد من git."
+  "redirect_uris": [
+    "http://127.0.0.1:47820/api/google/callback"
+  ],
+  "note": "انسخ الملف لـ google-client.json، أو اضبط NIZAM_GOOGLE_CLIENT_ID و NIZAM_GOOGLE_CLIENT_SECRET قبل البناء. الملف الحقيقي مستبعد من git وبيتضمن تلقائياً في نسخ الديسكتوب."
 }

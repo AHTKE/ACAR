@@ -51,23 +51,18 @@ module.exports = function createGoogle(deps) {
   /* الموقع الرسمي اللي بيتم الربط من خلاله في وضع site فقط */
   const SITE_BASE = String(deps.siteBase || process.env.NIZAM_SITE_BASE ||
     deps.apiBase || 'https://workflow-amw-code.vercel.app').replace(/\/+$/, '');
-  /* auto = محلي لو مفاتيح Desktop موجودة، وإلا موقع. أي قيمة صريحة
-     (local/site) بتتغلّب على الاختيار التلقائي. */
-  const LINK_MODE = String(process.env.NIZAM_LINK_MODE || '').toLowerCase();
+  /* الوضع الافتراضي محلي فقط. الربط عبر الموقع لا يشتغل إلا لو
+     المستخدم طلب NIZAM_LINK_MODE=site صراحةً. */
+  const LINK_MODE = String(process.env.NIZAM_LINK_MODE || 'local').toLowerCase();
   let tokenCache = { tok: '', exp: 0 };
   let siteCache = { ok: false, base: '', at: 0 };
   /* مدة تخزين نتيجة فحص الموقع (صفر = فحص في كل مرة — للاختبارات) */
   const CAP_TTL = Number(process.env.NIZAM_SITE_CAP_TTL || 5 * 60 * 1000);
 
-  /* الوضع التلقائي: محلي لو مفاتيح Desktop متوفرة، وإلا الربط عبر الموقع.
-     وضع site الصريح بيتحقق من دعم الموقع قبل التحويل، ولو مش متاح
-     بيرجع للوضع المحلي لو المفاتيح موجودة. */
+  /* الديسكتوب محلي فقط بشكل افتراضي. وضع site اختياري وصريح، ولو
+     الموقع مش متاح بيرجع للوضع المحلي بدل ما يفشل. */
   async function resolveSite() {
-    if (LINK_MODE === 'local') return { ok: false, base: '' };
-    const local = creds();
-    if (LINK_MODE !== 'site' && local.configured && local.idValid && local.secretValid) {
-      return { ok: false, base: '' };
-    }
+    if (LINK_MODE !== 'site') return { ok: false, base: '' };
     if (CAP_TTL > 0 && siteCache.at && Date.now() - siteCache.at < CAP_TTL) return siteCache;
     let found = { ok: false, base: '', origin: '', redirectUri: '', at: Date.now() };
     try {

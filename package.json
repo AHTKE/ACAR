@@ -6,6 +6,7 @@
   "scripts": {
     "build": "node build.js",
     "desktop:serve": "node desktop/server.js",
+    "desktop:keys": "node desktop/prepare-google-client.js",
     "desktop:install": "npm install --prefix desktop",
     "desktop:dist": "npm run build && npm --prefix desktop run dist:win-all",
     "desktop:dist:win64": "npm run build && npm --prefix desktop run dist:win64",

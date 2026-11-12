@@ -81,21 +81,40 @@ npm --prefix desktop run start   # نافذة Electron
 
 ## 4) ربط Google Drive في نسخة سطح المكتب
 
-### الوضع الافتراضي: محلي أولًا
-`desktop/google.js` بيفضّل OAuth المحلي لو لقى مفاتيح عميل Desktop في
-`desktop/google-client.json` أو في `NIZAM_GOOGLE_CLIENT_ID` و`NIZAM_GOOGLE_CLIENT_SECRET`.
-الربط بيحصل على `http://127.0.0.1:47820/api/google/callback` والرمز بيتحفظ في
+### الوضع الافتراضي: محلي فقط
+`desktop/google.js` بيعمل OAuth محلي باستخدام مفاتيح عميل Desktop من
+`desktop/google-client.json` أو من `NIZAM_GOOGLE_CLIENT_ID` و`NIZAM_GOOGLE_CLIENT_SECRET`.
+الربط بيحصل على `http://127.0.0.1:47820/api/google/callback` (أو منفذ loopback
+آخر لو 47820 مشغول — عميل Desktop بيقبل أي منفذ)، والرمز بيتحفظ في
 `data/google-auth.json` على الجهاز. الحالة (`state`) بتتحفظ في الملف نفسه مش في
 كوكي، عشان العملية تكمّل حتى لو الرجوع حصل في متصفح مختلف عن نافذة التطبيق.
 
-لو مفاتيح عميل Desktop مش موجودة، التطبيق بيرجع تلقائيًا لوضع الربط عبر الموقع
-(نفس السلوك القديم) بدل ما يفشل. تقدر تجبر وضعًا معينًا:
+**مفيش رجوع تلقائي للموقع.** لو المفاتيح مش موجودة أو صيغتها غلط، التطبيق بيقول
+كده بوضوح ويفضل محلي. وضع الموقع متاح فقط لو طلبته صراحةً:
 
 | القيمة | السلوك |
 |---|---|
-| بدون `NIZAM_LINK_MODE` | محلي لو المفاتيح موجودة، وإلا عبر الموقع |
+| بدون `NIZAM_LINK_MODE` | محلي فقط (الافتراضي) |
 | `NIZAM_LINK_MODE=local` | محلي فقط — ولو المفاتيح ناقصة تظهر رسالة واضحة |
-| `NIZAM_LINK_MODE=site` | يجرّب الموقع أولًا، ولو مش متاح يرجع للمحلي |
+| `NIZAM_LINK_MODE=site` | وضع الموقع الاختياري؛ لو الموقع مش متاح يرجع للمحلي |
+
+### مفاتيح البناء (مهم جداً)
+`desktop/google-client.json` **مستبعد من Git**، عشان السر ما يترفعش. كل سكربتات
+البناء (`dist:win64` و`win32` و`portable` و`win-all` وغيرها) بتشغّل
+`desktop/prepare-google-client.js` قبل `electron-builder`، والملف بيتضمن جوه كل
+نسخة (Setup وPortable و32/64).
+
+السكربت بيقبل المفاتيح من أول مصدر موجود:
+1. `NIZAM_GOOGLE_CLIENT_ID` و`NIZAM_GOOGLE_CLIENT_SECRET`
+2. `GOOGLE_CLIENT_ID` و`GOOGLE_CLIENT_SECRET` (من GitHub/Vercel)
+3. ملف `desktop/google-client.json` الموجود محلياً
+
+ولو مفيش مفاتيح صالحة، **البناء بيفشل برسالة واضحة** بدل ما تطلع نسخة مش قادرة
+تربط. تقدر تجهّز الملف يدوياً بـ:
+
+```bash
+npm run desktop:keys
+```
 
 ### الوضع عبر الموقع (اختياري)
 بيبدأ من `NIZAM_SITE_BASE` (الافتراضي `https://workflow-amw-code.vercel.app`):
@@ -117,6 +136,16 @@ npm --prefix desktop run start   # نافذة Electron
 | لو استخدمت Web client للوضع المحلي | Web application | `http://127.0.0.1:47820/api/google/callback` بالحرف |
 | الوضع عبر الموقع: `NIZAM_LINK_MODE=site` | **Web application** | `https://<دومين-الموقع>/api/google/callback` بالحرف |
 
+الرابط المحلي اللي التطبيق بيستخدمه افتراضياً:
+
+```
+http://127.0.0.1:47820/api/google/callback
+```
+
+لو العميل **Desktop app** (زي العميل الحالي) مش محتاج تضيفه؛ Google بيقبل أي
+منفذ loopback. لو حوّلت العميل لـ**Web application**، أضف الرابط ده بالحرف في
+**Authorized redirect URIs**.
+
 > في الوضع المحلي **مش محتاج** تضيف `http://127.0.0.1:...` في Google Console لو
 > العميل من نوع **Desktop app**. لو استخدمت Web client لازم تسجّل رابط loopback
 > بالحرف. راجع `desktop/google-client.example.json` لطريقة إعداد الملف.
@@ -130,7 +159,8 @@ npm --prefix desktop run start   # نافذة Electron
 الوضع المحلي.
 
 > `desktop/google-client.json` (مفاتيح عميل Desktop) مستبعد من git، لكنه
-> **مضمَّن في المثبّت** — التطبيق بيستخدمه في الوضع المحلي فقط.
+> **مضمَّن في المثبّت** — التطبيق بيستخدمه في الوضع المحلي فقط. البناء بيتأكد
+> من وجوده وصلاحيته قبل التغليف، ويفشل لو ناقص.
 
 ---
 
