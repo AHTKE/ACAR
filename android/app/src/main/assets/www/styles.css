@@ -1338,3 +1338,128 @@ label.btn{cursor:pointer;user-select:none}
   .col-months-head,.col-months{min-width:200px}
   .month-strip__cells{max-width:210px}
 }
+
+/* ============================================================
+   المصنعية: نوع البند (شغلانة / تشوين)
+   ============================================================ */
+.manu-tag{display:inline-block;font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:999px;border:1px solid;white-space:nowrap}
+.manu-tag--work{color:#9cc2ff;background:rgba(79,140,255,.14);border-color:rgba(79,140,255,.45)}
+.manu-tag--store{color:#fcd34d;background:rgba(245,158,11,.14);border-color:rgba(245,158,11,.4)}
+.manu-works{margin-top:16px}
+.manu-works__head{display:block;font-size:12.5px;color:var(--muted);margin-bottom:8px}
+.manu-works__list{display:flex;flex-wrap:wrap;gap:8px}
+.manu-works__chip{display:flex;flex-direction:column;gap:2px;padding:9px 13px;border-radius:12px;border:1px solid rgba(79,140,255,.35);background:rgba(79,140,255,.09)}
+.manu-works__chip b{font-size:12.5px}
+.manu-works__chip span{font-size:11.5px;color:var(--muted)}
+.manu-works__chip--store{border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.08)}
+
+/* ============================================================
+   الوضع النهاري: تباين أعلى وألوان أوضح (نصوص وتواريخ مقروءة)
+   ============================================================ */
+[data-theme="light"]{
+  --muted:#3f4c63;
+  --muted-2:#54617a;
+  --green:#047857;
+  --red:#b91c1c;
+  --amber:#92400e;
+  --cyan:#0e7490;
+  --violet:#6d28d9;
+  --pink:#be1e6d;
+  --secondary:#047857;
+  --secondary-hover:#065f46;
+  --blue:#1d4ed8;
+}
+[data-theme="light"] body{
+  background:
+    radial-gradient(1200px 600px at 85% -10%, #eef3ff 0%, transparent 60%),
+    radial-gradient(900px 500px at 10% 110%, #eafaf2 0%, transparent 60%),
+    var(--bg);
+}
+/* أسطح كانت داكنة في الوضع الليلي */
+[data-theme="light"] .table thead th{background:#e9eef7;color:#2f3b52;border-bottom:1px solid var(--line-strong)}
+[data-theme="light"] .table tbody td{border-bottom:1px solid rgba(15,23,42,.10)}
+[data-theme="light"] .table tbody tr:hover{background:#eaf1fd}
+[data-theme="light"] .table tbody tr.group-row td{background:#dfe9fb;color:#0f1a2e;border-top:1px solid var(--line-strong)}
+[data-theme="light"] .table tbody tr.group-row td span{color:#3f4c63}
+[data-theme="light"] .table tbody tr.group-row td .group-total{color:#0f1a2e}
+[data-theme="light"] .collection-row.is-open{background:#e8f0fd}
+[data-theme="light"] .collection-detail>td{background:#f7fafe}
+[data-theme="light"] .info-item{background:#f4f7fc;color:var(--text)}
+[data-theme="light"] .info-item span{color:#3f4c63}
+[data-theme="light"] .info-item--accent{background:#e3edfd;border-color:#b6cbf4}
+[data-theme="light"] .info-item--accent b{color:#0b3fa8}
+[data-theme="light"] .info-item--warn{background:#fdf1dd;border-color:#eec88a}
+[data-theme="light"] .info-item--warn b{color:#8a4b00}
+[data-theme="light"] .plan-box,
+[data-theme="light"] .wh-form,
+[data-theme="light"] .wh-kpi,
+[data-theme="light"] .wh-crumbs,
+[data-theme="light"] .wh-store-card,
+[data-theme="light"] .wh-inline-form,
+[data-theme="light"] .wh-empty,
+[data-theme="light"] .wh-detail-box,
+[data-theme="light"] .spec-chip,
+[data-theme="light"] .catalog-cat__head{background:#f4f7fc;border-color:var(--line);color:var(--text)}
+[data-theme="light"] .wh-table-wrap{background:#fff}
+[data-theme="light"] .share-pill,[data-theme="light"] .card__meta{background:#e3edfd;border-color:#b6cbf4;color:#0b3fa8}
+[data-theme="light"] .chev{background:#eef2f9;border-color:var(--line);color:#3f4c63}
+[data-theme="light"] .progress,[data-theme="light"] .bar{background:rgba(15,23,42,.12)}
+[data-theme="light"] .segmented,[data-theme="light"] .keypad button{background:#eef2f9;border-color:var(--line);color:var(--text)}
+[data-theme="light"] .send-tools input,
+[data-theme="light"] .note-add input,
+[data-theme="light"] .custom-row input,
+[data-theme="light"] .wh-inline-form input,
+[data-theme="light"] #syncPolicy,
+[data-theme="light"] .field--search input{background:#fff;color:var(--text);border-color:var(--line)}
+[data-theme="light"] .month-card,[data-theme="light"] .glance-chip{background:#fff}
+[data-theme="light"] .notif-pop{background:#fff;border-color:var(--line);box-shadow:0 18px 40px rgba(15,23,42,.18)}
+[data-theme="light"] .notif-pop__all:hover{background:#e3edfd;color:#0b3fa8}
+[data-theme="light"] .suggest-pop{background:#fff;border-color:#b6cbf4;box-shadow:0 18px 40px rgba(15,23,42,.18)}
+[data-theme="light"] .suggest-pop button{color:#16233a}
+[data-theme="light"] #viewerDriveBar{background:#fff;border-color:#b6cbf4}
+[data-theme="light"] #viewerDriveBar span{color:#2f3b52}
+/* نصوص كانت فاتحة على خلفية داكنة */
+[data-theme="light"] .tag--in{color:#065f46;background:#d6f7e7;border-color:#6ee7b7}
+[data-theme="light"] .tag--out{color:#991b1b;background:#fde4e4;border-color:#fca5a5}
+[data-theme="light"] .tag--warn{color:#8a4b00;background:#fdf0d5;border-color:#f0c46a}
+[data-theme="light"] .btn--danger{background:#fde4e4;border-color:#f3a3a3;color:#b91c1c}
+[data-theme="light"] .btn--danger:hover{background:#fbcaca;border-color:#ef7f7f;color:#7f1d1d}
+[data-theme="light"] .count-pill--ok,
+[data-theme="light"] .drive-status.is-ok,
+[data-theme="light"] .plan-box__ok,
+[data-theme="light"] .month-card.is-paid .month-card__state,
+[data-theme="light"] .glance-chip.is-paid b,
+[data-theme="light"] .notif-empty b,
+[data-theme="light"] .auth-gate__status.is-ok{color:#047857}
+[data-theme="light"] .count-pill--warn,
+[data-theme="light"] .drive-status.is-warn,
+[data-theme="light"] .month-card.is-due .month-card__state,
+[data-theme="light"] .month-card.is-paid.is-late-paid .month-card__state,
+[data-theme="light"] .glance-chip.is-due b,
+[data-theme="light"] .plan-history>b,
+[data-theme="light"] .plan-history li,
+[data-theme="light"] .form-alert__body b,
+[data-theme="light"] .cf-chip i,
+[data-theme="light"] .custom-fields .cf-input span i{color:#8a4b00}
+[data-theme="light"] .drive-status.is-err,
+[data-theme="light"] .panel__note.is-error,
+[data-theme="light"] .field.is-missing>span,
+[data-theme="light"] .pwd-error,
+[data-theme="light"] .plan-late>b,
+[data-theme="light"] .plan-late li,
+[data-theme="light"] .month-card.is-overdue .month-card__state,
+[data-theme="light"] .month-card__rest,
+[data-theme="light"] .glance-chip.is-late b,
+[data-theme="light"] .month-strip__meta .neg,
+[data-theme="light"] .notif-item__main em,
+[data-theme="light"] .notif-item__amount b,
+[data-theme="light"] .form-alert__body li,
+[data-theme="light"] .auth-gate__status.is-error{color:#b91c1c}
+[data-theme="light"] .field.is-missing input,[data-theme="light"] .field.is-missing select{border-color:#e07a7a}
+[data-theme="light"] .notes-list li button{color:#1d4ed8}
+[data-theme="light"] .notes-list li button:hover,[data-theme="light"] .wh-card-del:hover{color:#b91c1c}
+[data-theme="light"] .manu-tag--work{color:#0b3fa8;background:#e3edfd;border-color:#a8c4f2}
+[data-theme="light"] .manu-tag--store{color:#8a4b00;background:#fdf0d5;border-color:#e9c37e}
+[data-theme="light"] .manu-works__chip{background:#eaf1fd;border-color:#b6cbf4}
+[data-theme="light"] .manu-works__chip span{color:#3f4c63}
+[data-theme="light"] .manu-works__chip--store{background:#fdf3e3;border-color:#e9c37e}

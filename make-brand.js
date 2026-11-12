@@ -9,7 +9,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { createCanvas, registerFont } = require('canvas');
+const { createCanvas, registerFont, Image } = require('canvas');
 
 const ROOT = __dirname;
 const FONT_PATH = path.join(ROOT, '.fonts/Poppins-Bold.ttf');
@@ -562,6 +562,51 @@ function makeAWWide() {
   return c;
 }
 
+/* ================== مصادر الهوية (صور مرفوعة) ==================
+   لو الملفان موجودين بنستخدمهم هم مصدر أيقونة التطبيق وشعار
+   الشركة، ولو مش موجودين نرجع للرسم القديم حتى لا يفشل البناء. */
+function loadSource(rel) {
+  const file = path.join(ROOT, rel);
+  try {
+    if (!fs.existsSync(file)) return null;
+    const img = new Image();
+    img.src = fs.readFileSync(file);
+    return img;
+  } catch (e) {
+    console.warn('  ! تعذّر قراءة ' + rel + ': ' + e.message);
+    return null;
+  }
+}
+
+const APP_ICON_SRC = loadSource('assets/brand/app-icon.png');
+const COMPANY_LOGO_SRC = loadSource('assets/brand/company-logo.png');
+
+/* أيقونة التطبيق من الصورة المرفوعة (مع هامش آمن لو maskable) */
+function makeIcon(size, opts) {
+  const o = opts || {};
+  if (!APP_ICON_SRC) return drawWorkflow(size, o);
+  const c = createCanvas(size, size);
+  const ctx = c.getContext('2d');
+  if (o.maskable) {
+    ctx.fillStyle = '#f3f8ff';
+    ctx.fillRect(0, 0, size, size);
+    const k = 0.82;
+    const w = size * k;
+    ctx.drawImage(APP_ICON_SRC, (size - w) / 2, (size - w) / 2, w, w);
+  } else {
+    ctx.drawImage(APP_ICON_SRC, 0, 0, size, size);
+  }
+  return c;
+}
+
+/* شعار الشركة من الصورة المرفوعة */
+function makeLogo(size) {
+  if (!COMPANY_LOGO_SRC) return drawAW(size);
+  const c = createCanvas(size, size);
+  c.getContext('2d').drawImage(COMPANY_LOGO_SRC, 0, 0, size, size);
+  return c;
+}
+
 /* ======================== حفظ الملفات ======================== */
 function save(canvas, file) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -592,18 +637,18 @@ function buildIco(pngs) {
 }
 
 /* الويب */
-save(drawWorkflow(1024), path.join(ROOT, 'icons/icon-source-1024.png'));
-save(drawWorkflow(512), path.join(ROOT, 'icons/icon-512.png'));
-save(drawWorkflow(192), path.join(ROOT, 'icons/icon-192.png'));
-save(drawWorkflow(512, { maskable: true }), path.join(ROOT, 'icons/icon-maskable-512.png'));
-save(drawWorkflow(64), path.join(ROOT, 'icons/favicon.png'));
-save(drawAW(512), path.join(ROOT, 'icons/logo-amw.png'));
-save(drawAW(1024), path.join(ROOT, 'icons/logo-amw@2x.png'));
+save(makeIcon(1024), path.join(ROOT, 'icons/icon-source-1024.png'));
+save(makeIcon(512), path.join(ROOT, 'icons/icon-512.png'));
+save(makeIcon(192), path.join(ROOT, 'icons/icon-192.png'));
+save(makeIcon(512, { maskable: true }), path.join(ROOT, 'icons/icon-maskable-512.png'));
+save(makeIcon(64), path.join(ROOT, 'icons/favicon.png'));
+save(makeLogo(512), path.join(ROOT, 'icons/logo-amw.png'));
+save(makeLogo(1024), path.join(ROOT, 'icons/logo-amw@2x.png'));
 save(makeAWWide(), path.join(ROOT, 'icons/logo-amw-word.png'));
 
 /* أيقونة ويندوز */
 const icoSizes = [16, 24, 32, 48, 64, 128, 256];
-const icoPngs = icoSizes.map(function (s) { return { size: s, buf: drawWorkflow(s).toBuffer('image/png') }; });
+const icoPngs = icoSizes.map(function (s) { return { size: s, buf: makeIcon(s).toBuffer('image/png') }; });
 const icoPath = path.join(ROOT, 'release/.icon-ico/icon.ico');
 fs.mkdirSync(path.dirname(icoPath), { recursive: true });
 fs.writeFileSync(icoPath, buildIco(icoPngs));
@@ -620,8 +665,8 @@ fs.mkdirSync(androidIcons, { recursive: true });
 const mipmaps = [['mdpi', 48], ['hdpi', 72], ['xhdpi', 96], ['xxhdpi', 144], ['xxxhdpi', 192]];
 mipmaps.forEach(function (m) {
   const dir = path.join(ROOT, 'android/app/src/main/res/mipmap-' + m[0]);
-  save(drawWorkflow(m[1], { maskable: true }), path.join(dir, 'ic_launcher.png'));
-  save(drawWorkflow(m[1], { maskable: true }), path.join(dir, 'ic_launcher_round.png'));
+  save(makeIcon(m[1], { maskable: true }), path.join(dir, 'ic_launcher.png'));
+  save(makeIcon(m[1], { maskable: true }), path.join(dir, 'ic_launcher_round.png'));
 });
 
 console.log('تم توليد أصول الهوية الجديدة.');
