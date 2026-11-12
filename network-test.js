@@ -1,6 +1,7 @@
 /* اختبار مستقل للشبكة المربوطة — يشغّل بدون حزمة canvas الأصلية */
 const fs = require('fs');
 const { JSDOM, VirtualConsole } = require('jsdom');
+const { seedDemo } = require('./test-fixtures');
 
 const errors = [];
 const vc = new VirtualConsole();
@@ -21,6 +22,7 @@ const dom = new JSDOM(html, {
   virtualConsole: vc,
   /* تعطيل canvas قبل تشغيل أي سكربت حتى لا يُسجَّل خطأ بيئة */
   beforeParse(window) {
+    seedDemo(window);
     window.HTMLCanvasElement.prototype.getContext = function () { return null; };
     window.HTMLAnchorElement.prototype.click = function () {};
     window.URL.createObjectURL = function () { return 'blob:test'; };

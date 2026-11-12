@@ -5,6 +5,7 @@
    ============================================================ */
 const fs = require('fs');
 const { JSDOM, VirtualConsole } = require('jsdom');
+const { seedDemo } = require('./test-fixtures');
 
 const htmlSrc = fs.readFileSync('dist/index.html', 'utf8');
 const appSrc = fs.readFileSync('dist/app.js', 'utf8');
@@ -34,6 +35,7 @@ function boot(opts) {
     pretendToBeVisual: true,
     virtualConsole: vc,
     beforeParse(window) {
+      seedDemo(window);
       if (opts.seed) {
         for (const k in opts.seed) window.localStorage.setItem(k, opts.seed[k]);
       }
@@ -189,7 +191,7 @@ const unlock = (t) => {
   ok('الرئيسية ظهرت رغم تخزين تالف', b1.$('#view-home').classList.contains('is-active'));
   ok('الصفحة فاضية؟ لا — فيه محتوى في القسم الرئيسي',
     (b1.$('#view-home').innerHTML || '').length > 500);
-  ok('رجعنا للعملاء الافتراضيين', b1.$$('#collectTbody tr.collection-row').length === 5,
+  ok('تخزين تالف → قائمة فاضية بدون بيانات افتراضية', b1.$$('#collectTbody tr.collection-row').length === 0,
     'rows=' + b1.$$('#collectTbody tr.collection-row').length);
   ok('مفيش خطأ غير مُتّقع (ب1)', b1.errs.length === 0, b1.errs.join(' | '));
 

@@ -17,11 +17,13 @@ html = html
   .replace(/<script[^>]*src="monthly\.js"[^>]*>\s*<\/script>/, () => '<script>' + monthly + '</script>')
   .replace(/<script[^>]*src="app\.js"[^>]*>\s*<\/script>/, () => '<script>' + app + '</script>');
 
+const { seedDemo } = require('./test-fixtures');
 const dom = new JSDOM(html, {
   runScripts: 'dangerously',
   url: 'https://example.test/',
   pretendToBeVisual: true,
   virtualConsole: vc,
+  beforeParse(window) { seedDemo(window); },
 });
 const { window } = dom;
 const doc = window.document;
@@ -62,7 +64,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   ok('جدول التحصيل موجود', !!$('#collectTbody'));
   ok('جدول التحصيل الرئيسي اتخترق بـ id صحيح', !!$('#collectionList'));
   ok('ملخص التحصيل اتبنى', $$('#collectionSummary .summary__box').length === 3);
-  ok('صف العملاء ظهر (5 عملاء افتراضيون)', $$('#collectTbody tr.collection-row').length === 5,
+  ok('صف العملاء ظهر (بيانات الاختبار)', $$('#collectTbody tr.collection-row').length === 5,
      'found=' + $$('#collectTbody tr.collection-row').length);
   ok('عدّاد العملاء محدَّث', $('#collectionCount').textContent === '5 عميل', $('#collectionCount').textContent);
   ok('لا تفاصيل مفتوحة في البداية', $$('#collectTbody .collection-detail').length === 0);
@@ -89,8 +91,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   console.log('\n[4] إضافة تحصيل جديد');
   const form = $('#mainCollectForm');
   const idx = Number(form.getAttribute('data-idx'));
-  const defaultsM = app.match(/var DEFAULT_CUSTOMERS = (\[[\s\S]*?\n  \]);/);
-  const DEFAULTS = window.eval('(' + defaultsM[1] + ')');
+  const DEFAULTS = require('./test-fixtures').DEMO.customers;
   const storedList = () => {
     const raw = window.localStorage.getItem('app_customers');
     return raw ? JSON.parse(raw) : DEFAULTS;

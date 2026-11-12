@@ -14,7 +14,9 @@ html = html
   .replace(/<script[^>]*src="export\.js"[^>]*>\s*<\/script>/, () => '<script>' + exp + '</script>')
   .replace(/<script[^>]*src="app\.js"[^>]*>\s*<\/script>/, () => '<script>' + app + '</script>');
 
-const dom = new JSDOM(html, { runScripts: 'dangerously', url: 'https://example.test/', pretendToBeVisual: true, virtualConsole: vc });
+const { seedDemo } = require('./test-fixtures');
+const dom = new JSDOM(html, { runScripts: 'dangerously', url: 'https://example.test/', pretendToBeVisual: true, virtualConsole: vc,
+  beforeParse(window) { seedDemo(window); } });
 const { window } = dom;
 const doc = window.document;
 const $ = (s) => doc.querySelector(s);
@@ -159,6 +161,11 @@ const stores = () => JSON.parse(window.localStorage.getItem('app_stores') || '{"
   click(partnerRow || $('#partnersTbody tr'));
   await wait(120);
   const pName = ($('#pfpTitle').textContent || '').trim();
+  const w0 = (() => {
+    const pts0 = JSON.parse(window.localStorage.getItem('app_partners') || '[]');
+    const p0 = pts0.filter((p) => (p.name || '').trim() === pName)[0];
+    return p0 ? Number(p0.withdrawals || 0) : 0;
+  })();
   ok('بروفايل الشريك فتح', $('#view-partner-profile').classList.contains('is-active'));
   ok('المسحوبات بطاقة فيها المفتاح', $('#pfpSummary') && $('#pfpSummary').textContent.length > 0);
 
@@ -194,7 +201,7 @@ const stores = () => JSON.parse(window.localStorage.getItem('app_stores') || '{"
     const nm = pts.map((p) => (p.name || '').trim()).indexOf(pName);
     if (nm < 0) return true;
     const p = pts[nm];
-    return ((Number(p.withdrawals || 0) || 0) <= 0);
+    return (Number(p.withdrawals || 0) || 0) === w0;
   })());
 
   console.log('\n[7] لا أخطاء تشغيل');

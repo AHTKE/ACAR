@@ -1,6 +1,7 @@
 /* اختبار نظام الجمعيات (الدور) + بروفايل العضو + بروفايل الشريك الكامل */
 const fs = require('fs');
 const { JSDOM, VirtualConsole } = require('jsdom');
+const { seedDemo } = require('./test-fixtures');
 
 const errors = [];
 const vc = new VirtualConsole();
@@ -20,6 +21,7 @@ const dom = new JSDOM(html, {
   pretendToBeVisual: true,
   virtualConsole: vc,
   beforeParse(window) {
+    seedDemo(window);
     window.HTMLCanvasElement.prototype.getContext = function () { return null; };
     window.HTMLAnchorElement.prototype.click = function () {};
     window.URL.createObjectURL = function () { return 'blob:test'; };
