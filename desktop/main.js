@@ -8,6 +8,7 @@
 const { app, BrowserWindow, shell, Menu, ipcMain, dialog } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
 const server = require('./server');
 
 let win = null;
@@ -108,6 +109,78 @@ function focusWindow() {
   } catch (e) { return false; }
 }
 
+/* ---------- ربط Google: منقعدش نخرج المستخدم بره التطبيق ----------
+   بنفتح صفحة موافقة Google في المتصفح الافتراضي (Google بيمنع تسجيل
+   الدخول جوه نوافذ التطبيقات)، ونافذة التطبيق تفضل على حالها،
+   وبعدين نستنى الربط يتم على الخادم المحلي ونعمل تحديث تلقائي. */
+let linkTimer = null;
+let lastLinkError = '';
+
+function localGoogleStatus() {
+  return new Promise(function (resolve) {
+    if (!info || !info.port) return resolve(null);
+    let req;
+    try {
+      req = http.get({
+        host: '127.0.0.1', port: info.port, path: '/api/google/status', timeout: 4000
+      }, function (res) {
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', function (c) { body += c; });
+        res.on('end', function () {
+          try { resolve(JSON.parse(body)); } catch (e) { resolve(null); }
+        });
+      });
+    } catch (e) { return resolve(null); }
+    req.on('error', function () { resolve(null); });
+    req.on('timeout', function () { try { req.destroy(); } catch (e) {} resolve(null); });
+  });
+}
+
+function stopLinkWatch() {
+  if (linkTimer) { clearInterval(linkTimer); linkTimer = null; }
+}
+
+function toastInApp(text) {
+  if (!win || win.isDestroyed()) return;
+  try {
+    win.webContents.executeJavaScript(
+      'try{window.NizamApp&&window.NizamApp.toast&&window.NizamApp.toast(' +
+      JSON.stringify(String(text)) + ')}catch(e){}'
+    ).catch(function () {});
+  } catch (e) { /* اختياري */ }
+}
+
+function watchLink() {
+  if (linkTimer) return;
+  const startedAt = Date.now();
+  toastInApp('اتفتح المتصفح — كمّل الموافقة على حساب Google والتطبيق هيتحدّث لوحده.');
+  linkTimer = setInterval(async function () {
+    if (!win || win.isDestroyed() || Date.now() - startedAt > 6 * 60 * 1000) { stopLinkWatch(); return; }
+    const st = await localGoogleStatus();
+    if (!st) return;
+    if (st.connected) {
+      stopLinkWatch();
+      try { win.reload(); } catch (e) {}
+      return;
+    }
+    const err = String(st.lastError || '');
+    if (err && err !== lastLinkError) {
+      lastLinkError = err;
+      stopLinkWatch();
+      try {
+        dialog.showMessageBox(win, {
+          type: 'error',
+          title: 'تعذّر ربط Google Drive',
+          message: err,
+          detail: 'نفس الرسالة ظاهرة في «إعدادات ← ربط Google Drive». جرّب الربط مرة أخرى.',
+          buttons: ['حسنًا']
+        });
+      } catch (e) { /* لو مش قادر يعرض الرسالة ما نكسرش التطبيق */ }
+    }
+  }, 1500);
+}
+
 function createWindow() {
   /* لو فيه نافذة شغالة بالفعل نكتفي بتركيزها */
   if (focusWindow()) return win;
@@ -135,15 +208,31 @@ function createWindow() {
 
   win.on('closed', function () { win = null; });
 
-  /* كل رابط خارجي يفتح في المتصفح الافتراضي مش داخل التطبيق */
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+  /* أي رابط خارجي (زي صفحة موافقة Google) يفتح في المتصفح الافتراضي،
+     ونافذة التطبيق تفضل مكانها. لازم نلتقط كمان الـredirects من الخادم
+     (will-redirect) لأن will-navigate مش بيشتغل مع ردود 302. */
+  win.webContents.setWindowOpenHandler((o) => {
+    const u = String((o && o.url) || '');
+    if (/^https?:\/\//i.test(u) && !/^https?:\/\/(127\.0\.0\.1|localhost):/i.test(u)) {
+      shell.openExternal(u);
+      if (/accounts\.google\.com/i.test(u)) watchLink();
+    }
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (e, url) => {
-    if (!/^https?:\/\/127\.0\.0\.1:/i.test(url)) {
-      e.preventDefault();
-      if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    if (/^https?:\/\/(127\.0\.0\.1|localhost):/i.test(String(url || ''))) return;
+    e.preventDefault();
+    if (/^https?:\/\//i.test(String(url || ''))) {
+      shell.openExternal(url);
+      if (/accounts\.google\.com/i.test(String(url || ''))) watchLink();
+    }
+  });
+  win.webContents.on('will-redirect', (e, url) => {
+    if (/^https?:\/\/(127\.0\.0\.1|localhost):/i.test(String(url || ''))) return;
+    e.preventDefault();
+    if (/^https?:\/\//i.test(String(url || ''))) {
+      shell.openExternal(url);
+      if (/accounts\.google\.com/i.test(String(url || ''))) watchLink();
     }
   });
 }
@@ -206,6 +295,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
+  stopLinkWatch();
   server.stop().finally(() => app.quit());
 });
 

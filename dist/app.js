@@ -5437,6 +5437,12 @@
         note.hidden = true;
         note.textContent = '';
       }
+      /* آخر خطأ حقيقي من Google في محاولة الربط — يظهر هنا بدل ما يضيع */
+      var lastErr = String(driveState.diag.lastError || '').trim();
+      if (lastErr && !conn) {
+        note.hidden = false;
+        note.textContent = 'آخر محاولة ربط فشلت: ' + lastErr;
+      }
     }
 
     if (backendDown) setDriveStatus('is-warn', 'تعذّر الوصول لخادم الربط (/api/google/status) — مش خطأ في المفاتيح، راجع نشر مجلد api/');

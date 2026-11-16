@@ -127,6 +127,56 @@ module.exports = function createGoogle(deps) {
     try { fs.unlinkSync(AUTH_FILE); } catch (e) {}
   }
 
+  /* ---------- سجل الربط وآخر خطأ ---------- */
+  /* بنسجّل كل خطوة عشان لو الربط فشل يبان سبب Google الحقيقي
+     جوه التطبيق (وفي شاشة الخطأ في المتصفح) بدل صفحة 500 مبهمة. */
+  function logEvent(kind, msg) {
+    try {
+      var a = readAuth();
+      var ev = Array.isArray(a.events) ? a.events : [];
+      ev.push({ at: new Date().toISOString(), kind: String(kind || 'info'), msg: String(msg || '').slice(0, 400) });
+      while (ev.length > 25) ev.shift();
+      var patch = { events: ev };
+      if (kind === 'error') {
+        patch.last_error = String(msg || '').slice(0, 600);
+        patch.last_error_at = new Date().toISOString();
+      } else if (kind === 'ok') {
+        patch.last_error = '';
+        patch.last_error_at = '';
+      }
+      patchAuth(patch);
+      /* نسخة في ملف نصي — المستخدم يبعتها لو احتاج دعم */
+      try {
+        fs.appendFileSync(path.join(deps.dataDir, 'google-link.log'),
+          new Date().toISOString() + ' [' + kind + '] ' + String(msg || '') + '\n');
+      } catch (e2) { /* اختياري */ }
+    } catch (e) { /* السجل لا يوقف الربط */ }
+  }
+
+  /* صفحة خطأ مقروءة بدل رد 500 خام في المتصفح */
+  function htmlError(res, title, detail) {
+    var msg = String(detail || '').slice(0, 800);
+    var esc = function (s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    };
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end('<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">' +
+      '<title>تعذّر ربط Google</title></head>' +
+      '<body style="font-family:Segoe UI,Tahoma,sans-serif;background:#0a0e15;color:#e9eef7;' +
+      'display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px">' +
+      '<div style="max-width:560px;text-align:center;background:#151b26;border:1px solid #2a3446;' +
+      'border-radius:16px;padding:26px 22px">' +
+      '<div style="font-size:40px">⚠️</div>' +
+      '<h1 style="font-size:19px;margin:10px 0 8px">' + esc(title) + '</h1>' +
+      '<p style="font-size:13.5px;line-height:1.9;color:#cbd5e1;word-break:break-word">' + esc(msg) + '</p>' +
+      '<p style="font-size:12.5px;color:#9fadc2;margin-top:14px">ارجع لنسخة الديسكتوب — هتلاقي نفس الرسالة ظاهرة في «ربط Google Drive».</p>' +
+      '<a href="/api/google/login" style="display:inline-block;margin-top:16px;padding:11px 20px;' +
+      'background:#4f8cff;color:#fff;border-radius:11px;text-decoration:none;font-weight:700">إعادة المحاولة</a>' +
+      '</div></body></html>');
+  }
+
   /* ---------- روابط محلية ---------- */
   function originLocal() {
     return 'http://127.0.0.1:' + (getPort() || 47820);
@@ -394,6 +444,8 @@ module.exports = function createGoogle(deps) {
               : !c.idValid ? 'bad_client_id_format'
                 : !c.secretValid ? 'bad_client_secret_format'
                   : 'keys_ready',
+        lastError: a.last_error || '',
+        lastErrorAt: a.last_error_at || '',
         desktop: true
       });
       return true;
@@ -556,6 +608,7 @@ module.exports = function createGoogle(deps) {
       /* الحالة بتتحفظ محليًا (مش كوكي) — لأن الرجوع ممكن يحصل في
          متصفح خارجي مختلف عن نافذة التطبيق. */
       patchAuth({ pending_state: state, pending_at: Date.now(), pending_site: '' });
+      logEvent('info', 'بدء الربط محليًا — ' + redirectUri());
       const u = new URL(AUTH_URL);
       u.searchParams.set('client_id', c.id);
       u.searchParams.set('redirect_uri', redirectUri());
@@ -570,6 +623,7 @@ module.exports = function createGoogle(deps) {
     }
 
     if (pathname === '/api/google/callback') {
+      try {
       const u = new URL(req.url, 'http://127.0.0.1');
       const err = u.searchParams.get('error');
       const code = u.searchParams.get('code');
@@ -583,13 +637,15 @@ module.exports = function createGoogle(deps) {
         const msg = err === 'access_denied'
           ? 'تم إلغاء منح الإذن من حساب Google — جرّب تختار حسابك وتضغط «السماح».'
           : 'Google رد بخطأ: ' + err + (desc ? ' — ' + desc : '');
+        logEvent('error', msg);
         redirect(res, localRedirect('?g=err&m=' + encodeURIComponent(msg)));
         return true;
       }
       if (!code) { redirect(res, localRedirect('?g=err&m=' + encodeURIComponent('لم يصل رمز التفويض'))); return true; }
       if (!stateOk) {
-        redirect(res, localRedirect('?g=err&m=' + encodeURIComponent(
-          'انتهت صلاحية محاولة الربط — اضغط «ربط Google Drive» من جديد.')));
+        const msg = 'انتهت صلاحية محاولة الربط — اضغط «ربط Google Drive» من جديد.';
+        logEvent('error', msg + (state ? '' : ' (لم يرجع state من Google)'));
+        redirect(res, localRedirect('?g=err&m=' + encodeURIComponent(msg)));
         return true;
       }
 
@@ -608,15 +664,24 @@ module.exports = function createGoogle(deps) {
         });
         tokenCache = { tok: tok.access_token, exp: Date.now() + Number(tok.expires_in || 3500) * 1000 };
         if (!tok.refresh_token && !prev.refresh_token) {
+          logEvent('error', 'Google لم يرجّع refresh_token');
           redirect(res, localRedirect('?g=err&m=' + encodeURIComponent(
             'Google لم يرجّع رمز تجديد دائم — افتح Google Cloud ← Clients وشيل أي قيود، أو أزل التطبيق من صلاحيات الحساب وجرّب تاني.')));
           return true;
         }
+        logEvent('ok', 'تم ربط الحساب' + (email ? ': ' + email : ''));
         redirect(res, localRedirect('?g=ok'));
       } catch (e) {
-        redirect(res, localRedirect('?g=err&m=' + encodeURIComponent(e.message || 'فشل الربط')));
+        const em = (e && e.message) || 'فشل الربط';
+        logEvent('error', em);
+        redirect(res, localRedirect('?g=err&m=' + encodeURIComponent(em)));
       }
       return true;
+      } catch (e) {
+        logEvent('error', 'خطأ غير متوقع أثناء إكمال الربط: ' + ((e && e.message) || e));
+        htmlError(res, 'خطأ غير متوقع أثناء إكمال الربط', (e && e.message) || String(e));
+        return true;
+      }
     }
 
     if (pathname === '/api/google/disconnect') {

@@ -3,6 +3,7 @@
   "productName": "Nizam Al-Idara",
   "version": "1.0.0",
   "private": true,
+  "author": "AMW Code",
   "description": "نسخة سطح المكتب — Windows 32/64 (Setup + Portable) مع حفظ SQLite",
   "main": "main.js",
   "scripts": {
