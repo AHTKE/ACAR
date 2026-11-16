@@ -785,5 +785,5 @@ module.exports = function createGoogle(deps) {
     return false;
   }
 
-  return { handle: handle, readAuth: readAuth, clearAuth: clearAuth };
+  return { handle: handle, readAuth: readAuth, clearAuth: clearAuth, accessToken: accessToken };
 };

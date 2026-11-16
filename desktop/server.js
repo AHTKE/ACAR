@@ -22,6 +22,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const createGoogle = require('./google');
+const createSync = require('./sync');
 /* node:sqlite موجودة في Node 22.5+ (زي ما بيشتغل الخادم العادي)،
    لكن Electron 33 شايل Node 20 فمافيهاش الوحدة دي. بنتأكد من إصدار
    Node الأول قبل أي require عشان ما يطلعش خطأ ERR_UNKNOWN_BUILTIN_MODULE
@@ -268,6 +269,16 @@ const google = createGoogle({
   siteBase: String(process.env.NIZAM_SITE_BASE || API_BASE).replace(/\/+$/, '')
 });
 
+/* المزامنة بتشتغل محليًا بتوكن Google المحلي — مش بتحويل للموقع (اللي كان
+   بيرفضها 401 لعدم وجود جلسة موقع جوه التطبيق). */
+const localSync = createSync({
+  json: json,
+  readBody: readBody,
+  dataDir: DATA_DIR,
+  accessToken: google.accessToken,
+  readAuth: google.readAuth
+});
+
 
 /* صفحة تأكيد الربط اللي بتظهر في المتصفح بعد موافقة Google */
 function linkedPage(email) {
@@ -353,6 +364,16 @@ const server = http.createServer(async (req, res) => {
       if (await google.handle(req, res, pathname)) return;
     } catch (e) {
       if (!res.headersSent) json(res, 500, { ok: false, error: (e && e.message) || 'خطأ داخلي في ربط Google' });
+      return;
+    }
+  }
+
+  /* ---------- المزامنة المحلية (Google Drive بتوكن التطبيق) ---------- */
+  if (pathname.indexOf('/api/sync/') === 0) {
+    try {
+      if (await localSync.handle(req, res, pathname)) return;
+    } catch (e) {
+      if (!res.headersSent) json(res, 500, { ok: false, error: (e && e.message) || 'خطأ داخلي في المزامنة' });
       return;
     }
   }

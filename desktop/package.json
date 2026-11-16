@@ -35,6 +35,7 @@
       "server.js",
       "google.js",
       "google-keys.js",
+      "sync.js",
       "google-client.json",
       {
         "from": "../dist",
