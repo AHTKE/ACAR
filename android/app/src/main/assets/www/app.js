@@ -5544,6 +5544,100 @@
     try { location.reload(); } catch (e) {}
   });
 
+  /* ---------- تنبيهات البريد (أدمن) ---------- */
+  var notifyPanel = $('#notifyPanel');
+  var notifyData = { linked: [], extras: [] };
+
+  function renderNotifyList() {
+    var box = $('#notifyLinkedList');
+    if (!box) return;
+    var linked = notifyData.linked || [], extras = notifyData.extras || [];
+    box.innerHTML = '<b>مسجّلين ومربوطين (' + linked.length + '):</b> ' +
+      (linked.length ? linked.map(escapeHtml).join(' · ') : 'لا يوجد') +
+      '<br><b>إيميلات إضافية (' + extras.length + '):</b> ' +
+      (extras.length ? extras.map(escapeHtml).join(' · ') : 'لا يوجد');
+  }
+
+  function notifyNote(text, isError) {
+    var el = $('#notifyResult');
+    if (!el) return;
+    el.hidden = !text;
+    el.textContent = text || '';
+    el.className = 'panel__note' + (isError ? ' is-error' : '');
+  }
+
+  function loadNotify() {
+    if (!notifyPanel || typeof fetch !== 'function') return;
+    fetch('/api/notify-list', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || !j.ok) { notifyPanel.hidden = true; return; }
+        notifyPanel.hidden = false;
+        notifyData.linked = j.linked || [];
+        notifyData.extras = j.extras || [];
+        renderNotifyList();
+        var ex = $('#notifyExtras');
+        if (ex && !ex.value) ex.value = notifyData.extras.join('\n');
+      })
+      .catch(function () { notifyPanel.hidden = true; });
+  }
+
+  var notifySaveBtn = $('#notifySave');
+  if (notifySaveBtn) notifySaveBtn.addEventListener('click', function () {
+    var el = $('#notifyExtras');
+    notifySaveBtn.disabled = true;
+    fetch('/api/notify-emails', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emails: el ? el.value : '' })
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      notifySaveBtn.disabled = false;
+      if (!j || !j.ok) { notifyNote((j && j.error) || 'تعذّر الحفظ', true); return; }
+      notifyData.extras = j.extras || [];
+      if (el) el.value = notifyData.extras.join('\n');
+      renderNotifyList();
+      notifyNote('اتحفظت ' + notifyData.extras.length + ' إيميل إضافي ✓', false);
+      toast('اتحفظت الإيميلات ✓');
+    }).catch(function () {
+      notifySaveBtn.disabled = false;
+      notifyNote('تعذّر الحفظ — راجع الاتصال', true);
+    });
+  });
+
+  var notifySendBtn = $('#notifySend');
+  if (notifySendBtn) notifySendBtn.addEventListener('click', function () {
+    var msg = $('#notifyMessage'), subj = $('#notifySubject'), ex = $('#notifyExtras');
+    var text = msg ? String(msg.value || '').trim() : '';
+    if (!text) { notifyNote('اكتب نص الرسالة الأول', true); return; }
+    notifySendBtn.disabled = true;
+    notifyNote('جارٍ الإرسال…', false);
+    fetch('/api/notify-send', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subject: subj ? subj.value : '',
+        message: text,
+        extraEmails: ex ? ex.value : ''
+      })
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      notifySendBtn.disabled = false;
+      if (!j || !j.ok) { notifyNote((j && j.error) || 'تعذّر الإرسال', true); return; }
+      var line = 'اتبعت لـ ' + j.sent + ' من ' + j.total + ' إيميل';
+      if (j.failed) line += ' — فشل ' + j.failed;
+      if (j.skipped) line += ' — اتخطّى ' + j.skipped + ' (الحد 40 في المرة)';
+      var fails = (j.results || []).filter(function (x) { return !x.ok; });
+      if (fails.length) {
+        line += '\n' + fails.map(function (x) { return x.email + ': ' + (x.error || 'فشل'); }).join('\n');
+      }
+      notifyNote(line, !!(j.failed || j.skipped));
+      toast('تم إرسال التنبيه ✓');
+      if (msg) msg.value = '';
+    }).catch(function () {
+      notifySendBtn.disabled = false;
+      notifyNote('تعذّر الإرسال — راجع الاتصال', true);
+    });
+  });
+
   window.runGoogleCheck = runGoogleCheck;
   window.renderGoogleDiag = renderGoogleDiag;
 
@@ -6667,6 +6761,7 @@
       });
   }
   safeRun(loadSyncFolder, 'مجلد المزامنة');
+  safeRun(loadNotify, 'تنبيهات البريد');
 
   var syncFolderSave = $('#syncFolderSave');
   if (syncFolderSave) {

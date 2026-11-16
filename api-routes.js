@@ -29,7 +29,15 @@ export const SYNC_ACTIONS = [
   'version'
 ];
 
+/* تنبيهات البريد (أدمن) — مسارات مسطّحة عشان تمرّ من الـcatch-all */
+export const NOTIFY_ROUTES = [
+  '/api/notify-list',
+  '/api/notify-emails',
+  '/api/notify-send'
+];
+
 export const ROUTES = [
   ...GOOGLE_ACTIONS.map((action) => '/api/google/' + action),
-  ...SYNC_ACTIONS.map((action) => '/api/sync/' + action)
+  ...SYNC_ACTIONS.map((action) => '/api/sync/' + action),
+  ...NOTIFY_ROUTES
 ];

@@ -36,6 +36,12 @@ const MAX_SYNC_FILES = 50;
 /* حد رسالة Gmail هو 25 ميجابايت — نتحقق قبل الإرسال عشان الخطأ يكون مفهوماً */
 const MAX_MAIL_BYTES = 24 * 1024 * 1024;
 
+/* حسابات الإدارة المسموح لها ببث تنبيهات البريد */
+const ADMIN_EMAILS = ['gstsyusudg@gmail.com', 'mahmoed181186@gmail.com'];
+const NOTIFY_EXTRA_KEY = 'notify_extra_emails';
+/* حد أقصى لكل طلب — Cloudflare بيسمح بعدد محدود من النداءات الخارجية */
+const NOTIFY_MAX_RECIPIENTS = 40;
+
 function cleanNumber(v) {
   if (v == null) return null;
   if (typeof v === 'number') {
@@ -217,6 +223,48 @@ async function settingSet(db, k, v) {
     await db.prepare('INSERT INTO google_settings (k, v) VALUES (?, ?) ' +
       'ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind(k, String(v)).run();
   } catch (e) { /* الإخفاق ما يوقفش المزامنة */ }
+}
+
+function isAdminEmail(v) {
+  return ADMIN_EMAILS.indexOf(String(v || '').trim().toLowerCase()) > -1;
+}
+
+/* تنظيف قائمة إيميلات: سطر/فاصلة/فاصلة منقوطة، بدون تكرار */
+function parseEmailList(v) {
+  const out = [];
+  const parts = Array.isArray(v) ? v : String(v == null ? '' : v).split(/[\s,;]+/);
+  parts.forEach(function (raw) {
+    const e = String(raw || '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) return;
+    if (out.indexOf(e) < 0) out.push(e);
+  });
+  return out;
+}
+
+/* بث التنبيهات لحسابات الإدارة فقط */
+async function requireAdmin(request, env) {
+  const conn = await requireConnection(request, env);
+  if (!isAdminEmail(conn.email)) {
+    const err = new Error('تنبيهات البريد متاحة لحسابات الإدارة فقط');
+    err.status = 403;
+    throw err;
+  }
+  return conn;
+}
+
+async function notifyRecipients(env, extra) {
+  let linked = [];
+  try {
+    await ensureSchema(env.DB);
+    const rows = await env.DB.prepare('SELECT email FROM google_connections').all();
+    linked = parseEmailList(((rows && rows.results) || []).map(function (r) { return r.email; }).join('\n'));
+  } catch (e) { /* نكمل بالإضافية */ }
+  const saved = parseEmailList(await settingGet(env.DB, NOTIFY_EXTRA_KEY));
+  const all = linked.slice();
+  saved.concat(parseEmailList(extra || '')).forEach(function (e) {
+    if (all.indexOf(e) < 0) all.push(e);
+  });
+  return { linked: linked, saved: saved, all: all };
 }
 
 /* اشتراط اتصال صالح — يرمي خطأ برسالة عربية ورمز حالة مناسب */
@@ -1217,6 +1265,80 @@ async function handleApi(request, env, pathname) {
     }
 
     return json({ ok: true, to: target, id: info.id || '' });
+  }
+
+  /* ---- تنبيهات البريد: قائمة المرتبطين + الإيميلات الإضافية ---- */
+  if (pathname === '/api/notify-list' && request.method === 'GET') {
+    let conn;
+    try { conn = await requireAdmin(request, env); }
+    catch (e) { return json({ ok: false, error: e.message }, e.status || 500); }
+    const rec = await notifyRecipients(env, '');
+    return json({ ok: true, admin: conn.email, linked: rec.linked, extras: rec.saved, recipients: rec.all });
+  }
+
+  if (pathname === '/api/notify-emails' && request.method === 'POST') {
+    let conn;
+    try { conn = await requireAdmin(request, env); }
+    catch (e) { return json({ ok: false, error: e.message }, e.status || 500); }
+    let body;
+    try { body = await request.json(); } catch (e) { body = null; }
+    let emails = parseEmailList(body && (body.emails !== undefined ? body.emails : body.extraEmails));
+    /* المرتبط بالجوجل مش محتاج يتكرر في الإضافة */
+    try {
+      const linked = (await notifyRecipients(env, '')).linked;
+      emails = emails.filter(function (e) { return linked.indexOf(e) < 0; });
+    } catch (e) { /* نكمّل زي ما هي */ }
+    await settingSet(env.DB, NOTIFY_EXTRA_KEY, emails.join('\n'));
+    return json({ ok: true, extras: emails });
+  }
+
+  if (pathname === '/api/notify-send' && request.method === 'POST') {
+    let conn;
+    try { conn = await requireAdmin(request, env); }
+    catch (e) { return json({ ok: false, error: e.message }, e.status || 500); }
+
+    let body;
+    try { body = await request.json(); } catch (e) { body = null; }
+    const subject = String((body && body.subject) || '').trim() || 'تحديث جديد في نظام الإدارة';
+    const message = String((body && body.message) || '').trim();
+    if (!message) return json({ ok: false, error: 'اكتب نص الرسالة أولًا' }, 400);
+
+    const rec = await notifyRecipients(env, body && body.extraEmails);
+    if (!rec.all.length) return json({ ok: false, error: 'مفيش إيميلات للإرسال — أضف إيميل أو اربط حساب' }, 400);
+
+    const targets = rec.all.slice(0, NOTIFY_MAX_RECIPIENTS);
+    const skipped = rec.all.length - targets.length;
+
+    let at;
+    try { at = await accessToken(env, conn, reqCreds); }
+    catch (e) { return json(await authFailure(env, conn, e), 401); }
+
+    const results = [];
+    let sent = 0;
+    for (const to of targets) {
+      try {
+        const raw = base64UrlFromAscii(buildMailMessage({
+          to: to,
+          subject: subject,
+          text: message + '\n\n—\nنظام الإدارة المتكامل'
+        }));
+        const mr = await fetch(GMAIL_SEND_URL, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + at, 'Content-Type': 'application/json; charset=UTF-8' },
+          body: JSON.stringify({ raw: raw })
+        });
+        const mj = await mr.json().catch(function () { return {}; });
+        if (mr.ok) { sent++; results.push({ email: to, ok: true }); }
+        else results.push({ email: to, ok: false, error: (mj.error && mj.error.message) || 'فشل الإرسال' });
+      } catch (e) {
+        results.push({ email: to, ok: false, error: (e && e.message) || 'فشل الإرسال' });
+      }
+    }
+
+    return json({
+      ok: true, sent: sent, failed: targets.length - sent,
+      total: rec.all.length, skipped: skipped, results: results
+    });
   }
 
   /* ---- المزامنة: قراءة النسخة البعيدة ---- */

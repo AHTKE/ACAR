@@ -1549,6 +1549,29 @@
           <p class="panel__note" id="driveNote" hidden></p>
         </div>
 
+        <div class="panel" id="notifyPanel" hidden style="grid-column:1/-1">
+          <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-bell"/></svg> تنبيهات البريد (أدمن)</h3>
+          <p class="panel__hint">بيبعت رسالة من حسابك المربوط لكل الإيميلات المسجّلة والمربوطة بالجوجل، وكمان أي إيميلات تضيفها بنفسك.</p>
+          <div class="panel__note" id="notifyLinkedList">جارٍ تحميل القائمة…</div>
+          <label class="field">
+            <span>إيميلات إضافية — كل إيميل في سطر</span>
+            <textarea id="notifyExtras" rows="3" placeholder="name@example.com"></textarea>
+          </label>
+          <label class="field">
+            <span>موضوع الرسالة</span>
+            <input id="notifySubject" maxlength="120" value="تحديث جديد في نظام الإدارة" />
+          </label>
+          <label class="field">
+            <span>نص الرسالة</span>
+            <textarea id="notifyMessage" rows="4" placeholder="اكتب التحديث اللي عايز تبلّغ بيه المستخدمين…"></textarea>
+          </label>
+          <div class="form__actions">
+            <button type="button" class="btn btn--ghost btn--sm" id="notifySave">حفظ الإيميلات</button>
+            <button type="button" class="btn btn--primary" id="notifySend">إرسال التنبيه</button>
+          </div>
+          <p class="panel__note" id="notifyResult" hidden></p>
+        </div>
+
         <div class="panel" style="grid-column:1/-1">
           <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-save"/></svg> ربـط الداتا على قرص الجهاز</h3>
           <p class="panel__hint">اختار فولدر من جهازك (زي الفولدر العام على جوجل درايف) وهتتحفظ فيه نسخة JSON من كل بياناتك تلقائيًا مع كل تعديل، وكمان ملفات PDF/Excel اللي تصدّرها تقدر تحفظها فيه مباشرة — بجانب Google Drive بدون ما يتأثر.</p>

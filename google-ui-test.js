@@ -111,7 +111,13 @@ const ok = (name, cond, extra) => {
   ok('الصندوق متلوّن حسب النتيجة', box.className.indexOf('drive-diag') > -1, box.className);
   ok('زر إعادة التحميل ظاهر فقط عند النجاح', $('#driveReload').hidden === true);
 
-  console.log('\n[4] لا أخطاء تشغيل');
+  console.log('\n[4] لوحة تنبيهات البريد (أدمن)');
+  const nPanel = $('#notifyPanel');
+  ok('اللوحة موجودة وتظهر للأدمن', !!nPanel && nPanel.hidden === false, nPanel && nPanel.hidden);
+  ok('قائمة المسجلين معروضة', ($('#notifyLinkedList').textContent || '').indexOf('مسجّلين') > -1, $('#notifyLinkedList').textContent);
+  ok('زر الإرسال موجود', !!$('#notifySend'));
+
+  console.log('\n[5] لا أخطاء تشغيل');
   ok('لا أخطاء JS', errors.length === 0, errors.join(' | ').slice(0, 200));
 
   console.log('\n========================================');
