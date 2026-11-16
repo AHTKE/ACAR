@@ -34,6 +34,7 @@
       "preload.js",
       "server.js",
       "google.js",
+      "google-keys.js",
       "google-client.json",
       {
         "from": "../dist",

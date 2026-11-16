@@ -1,63 +1,19 @@
 /* ============================================================
    desktop/check-keys.js
    ------------------------------------------------------------
-   فحص سريع لمفاتيح Google قبل/بعد البناء — من غير ما تفتح التطبيق:
+   فحص سريع لمفاتيح Google قبل البناء — من غير ما تفتح التطبيق:
      npm run desktop:check-keys
 
-   بيقولك:
-     • البناء هياخد المفتاح من فين (ملف ولا متغيّرات بيئة)
-     • آخر جزء من الـClient ID (تقدر تقارنه بـ Google Cloud)
-     • Google شايف المفتاح ده إيه: سليم / محذوف / مش مطابق
-
-   ما بيطبعش الـClient Secret نهائيًا.
+   بيقولك نفس اللي البناء هيستخدمه بالظبط (نفس قراءة المفاتيح
+   والأولوية من google-keys.js)، وبيسأل Google عن المفتاح:
+   سليم / محذوف / مش مطابق. السر مش بيتطبع.
    ============================================================ */
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
+const keys = require('./google-keys');
 
-const DEFAULT_REDIRECT = 'http://127.0.0.1:47820/api/google/callback';
-const ID_RE = /^\d{6,}-[a-z0-9_-]{10,}\.apps\.googleusercontent\.com$/i;
-const SECRET_RE = /^GOCSPX-[A-Za-z0-9_-]{8,}$/;
-
-function clean(v) {
-  return String(v == null ? '' : v)
-    .replace(/[\u200B-\u200D\uFEFF]/g, '')
-    .replace(/^[\s"'`]+/, '')
-    .replace(/[\s"'`]+$/, '')
-    .replace(/[\r\n\t]/g, '')
-    .trim();
-}
-
-function normalize(data) {
-  if (!data || typeof data !== 'object') return {};
-  const inner = data.installed || data.web;
-  const base = inner && typeof inner === 'object' ? Object.assign({}, data, inner) : data;
-  return {
-    client_id: clean(base.client_id),
-    client_secret: clean(base.client_secret),
-    type: data.installed ? 'Desktop app' : data.web ? 'Web application' : 'غير معروف',
-    redirect_uris: Array.isArray(base.redirect_uris) ? base.redirect_uris : []
-  };
-}
-
-function resolveKeys() {
-  const file = process.env.NIZAM_GOOGLE_CLIENT_FILE || path.join(__dirname, 'google-client.json');
-  if (fs.existsSync(file)) {
-    try {
-      const norm = normalize(JSON.parse(fs.readFileSync(file, 'utf8')));
-      if (norm.client_id && norm.client_secret) {
-        return Object.assign({ source: 'ملف ' + path.relative(process.cwd(), file) }, norm);
-      }
-    } catch (e) { /* نكمل بالبيئة */ }
-  }
-  const id = clean(process.env.NIZAM_GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID);
-  const secret = clean(process.env.NIZAM_GOOGLE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET);
-  if (id && secret) return { source: 'متغيّرات البيئة', client_id: id, client_secret: secret, type: 'غير معروف' };
-  return null;
-}
-
-const tail = (id) => { const v = String(id).split('.')[0]; return v.length > 20 ? v.slice(0, 13) + '…' + v.slice(-6) : v; };
+const DEFAULT_REDIRECT = keys.DEFAULT_REDIRECT;
 
 async function google(url, init) {
   const ctl = typeof AbortSignal !== 'undefined' && AbortSignal.timeout
@@ -66,22 +22,32 @@ async function google(url, init) {
 }
 
 (async function main() {
-  const k = resolveKeys();
-  if (!k) {
-    console.log('✖ مفيش مفاتيح: لا desktop/google-client.json ولا NIZAM_GOOGLE_CLIENT_ID/SECRET.');
+  let resolved;
+  try {
+    resolved = keys.resolveForBuild({});
+  } catch (e) {
+    console.log('✖ ' + ((e && e.message) || e));
     process.exit(1);
   }
-  console.log('المصدر: ' + k.source);
-  console.log('نوع العميل: ' + k.type);
-  console.log('Client ID: ' + tail(k.client_id));
-  console.log('صيغة الـID: ' + (ID_RE.test(k.client_id) ? '✔ سليمة' : '✖ غير سليمة'));
-  console.log('صيغة السر: ' + (SECRET_RE.test(k.client_secret) ? '✔ سليمة' : '✖ غير سليمة') +
-    ' (الطول ' + String(k.client_secret).length + ' — القيمة مش بتتطبع)');
+
+  const id = resolved.keys.client_id;
+  const secret = resolved.keys.client_secret;
+  const source = resolved.source === 'file'
+    ? 'ملف ' + path.relative(process.cwd(), resolved.file)
+    : 'متغيّرات البيئة';
+
+  console.log('المصدر: ' + source);
+  console.log('نوع العميل: ' + (resolved.keys.type || 'غير معروف'));
+  console.log('Client ID: ' + keys.tail(id));
+  console.log('صيغة الـID: ' + (keys.validateId(id) ? '✔ سليمة' : '✖ غير سليمة'));
+  console.log('صيغة السر: ' + (keys.validateSecret(secret) ? '✔ سليمة' : '✖ غير سليمة') +
+    ' (الطول ' + String(secret).length + ' — القيمة مش بتتطبع)');
+  resolved.warnings.forEach(function (w) { console.log('⚠ ' + w); });
 
   let idProbe = '';
   try {
     const u = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-    u.searchParams.set('client_id', k.client_id);
+    u.searchParams.set('client_id', id);
     u.searchParams.set('redirect_uri', DEFAULT_REDIRECT);
     u.searchParams.set('response_type', 'code');
     u.searchParams.set('scope', 'https://www.googleapis.com/auth/drive.file');
@@ -95,7 +61,7 @@ async function google(url, init) {
   let token = { error: '', description: '' };
   try {
     const body = new URLSearchParams({
-      client_id: k.client_id, client_secret: k.client_secret,
+      client_id: id, client_secret: secret,
       code: 'diagnostic-probe', grant_type: 'authorization_code',
       redirect_uri: DEFAULT_REDIRECT
     });

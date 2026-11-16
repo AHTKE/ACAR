@@ -5372,9 +5372,11 @@
     /* الربط عبر الموقع الرسمي (نسخة الديسكتوب) — منعرضش تعليمات المفاتيح */
     var viaSite = driveState.diag.mode === 'site';
     var siteLink = driveState.diag.siteLink === true;
+    /* نسخة سطح المكتب: المفاتيح جوّه النسخة، فتعليمات Vercel/Secrets مش مكانها */
+    var isDesktop = driveState.diag.desktop === true;
     var setup = $('#driveSetup'), connect = $('#driveConnect'),
         disconnect = $('#driveDisconnect'), upload = $('#driveUploadLabel'), note = $('#driveNote');
-    if (setup) setup.hidden = !!cfg || !!backendDown;
+    if (setup) setup.hidden = !!cfg || !!backendDown || isDesktop;
 
     /* الزر دايم ظاهر — ومعطّل بس لو السيرفر نفسه قال «المفاتيح ناقصة».
        لو السيرفر مش رادّ خالص (نشر من غير مسار /api) مبنقولش «المفاتيح
@@ -5389,7 +5391,9 @@
           ? 'اضغط لاختيار حساب Google وتفويضه'
           : verdict === 'bad_client_id_format'
             ? 'GOOGLE_CLIENT_ID غير صحيح الصيغة — لازم ينتهي بـ .apps.googleusercontent.com'
-            : 'أضف المفتاحين GOOGLE_CLIENT_ID و GOOGLE_CLIENT_SECRET في Sites/Vercel ← Secrets ثم أعد النشر';
+            : isDesktop
+              ? 'مفاتيح Google مش موجودة جوّه النسخة — أعد البناء بملف desktop/google-client.json'
+              : 'أضف المفتاحين GOOGLE_CLIENT_ID و GOOGLE_CLIENT_SECRET في Sites/Vercel ← Secrets ثم أعد النشر';
     }
     if (disconnect) disconnect.hidden = !conn;
     if (upload) upload.hidden = !conn;
@@ -5422,22 +5426,27 @@
         note.textContent = 'الربط بيبدأ من الموقع الرسمي: هيتفتح المتصفح على حسابك في الموقع، تختار حساب Google وتضغط «السماح»، وبعدها التطبيق بيكمل لوحده.';
       } else if (backendDown) {
         note.hidden = false;
-        note.textContent = 'خادم الربط مش متاح على هذا النشر: مسار /api/google/status ما ردّش. لو التطبيق منشور على Vercel لازم مجلد api/ ومعاه vercel.json يكونوا مرفوعين، وإلا مفيش حاجة تقدر تربط Google.';
+        note.textContent = isDesktop
+          ? 'تعذّر قراءة حالة الربط من الخادم المحلي — اقفل التطبيق وافتحه تاني.'
+          : 'خادم الربط مش متاح على هذا النشر: مسار /api/google/status ما ردّش. لو التطبيق منشور على Vercel لازم مجلد api/ ومعاه vercel.json يكونوا مرفوعين، وإلا مفيش حاجة تقدر تربط Google.';
       } else if (!cfg) {
         note.hidden = false;
-        note.textContent = 'الزر معطّل مؤقتاً: حطّ GOOGLE_CLIENT_ID و GOOGLE_CLIENT_SECRET في Sites ← Secrets (أو Vercel ← Environment Variables) وأعد النشر، وهيتشغّل فوراً. ' +
-          'مهم على Vercel: المتغيّرات تُطبَّق على النشر الجديد فقط — اعمل Redeploy بعد إضافتها، وتأكد إنها مضافة على Production و Preview.';
+        note.textContent = isDesktop
+          ? 'مفاتيح Google مش موجودة جوّه النسخة — ضع desktop/google-client.json وأعد البناء.'
+          : 'الزر معطّل مؤقتاً: حطّ GOOGLE_CLIENT_ID و GOOGLE_CLIENT_SECRET في Sites ← Secrets (أو Vercel ← Environment Variables) وأعد النشر، وهيتشغّل فوراً. ' +
+            'مهم على Vercel: المتغيّرات تُطبَّق على النشر الجديد فقط — اعمل Redeploy بعد إضافتها، وتأكد إنها مضافة على Production و Preview.';
       } else if (verdict === 'bad_client_id_format' || verdict === 'bad_client_secret_format') {
         note.hidden = false;
         note.textContent = 'المفاتيح موجودة لكن صيغتها غير صحيحة: ' +
           (verdict === 'bad_client_id_format'
             ? 'GOOGLE_CLIENT_ID لازم ينتهي بـ .apps.googleusercontent.com (القيمة الحالية تنتهي بـ ' + (tail || '—') + ').'
             : 'GOOGLE_CLIENT_SECRET لازم يكون بالشكل GOCSPX-... من Google Cloud ← Clients.') +
-          ' انسخ القيمة كاملة من Google Cloud وأعد النشر (Redeploy) على Vercel.';
+          (isDesktop
+            ? ' حدّث desktop/google-client.json وأعد البناء.'
+            : ' انسخ القيمة كاملة من Google Cloud وأعد النشر (Redeploy) على Vercel.');
       } else {
         note.hidden = false;
-        note.textContent = 'مفتاح الربط داخل النسخة: ' + (tail || '—') +
-          ' (آخر جزء من Client ID) — لو مش مطابق للعميل اللي في Google Cloud، حدّث desktop/google-client.json وأعد بناء النسخة.';
+        note.textContent = 'مفتاح Google جوّه النسخة: ' + (tail || '—');
       }
       /* آخر خطأ حقيقي من Google في محاولة الربط — يظهر هنا بدل ما يضيع */
       var lastErr = String(driveState.diag.lastError || '').trim();
@@ -5447,8 +5456,12 @@
       }
     }
 
-    if (backendDown) setDriveStatus('is-warn', 'تعذّر الوصول لخادم الربط (/api/google/status) — مش خطأ في المفاتيح، راجع نشر مجلد api/');
-    else if (!cfg) setDriveStatus('is-warn', 'ناقص مفتاحين: GOOGLE_CLIENT_ID و GOOGLE_CLIENT_SECRET — اضيفهم في Sites/Vercel ← Secrets ثم اعمل Redeploy');
+    if (backendDown) setDriveStatus('is-warn', isDesktop
+      ? 'تعذّر قراءة حالة الربط من الخادم المحلي — أعد فتح التطبيق'
+      : 'تعذّر الوصول لخادم الربط (/api/google/status) — مش خطأ في المفاتيح، راجع نشر مجلد api/');
+    else if (!cfg) setDriveStatus('is-warn', isDesktop
+      ? 'مفاتيح Google مش موجودة جوّه النسخة — أعد البناء بملف desktop/google-client.json'
+      : 'ناقص مفتاحين: GOOGLE_CLIENT_ID و GOOGLE_CLIENT_SECRET — اضيفهم في Sites/Vercel ← Secrets ثم اعمل Redeploy');
     else if (verdict === 'bad_client_id_format' || verdict === 'bad_client_secret_format') {
       setDriveStatus('is-warn', 'المفاتيح موجودة لكن ' + googleVerdictText(verdict) +
         (tail ? ' — القيمة الحالية تنتهي بـ ' + tail + ')' : '') + ' — اضغط «فحص المفاتيح»');
