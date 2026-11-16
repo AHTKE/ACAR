@@ -5326,6 +5326,7 @@
       case 'bad_client_secret_format': return 'قيمة GOOGLE_CLIENT_SECRET غير صحيحة الصيغة';
       case 'client_id_not_found': return 'Google لا يعرف هذا الـClient ID';
       case 'bad_client_secret': return 'الـClient Secret لا يطابق الـClient ID';
+      case 'client_deleted': return 'عميل OAuth ده محذوف من Google Cloud (deleted_client) — لازم عميل جديد';
       case 'redirect_uri_mismatch': return 'رابط الإرجاع غير مسجّل في Google Cloud';
       case 'keys_ok': return 'المفاتيح صحيحة ومطابقة لـ Google';
       default: return 'الحالة غير معروفة — شغّل الفحص';

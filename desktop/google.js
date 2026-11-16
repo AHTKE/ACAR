@@ -547,7 +547,7 @@ module.exports = function createGoogle(deps) {
           status: r.status,
           redirected: /^https?:/i.test(loc) && loc.indexOf('accounts.google.com') === -1,
           redirectUriMismatch: /redirect_uri_mismatch/i.test(text) || /redirect_uri_mismatch/i.test(loc),
-          clientNotFound: /invalid_client|OAuth client was not found|deleted_client/i.test(text)
+          clientNotFound: /invalid_client|unauthorized_client|OAuth client was not found|deleted_client|OAuth client was deleted/i.test(text)
         };
       } catch (e) {
         out.idProbe = { status: 0, network: true, error: String((e && e.message) || e).slice(0, 200) };
@@ -571,6 +571,9 @@ module.exports = function createGoogle(deps) {
       if (ip.clientNotFound) {
         out.verdict = 'client_id_not_found';
         out.advice = 'Google لا يعرف هذا الـClient ID — راجع Google Cloud ← Clients.';
+      } else if (sp.error === 'deleted_client' || /deleted_client|OAuth client was deleted/i.test(String(sp.description || ''))) {
+        out.verdict = 'client_deleted';
+        out.advice = 'عميل OAuth ده محذوف من Google Cloud (deleted_client). أنشئ عميل جديد OAuth client ID من نوع Desktop app، وحطّ الـClient ID والسر الجديد في desktop/google-client.json (أو NIZAM_GOOGLE_CLIENT_ID / NIZAM_GOOGLE_CLIENT_SECRET) وأعد بناء النسخة.';
       } else if (ip.redirectUriMismatch) {
         out.verdict = 'redirect_uri_mismatch';
         out.advice = 'أضف في Google Cloud ← Clients ← Authorized redirect URIs: ' + redirectUri();
