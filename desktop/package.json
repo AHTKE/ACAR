@@ -16,7 +16,8 @@
     "dist:win-portable32": "node prepare-google-client.js && electron-builder --win portable --ia32",
     "dist:win-all": "node prepare-google-client.js && electron-builder --win nsis portable --x64 --ia32",
     "dist:linux": "node prepare-google-client.js && electron-builder --linux AppImage deb --x64",
-    "dist:mac": "node prepare-google-client.js && electron-builder --mac dmg --x64 --arm64"
+    "dist:mac": "node prepare-google-client.js && electron-builder --mac dmg --x64 --arm64",
+    "check-keys": "node check-keys.js"
   },
   "devDependencies": {
     "electron": "33.2.1",

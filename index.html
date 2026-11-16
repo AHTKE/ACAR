@@ -1529,7 +1529,7 @@
           </div>
 
           <div class="panel__note" id="driveSetup" hidden>
-            <b>للتفعيل (مرة واحدة):</b> أنشئ مشروعاً في <b>Google Cloud Console</b> ← فعّل <b>Drive API</b> ← املأ <b>OAuth consent screen</b> (External) وأضف حسابك كـ <b>Test user</b> ← أنشئ <b>OAuth client ID</b> من نوع <b>Web application</b> بـ Redirect URI: <code id="driveRedirect"></code><br />
+            <b>للتفعيل (مرة واحدة):</b> أنشئ مشروعاً في <b>Google Cloud Console</b> ← فعّل <b>Drive API</b> ← املأ <b>OAuth consent screen</b> (External) وأضف حسابك كـ <b>Test user</b> ← أنشئ <b>OAuth client ID</b>. للديسكتوب النوع <b>Desktop app</b> (مش محتاج Redirect URI — أي منفذ loopback مقبول)، ولنسخة الموقع النوع <b>Web application</b> برابط إرجاع: <code id="driveRedirect"></code><br />
             ثم ضع <code>GOOGLE_CLIENT_ID</code> و <code>GOOGLE_CLIENT_SECRET</code> في <b>Vercel</b> ← Settings ← Environment Variables (أو في إعدادات الموقع ← <b>Secrets</b>)، وأعد النشر.
             <br /><b>على Vercel كمان</b> لازم تضيف مسار الإرجاع في Google Cloud Console: <code id="driveRedirectVercel"></code>
           </div>

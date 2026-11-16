@@ -63,6 +63,10 @@ const GOOGLE_CLIENT_FILE = process.env.NIZAM_GOOGLE_CLIENT_FILE ||
 let GOOGLE_CLIENT = {};
 try { GOOGLE_CLIENT = JSON.parse(fs.readFileSync(GOOGLE_CLIENT_FILE, 'utf8')) || {}; }
 catch (e) { GOOGLE_CLIENT = {}; }
+/* Google بينزّل ملف المفاتيح جوّه installed (Desktop) أو web — نقبل الشكلين */
+if (GOOGLE_CLIENT && (GOOGLE_CLIENT.installed || GOOGLE_CLIENT.web)) {
+  GOOGLE_CLIENT = Object.assign({}, GOOGLE_CLIENT, GOOGLE_CLIENT.installed || GOOGLE_CLIENT.web);
+}
 /* بديل آمن للتشغيل والاختبار من غير كتابة السر في ملف: تقدر تمرّر
    NIZAM_GOOGLE_CLIENT_ID و NIZAM_GOOGLE_CLIENT_SECRET في البيئة. */
 if (process.env.NIZAM_GOOGLE_CLIENT_ID || process.env.NIZAM_GOOGLE_CLIENT_SECRET) {

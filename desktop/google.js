@@ -431,7 +431,9 @@ module.exports = function createGoogle(deps) {
         mode: viaSite ? 'site' : 'local',
         siteBase: siteBase,
         siteLink: capable,
-        clientIdTail: c.id ? c.id.slice(-10) : '',
+        clientIdTail: c.id ? (c.id.split('.')[0].length > 20
+          ? c.id.split('.')[0].slice(0, 13) + '…' + c.id.split('.')[0].slice(-6)
+          : c.id.split('.')[0]) : '',
         clientIdLength: c.id.length,
         clientIdValid: c.idValid,
         secretPresent: !!c.secret,

@@ -5435,8 +5435,9 @@
             : 'GOOGLE_CLIENT_SECRET لازم يكون بالشكل GOCSPX-... من Google Cloud ← Clients.') +
           ' انسخ القيمة كاملة من Google Cloud وأعد النشر (Redeploy) على Vercel.';
       } else {
-        note.hidden = true;
-        note.textContent = '';
+        note.hidden = false;
+        note.textContent = 'مفتاح الربط داخل النسخة: ' + (tail || '—') +
+          ' (آخر جزء من Client ID) — لو مش مطابق للعميل اللي في Google Cloud، حدّث desktop/google-client.json وأعد بناء النسخة.';
       }
       /* آخر خطأ حقيقي من Google في محاولة الربط — يظهر هنا بدل ما يضيع */
       var lastErr = String(driveState.diag.lastError || '').trim();
