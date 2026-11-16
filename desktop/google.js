@@ -675,7 +675,7 @@ module.exports = function createGoogle(deps) {
           return true;
         }
         logEvent('ok', 'تم ربط الحساب' + (email ? ': ' + email : ''));
-        redirect(res, localRedirect('?g=ok'));
+        redirect(res, localRedirect('local/linked?email=' + encodeURIComponent(email || '')));
       } catch (e) {
         const em = (e && e.message) || 'فشل الربط';
         logEvent('error', em);

@@ -161,6 +161,12 @@ function watchLink() {
     if (!st) return;
     if (st.connected) {
       stopLinkWatch();
+      try {
+        if (win.isMinimized()) win.restore();
+        win.show();
+        win.focus();
+        if (typeof win.flashFrame === 'function') win.flashFrame(false);
+      } catch (e) { /* النافذة ممكن تكون اتقفلت */ }
       try { win.reload(); } catch (e) {}
       return;
     }

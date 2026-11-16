@@ -268,6 +268,32 @@ const google = createGoogle({
   siteBase: String(process.env.NIZAM_SITE_BASE || API_BASE).replace(/\/+$/, '')
 });
 
+
+/* صفحة تأكيد الربط اللي بتظهر في المتصفح بعد موافقة Google */
+function linkedPage(email) {
+  const safe = String(email || '').replace(/[<>&"]/g, function (c) {
+    return { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c];
+  });
+  return '<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8" />' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1" />' +
+    '<title>تم ربط Google Drive</title><style>' +
+    'body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;' +
+    'background:#0a0e15;color:#e8edf5;font-family:system-ui,"Segoe UI",Tahoma,sans-serif}' +
+    '.card{max-width:520px;margin:24px;padding:28px 26px;border-radius:18px;background:#121926;' +
+    'border:1px solid #23303f;text-align:center;box-shadow:0 18px 50px rgba(0,0,0,.45)}' +
+    '.ok{font-size:44px;line-height:1}.card h1{font-size:22px;margin:10px 0 6px}' +
+    '.card p{margin:6px 0;color:#a9b6c7;font-size:15px;line-height:1.8}' +
+    '.mail{direction:ltr;color:#7fd1a7;font-weight:600}.btn{margin-top:18px;padding:10px 22px;' +
+    'border-radius:12px;border:0;background:#2d7ff9;color:#fff;font-size:15px;cursor:pointer}' +
+    '.hint{font-size:13px;color:#7d8b9c;margin-top:14px}</style></head><body><div class="card">' +
+    '<div class="ok">✅</div><h1>تم ربط Google Drive بنجاح</h1>' +
+    (safe ? '<p class="mail">' + safe + '</p>' : '') +
+    '<p>ارجع لنافذة التطبيق — بتتحدّث لوحدها وتبدأ المزامنة.</p>' +
+    '<button class="btn" onclick="window.close()">إغلاق الصفحة</button>' +
+    '<p class="hint">لو الصفحة ما اتقفلتش، اقفل التبويب وارجع للتطبيق.</p>' +
+    '</div></body></html>';
+}
+
 const server = http.createServer(async (req, res) => {
   let pathname = '/';
   try { pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname); }
@@ -294,6 +320,12 @@ const server = http.createServer(async (req, res) => {
       });
       res.end(buf);
     } catch (e) { json(res, 404, { ok: false, error: 'قاعدة البيانات غير موجودة بعد' }); }
+    return;
+  }
+  if (pathname === '/local/linked') {
+    const email = String((new URL(req.url, 'http://localhost')).searchParams.get('email') || '');
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(linkedPage(email));
     return;
   }
   if (pathname === '/local/kv' && req.method === 'POST') {
