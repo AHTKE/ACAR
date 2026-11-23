@@ -76,16 +76,62 @@ const TYPES = {
 
 let db = null;
 
+/* ---------- أدوات كتابة آمنة ضد انقطاع الكهرباء/الإغلاق المفاجئ ---------- */
+function stamp() {
+  const d = new Date();
+  const p = (n) => (n < 10 ? '0' : '') + n;
+  return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' +
+    p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+}
+
+/* ملف مؤقت + fsync + إعادة تسمية: الملف الأصلي ما يتكتبش عليه
+   نص ناقص لو الجهاز اتقفل في نص الكتابة. */
+function writeAtomic(file, text) {
+  const tmp = file + '.tmp';
+  const fd = fs.openSync(tmp, 'w');
+  try {
+    fs.writeSync(fd, text, null, 'utf8');
+    try { fs.fsyncSync(fd); } catch (e) { /* مش مدعوم على كل الأنظمة */ }
+  } finally {
+    try { fs.closeSync(fd); } catch (e) {}
+  }
+  try { fs.renameSync(tmp, file); return true; }
+  catch (e) { try { fs.unlinkSync(tmp); } catch (e2) {} throw e; }
+}
+
+/* نسخة احتياطية من قاعدة SQLite مرة كل ١٢ ساعة (لو الملف موجود وسليم) */
+function backupSqlite() {
+  try {
+    if (!fs.existsSync(DB_FILE)) return;
+    if (!fs.statSync(DB_FILE).size) return;
+    const bak = DB_FILE + '.bak';
+    let bt = 0;
+    try { bt = fs.statSync(bak).mtimeMs; } catch (e) { bt = 0; }
+    if (Date.now() - bt > 12 * 3600 * 1000) fs.copyFileSync(DB_FILE, bak);
+  } catch (e) { /* النسخة الاحتياطية اختيارية */ }
+}
+
 function openDb() {
   if (db) return db;
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const wantsJson = String(process.env.NIZAM_STORE || '').toLowerCase() === 'json';
-  db = (!wantsJson && DatabaseSync) ? makeSqliteStore() : makeJsonStore();
+  if (wantsJson || !DatabaseSync) {
+    db = makeJsonStore();
+  } else {
+    try { db = makeSqliteStore(); }
+    catch (e) {
+      /* قاعدة تالفة → نحتفظ بيها للتحليل ونكمّل بمخزن JSON
+         بدل ما التطبيق يفتح فاضي أو ما يفتحش خالص. */
+      console.error('تعذّر فتح قاعدة SQLite (' + (e && e.message) + ') — هنستخدم مخزن JSON');
+      db = makeJsonStore();
+    }
+  }
   return db;
 }
 
 /* مخزن SQLite — الواجهة الوحيدة اللي بقية الملف بيستعملها */
 function makeSqliteStore() {
+  backupSqlite();
   const d = new DatabaseSync(DB_FILE);
   d.exec('CREATE TABLE IF NOT EXISTS kv (' +
     'key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)');
@@ -113,28 +159,105 @@ function makeSqliteStore() {
     count: function () {
       return Number(d.prepare('SELECT COUNT(*) AS c FROM kv').get().c || 0);
     },
-    close: function () { try { d.close(); } catch (e) {} }
+    close: function () { try { d.close(); } catch (e) {} },
+    info: function () {
+      return {
+        engine: 'sqlite', backup: fs.existsSync(DB_FILE + '.bak'),
+        recovered: '', corrupt: ''
+      };
+    }
   };
 }
 
-/* مخزن JSON بديل — نفس الواجهة، ملف واحد في مجلد البيانات */
+/* مخزن JSON بديل — نفس الواجهة، ملف واحد في مجلد البيانات.
+   الحمايات:
+   1) كتابة ذرّية (tmp + fsync + rename) فمايبقاش فيه ملف نص-نص.
+   2) نسخة احتياطية دورية nizam-store.backup.json.
+   3) لو الملف اتلف أو بقى فاضي (انقطاع كهرباء / إغلاق مفاجئ)
+      ما نبدأش من الصفر في صمت: بنحتفظ بالملف التالف مع اسم
+      واضح ونرجّع النسخة الاحتياطية — ده اللي كان بيخلي كل بيانات
+      العميل تختفي مرة واحدة وتتحفظ فوقيها نسخة فاضية. */
 function makeJsonStore() {
   const FILE = path.join(DATA_DIR, 'nizam-store.json');
+  const BAK = path.join(DATA_DIR, 'nizam-store.backup.json');
+  const state = { recovered: '', corrupt: '', backupAt: '' };
   let data = null;
+  let lastBak = 0;
+
+  function parseText(text) {
+    if (!text || !String(text).trim()) return null;
+    try {
+      const o = JSON.parse(text);
+      if (!o || typeof o !== 'object' || !o.kv || typeof o.kv !== 'object') return null;
+      return o;
+    } catch (e) { return null; }
+  }
+  function parseFile(file) {
+    try { return parseText(fs.readFileSync(file, 'utf8')); } catch (e) { return null; }
+  }
+
   function read() {
     if (data) return data;
-    try { data = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch (e) { data = null; }
-    if (!data || typeof data !== 'object' || !data.kv || typeof data.kv !== 'object') {
-      data = { version: 1, kv: {} };
+    const exists = fs.existsSync(FILE);
+    data = parseFile(FILE);
+    /* أول مرة نلاقي ملف سليم ومفيش نسخة احتياطية → نعمل واحدة فورًا،
+       عشان يبقى فيه دايمًا نقطة رجوع لو الملف اتلف بعد كده. */
+    if (data) {
+      try {
+        if (!fs.existsSync(BAK) && fs.statSync(FILE).size) {
+          writeAtomic(BAK, fs.readFileSync(FILE, 'utf8'));
+          state.backupAt = new Date().toISOString();
+          lastBak = Date.now();
+        }
+      } catch (e) { /* اختياري */ }
+    }
+    if (!data) {
+      if (exists) {
+        let keep = FILE + '.corrupt-' + stamp() + '.json';
+        for (let n = 1; fs.existsSync(keep) && n < 20; n++) {
+          keep = FILE + '.corrupt-' + stamp() + '-' + n + '.json';
+        }
+        try { fs.renameSync(FILE, keep); state.corrupt = keep; } catch (e) { state.corrupt = ''; }
+      }
+      const bak = parseFile(BAK);
+      if (bak) {
+        data = bak;
+        state.recovered = 'backup';
+        try { writeAtomic(FILE, JSON.stringify(bak)); } catch (e) {}
+      } else {
+        data = { version: 1, kv: {} };
+        if (exists) state.recovered = 'empty';
+      }
     }
     return data;
   }
+
   function flush() {
-    const tmp = FILE + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(read()));
-    try { fs.renameSync(tmp, FILE); }
-    catch (e) { try { fs.unlinkSync(tmp); } catch (e2) {} throw e; }
+    const d = read();
+    /* نسخة احتياطية من الملف الحالي قبل ما نكتب فوقه (مرة كل دقيقة) */
+    try {
+      if (Date.now() - lastBak > 60 * 1000 && fs.existsSync(FILE) && fs.statSync(FILE).size) {
+        const cur = fs.readFileSync(FILE, 'utf8');
+        if (parseText(cur)) {
+          writeAtomic(BAK, cur);
+          lastBak = Date.now();
+          state.backupAt = new Date().toISOString();
+        }
+      }
+    } catch (e) { /* النسخة الاحتياطية ما تمنعش الحفظ الأساسي */ }
+    const text = JSON.stringify(d);
+    writeAtomic(FILE, text);
+    /* أول كتابة: نعمل النسخة الاحتياطية من نفس المحتوى السليم */
+    try {
+      if (!fs.existsSync(BAK)) {
+        writeAtomic(BAK, text);
+        lastBak = Date.now();
+        state.backupAt = new Date().toISOString();
+      }
+    } catch (e) {}
+    return true;
   }
+
   return {
     engine: 'json',
     file: FILE,
@@ -146,7 +269,14 @@ function makeJsonStore() {
       flush();
     },
     count: function () { return Object.keys(read().kv).length; },
-    close: function () {}
+    close: function () {},
+    info: function () {
+      read();
+      return {
+        engine: 'json', backup: fs.existsSync(BAK), backupFile: BAK,
+        recovered: state.recovered, corrupt: state.corrupt, backupAt: state.backupAt
+      };
+    }
   };
 }
 
@@ -162,7 +292,51 @@ function dbStats() {
   const d = openDb();
   let bytes = 0;
   try { bytes = fs.statSync(d.file).size; } catch (e) {}
-  return { keys: d.count(), bytes: bytes, file: d.file, engine: d.engine };
+  let extra = {};
+  try { if (typeof d.info === 'function') extra = d.info(); } catch (e) {}
+  return Object.assign({ keys: d.count(), bytes: bytes, file: d.file, engine: d.engine }, extra);
+}
+
+/* هل القيمة دي "فاضية"؟ (مفتاح مش موجود / مصفوفة فاضية / كائن فاضي) */
+function isEmptyValue(v) {
+  if (v === null || v === undefined || v === '') return true;
+  try {
+    const p = JSON.parse(v);
+    if (Array.isArray(p)) return p.length === 0;
+    if (p !== null && typeof p === 'object') return Object.keys(p).length === 0;
+    return false;
+  } catch (e) { return false; }
+}
+
+/* استرجاع غير مدمّر: بيملا الأقسام الفاضية/المفقودة من النسخ
+   الاحتياطية (backup + أي ملف تالف محفوظ) وما يمسحش أي حاجة موجودة. */
+function recoverFromBackups() {
+  const store = openDb();
+  const current = store.loadAll();
+  const files = [path.join(DATA_DIR, 'nizam-store.backup.json')];
+  try {
+    fs.readdirSync(DATA_DIR)
+      .filter(function (f) { return /\.corrupt-\d{8}-\d{6}\.json$/.test(f); })
+      .sort().reverse()
+      .forEach(function (f) { files.push(path.join(DATA_DIR, f)); });
+  } catch (e) {}
+
+  const restored = [];
+  files.forEach(function (file) {
+    let doc = null;
+    try {
+      const text = fs.readFileSync(file, 'utf8');
+      doc = JSON.parse(text);
+    } catch (e) { doc = null; }
+    if (!doc || typeof doc !== 'object' || !doc.kv || typeof doc.kv !== 'object') return;
+    Object.keys(doc.kv).forEach(function (k) {
+      const cur = Object.prototype.hasOwnProperty.call(current, k) ? current[k] : null;
+      if (!isEmptyValue(cur)) return;                 /* موجود وسليم → ما نلمسوش */
+      if (isEmptyValue(doc.kv[k])) return;            /* النسخة نفسها فاضية */
+      try { store.putKey(k, doc.kv[k]); current[k] = doc.kv[k]; restored.push(k); } catch (e) {}
+    });
+  });
+  return { restored: restored.length, keys: restored };
 }
 
 /* جافاسكربت يُحقن قبل app.js: يزرع البيانات من SQLite ثم يعرّف خطّاف المزامنة */
@@ -339,6 +513,11 @@ const server = http.createServer(async (req, res) => {
     res.end(linkedPage(email));
     return;
   }
+  if (pathname === '/local/recover' && req.method === 'POST') {
+    try { json(res, 200, Object.assign({ ok: true }, recoverFromBackups())); }
+    catch (e) { json(res, 500, { ok: false, error: String(e && e.message) }); }
+    return;
+  }
   if (pathname === '/local/kv' && req.method === 'POST') {
     const raw = await readBody(req, 2 * 1024 * 1024);
     if (!raw) { json(res, 400, { ok: false, error: 'جسم الطلب فارغ أو كبير' }); return; }
@@ -433,7 +612,7 @@ function stop() {
   });
 }
 
-module.exports = { start, stop, loadAll, putKey, dbStats, bootJs, DB_FILE, DIST };
+module.exports = { start, stop, loadAll, putKey, dbStats, bootJs, DB_FILE, DIST, recoverFromBackups };
 
 if (require.main === module) {
   start().then((info) => {

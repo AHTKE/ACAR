@@ -160,7 +160,31 @@
     return DEFAULT_CUSTOMERS.slice().map(normClient);
   }
   function saveCustomers(list) {
-    try { localStorage.setItem(KEY_CUSTOMERS, JSON.stringify(list)); } catch (e) {}
+    putRaw(KEY_CUSTOMERS, JSON.stringify(list));
+  }
+
+  /* حفظ مفتاح مع إظهار خطأ واضح لو التخزين مليان أو مقفول.
+     قبل كده كل الأخطاء كانت بتتبلع في صمت، فالتعديل يبان اتحفظ
+     وبعد إعادة التشغيل مايكونش موجود. */
+  var storageWarned = false;
+  function putRaw(key, raw) {
+    try {
+      localStorage.setItem(key, raw);
+      /* المسح المتعمّد من المستخدم معناه إن القسم ده خلص فعلاً —
+         نشيله من الحارس عشان ما يرجعش لوحده في التشغيل الجاي. */
+      try { if (isEmptyPayload(raw)) guardForget(key); } catch (eG) {}
+      return true;
+    }
+    catch (e) {
+      if (!storageWarned) {
+        storageWarned = true;
+        try {
+          toast('⚠ التخزين على الجهاز مليان — آخر تعديل ما اتحفظش. بياناتك القديمة موجودة زي ما هي: امسح سجل العمليات أو نزّل نسخة على جهازك.', true);
+        } catch (e2) {}
+        try { console.error('فشل حفظ «' + key + '»: ' + (e && e.message ? e.message : e)); } catch (e3) {}
+      }
+      return false;
+    }
   }
 
   /* ---------- الموظفون ---------- */
@@ -2135,7 +2159,7 @@
     return JSON.parse(JSON.stringify(DEFAULT_SUPPLIERS));
   }
   function saveSuppliers(list) {
-    try { localStorage.setItem(KEY_SUPPLIERS, JSON.stringify(list)); } catch (e) {}
+    putRaw(KEY_SUPPLIERS, JSON.stringify(list));
   }
 
   /* ---------- مبالغ الطرف المسجّلة في «الدواخل والخوارج» ----------
@@ -3634,7 +3658,7 @@
     return JSON.parse(JSON.stringify(DEFAULT_LEDGER));
   }
   function saveLedger(list) {
-    try { localStorage.setItem(KEY_LEDGER, JSON.stringify(list)); } catch (e) {}
+    putRaw(KEY_LEDGER, JSON.stringify(list));
   }
 
   function ledgerTotals(includeAuto) {
@@ -3987,7 +4011,7 @@
     return JSON.parse(JSON.stringify(DEFAULT_PARTNERS));
   }
   function savePartners(list) {
-    try { localStorage.setItem(KEY_PARTNERS, JSON.stringify(list)); } catch (e) {}
+    putRaw(KEY_PARTNERS, JSON.stringify(list));
   }
 
   function getPartnerProfit() {
@@ -4294,7 +4318,7 @@
     return JSON.parse(JSON.stringify(DEFAULT_ASSOCIATIONS));
   }
   function saveAssociations(list) {
-    try { localStorage.setItem(KEY_ASSOCIATIONS, JSON.stringify(list)); } catch (e) {}
+    putRaw(KEY_ASSOCIATIONS, JSON.stringify(list));
   }
   /* يضمن أن مجموع الدفعات = المدفوع (المدفوع هو المصدر الصحيح) */
   function normalizeMember(m) {
@@ -4326,7 +4350,7 @@
     return list;
   }
   function saveMembers(list) {
-    try { localStorage.setItem(KEY_MEMBERS, JSON.stringify(list)); } catch (e) {}
+    putRaw(KEY_MEMBERS, JSON.stringify(list));
   }
 
   function deriveMember(m) {
@@ -6126,9 +6150,11 @@
   }
 
   function countOf(key) {
+    try { return countOfFromRaw(localStorage.getItem(key)); } catch (e) { return 0; }
+  }
+  function countOfFromRaw(raw) {
     try {
-      var raw = localStorage.getItem(key);
-      if (raw === null) return 0;
+      if (raw === null || raw === undefined) return 0;
       var v = JSON.parse(raw);
       return Array.isArray(v) ? v.length : (v === null || v === undefined ? 0 : 1);
     } catch (e) { return 0; }
@@ -6208,18 +6234,175 @@
     try { return localStorage.getItem(k); } catch (e) { return null; }
   }
   var lastApplySkipped = 0;
+  var lastApplyReduced = 0;
 
-  function applySnapshot(snap) {
+  /* ============================================================
+     حارس البيانات — شبكة أمان ضد «البيانات اتمسحت لوحدها»
+     ------------------------------------------------------------
+     المشكلة اللي حصلت عند العميل: قسم زي العملاء يبقى فاضي
+     ("٠") من غير ما هو يمسحه. الأسباب الممكنة كلها بتوصل لنفس
+     النتيجة: التخزين بقى فيه [] أو قيمة تالفة. الحارس ده بيحتفظ
+     بآخر حالة سليمة (غير فاضية) لكل قسم، ويرجّعها تلقائيًا وقت
+     الإقلاع قبل أي رسم — وما بيكتبش فوق النسخة السليمة بقيمة
+     فاضية أبدًا، فمستحيل يضيع الأصل.
+     ============================================================ */
+  var GUARD_KEY = 'app_data_guard';
+  var GUARD_HISTORY = 'app_data_history';
+  var GUARD_HISTORY_MAX = 4;
+  var GUARD_HISTORY_BYTES = 1200 * 1024;   /* سقف حجم تاريخ النسخ */
+  var GUARD_KEYS = SYNC_KEYS.concat(['app_stores']);
+  var guardHealed = [];
+
+  function sectionState(raw) {
+    if (raw === null || raw === undefined || raw === '') return 'missing';
+    try {
+      var v = JSON.parse(raw);
+      if (Array.isArray(v)) return v.length ? 'ok' : 'empty';
+      if (v !== null && typeof v === 'object') return Object.keys(v).length ? 'ok' : 'empty';
+      return 'ok';
+    } catch (e) { return 'bad'; }
+  }
+
+  function guardRead() {
+    try {
+      var g = JSON.parse(localStorage.getItem(GUARD_KEY) || 'null');
+      if (!g || typeof g !== 'object' || !g.sections) return { at: '', sections: {} };
+      return g;
+    } catch (e) { return { at: '', sections: {} }; }
+  }
+
+  function guardWrite(g) {
+    try { localStorage.setItem(GUARD_KEY, JSON.stringify(g)); return true; }
+    catch (e) { return false; }
+  }
+
+  function guardHistoryPush(note) {
+    try {
+      var sections = {};
+      GUARD_KEYS.forEach(function (k) {
+        var raw = readRawKey(k);
+        if (sectionState(raw) === 'ok') sections[k] = raw;
+      });
+      if (!Object.keys(sections).length) return;
+      var hist = [];
+      try { hist = JSON.parse(localStorage.getItem(GUARD_HISTORY) || '[]') || []; } catch (e) { hist = []; }
+      if (!Array.isArray(hist)) hist = [];
+      hist.unshift({ at: new Date().toISOString(), note: note || '', sections: sections });
+      /* نقصّم من الأقدم لحد ما ندخل في السقف */
+      var size = function () {
+        var n = 0;
+        hist.forEach(function (h) { try { n += JSON.stringify(h).length; } catch (e) {} });
+        return n;
+      };
+      while (hist.length > GUARD_HISTORY_MAX || (hist.length > 1 && size() > GUARD_HISTORY_BYTES)) hist.pop();
+      localStorage.setItem(GUARD_HISTORY, JSON.stringify(hist));
+    } catch (e) { /* الحارس ما يكسرش التطبيق لو التخزين مليان */ }
+  }
+
+  /* الفحص الأساسي: بيرجّع الأقسام اللي اترجعت من الحارس */
+  function guardBoot() {
+    var g = guardRead();
+    var healed = [], changed = false;
+    GUARD_KEYS.forEach(function (k) {
+      var raw = readRawKey(k);
+      var st = sectionState(raw);
+      var savedRaw = g.sections ? g.sections[k] : null;
+      var savedOk = sectionState(savedRaw) === 'ok';
+      if (st === 'ok') {
+        /* بنحدّث الحارس بالحالة الحالية بس لو مش أقل من اللي محفوظ.
+           لو العدد قل (مسح/استبدال/تلف) بنسيب النسخة الأكبر كأمان. */
+        var savedCount = savedOk ? countOfFromRaw(savedRaw) : -1;
+        if (!savedOk || countOfFromRaw(raw) >= savedCount) { g.sections[k] = raw; changed = true; }
+        return;
+      }
+      /* القسم فاضي أو تالف — نرجّعه من آخر حالة سليمة */
+      if (savedOk) {
+        try { localStorage.setItem(k, savedRaw); healed.push(SYNC_LABELS[k] || k); changed = true; } catch (e) {}
+      }
+    });
+    if (changed) { g.at = new Date().toISOString(); guardWrite(g); }
+    guardHealed = healed;
+    if (healed.length) guardHistoryPush('استرجاع تلقائي: ' + healed.join('، '));
+    return healed;
+  }
+
+  function guardForget(key) {
+    try {
+      var g = guardRead();
+      if (g.sections && Object.prototype.hasOwnProperty.call(g.sections, key)) {
+        delete g.sections[key];
+        g.at = new Date().toISOString();
+        guardWrite(g);
+      }
+    } catch (e) {}
+  }
+
+  /* استرجاع يدوي من الحارس (زر في «سلامة البيانات») */
+  function guardRestoreAll() {
+    var g = guardRead();
+    var n = 0;
+    GUARD_KEYS.forEach(function (k) {
+      var raw = g.sections ? g.sections[k] : null;
+      if (sectionState(raw) !== 'ok') return;
+      try { localStorage.setItem(k, raw); n++; } catch (e) {}
+    });
+    return n;
+  }
+
+  function guardHistoryList() {
+    try {
+      var h = JSON.parse(localStorage.getItem(GUARD_HISTORY) || '[]');
+      return Array.isArray(h) ? h : [];
+    } catch (e) { return []; }
+  }
+
+  /* نسخة دورية كل ١٠ دقايق + قبل إغلاق التطبيق، عشان يبقى فيه دايمًا
+     نقطة رجوع حتى بعد أي مسح مفاجئ. */
+  try {
+    if (typeof setInterval === 'function') {
+      setInterval(function () { try { guardHistoryPush('نسخة دورية'); } catch (e) {} }, 10 * 60 * 1000);
+    }
+    if (typeof document !== 'undefined' && document.addEventListener) {
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') { try { guardHistoryPush('قبل الإغلاق'); } catch (e) {} }
+      });
+    }
+  } catch (eGuardTimer) {}
+
+  function restoreHistoryAt(i) {
+    var h = guardHistoryList();
+    var snap = h[i];
+    if (!snap || !snap.sections) return 0;
+    backupLocal('قبل استرجاع نسخة محفوظة');
+    var n = 0;
+    GUARD_KEYS.forEach(function (k) {
+      if (typeof snap.sections[k] === 'string' && sectionState(snap.sections[k]) === 'ok') {
+        try { localStorage.setItem(k, snap.sections[k]); n++; } catch (e) {}
+      }
+    });
+    return n;
+  }
+
+  function applySnapshot(snap, opts) {
+    var force = !!(opts && opts.force);
     backupLocal('قبل استبدال المزامنة');
+    guardHistoryPush('قبل تطبيق نسخة من الدرايف');
     var secs = (snap && snap.sections) || {};
     var applied = 0;
     lastApplySkipped = 0;
+    lastApplyReduced = 0;
     SYNC_KEYS.forEach(function (k) {
       if (typeof secs[k] !== 'string') return;
-      /* الحماية: ما نستبدلش بيانات موجودة على الجهاز ببيانات فارغة من بُعد */
+      /* الحماية ١: ما نستبدلش بيانات موجودة على الجهاز ببيانات فارغة من بُعد */
       if (isEmptyPayload(secs[k]) && !isEmptyPayload(readRawKey(k))) { lastApplySkipped++; return; }
+      /* الحماية ٢: ما نستبدلش قسم فيه سجلات أكتر بنسخة فيها سجلات أقل
+         (ده اللي بيخلي إضافة عميل تختفي بعد شوية لما نسخة قديمة
+         من الدرايف تتطبّق تلقائيًا) */
+      if (!force && countOf(k) > 0 && countOfFromRaw(secs[k]) < countOf(k)) { lastApplyReduced++; return; }
       localStorage.setItem(k, secs[k]); applied++;
     });
+    /* بعد التطبيق: أي قسم بقى فاضي/تالف يترجّع من الحارس فورًا */
+    guardBoot();
     try {
       localStorage.setItem('app_sync_meta', JSON.stringify({
         at: new Date().toISOString(),
@@ -6406,9 +6589,9 @@
     });
   }
 
-  function syncApply(snap) {
+  function syncApply(snap, force) {
     if (!snap || !snap.sections) { toast('النسخة البعيدة غير صالحة', true); return Promise.resolve(false); }
-    var applied = applySnapshot(snap);
+    var applied = applySnapshot(snap, { force: !!force });
     var box = $('#syncPending');
     if (box) box.hidden = true;
     pendingSync = null;
@@ -6417,9 +6600,10 @@
     syncSetState('is-ok', 'اتطبّقت نسخة ' + (snap.updatedAt ? new Date(snap.updatedAt).toLocaleString('ar-EG') : 'الدرايف') +
       ' — ' + applied + ' أقسام');
     syncShowNote('اتحفظت نسخة احتياطية من بياناتك القديمة. لو رجعت غلط، اضغط «تراجع عن آخر استبدال».' +
-      (lastApplySkipped ? ' — تم تجاهل ' + lastApplySkipped + ' قسم فارغ في النسخة البعيدة عشان ما نمسحش بياناتك.' : ''), false);
-    toast(lastApplySkipped
-      ? 'تم تحديث البيانات ✓ (وتم حماية ' + lastApplySkipped + ' قسم من المسح)'
+      (lastApplySkipped ? ' — تم تجاهل ' + lastApplySkipped + ' قسم فارغ في النسخة البعيدة عشان ما نمسحش بياناتك.' : '') +
+      (lastApplyReduced ? ' — وتم الاحتفاظ بـ ' + lastApplyReduced + ' قسم عندك فيه سجلات أكتر من النسخة البعيدة.' : ''), false);
+    toast((lastApplySkipped || lastApplyReduced)
+      ? 'تم تحديث البيانات ✓ (وتم حماية ' + (lastApplySkipped + lastApplyReduced) + ' قسم من المسح)'
       : 'تم تحديث البيانات من الدرايف ✓');
     /* نعيد بناء الأقسام المعروضة */
     try {
@@ -6716,7 +6900,7 @@
 
   var syncApplyBtn = $('#syncApply');
   if (syncApplyBtn) syncApplyBtn.addEventListener('click', function () {
-    if (pendingSync) syncApply(pendingSync);
+    if (pendingSync) syncApply(pendingSync, true);
   });
 
   var syncIgnoreBtn = $('#syncIgnore');
@@ -6830,7 +7014,7 @@
           b.disabled = false;
           b.textContent = 'عرض وتطبيق';
           if (!j.ok) throw new Error(j.error || 'تعذّر قراءة النسخة');
-          syncApply(j.snapshot);
+          syncApply(j.snapshot, true);   /* اختيار المستخدم الصريح = تطبيق كامل */
           syncShowNote('اتطبّقت النسخة القديمة «' + versionLabel(v.name, v.modifiedTime) +
             '». اضغط «العودة للنسخة الحالية» ترجع لأحدث نسخة.', false);
           toast('اتطبّقت النسخة القديمة ✓');
@@ -6853,7 +7037,7 @@
         toast('لا توجد نسخة حالية على الدرايف', true);
         return;
       }
-      syncApply(pull.snapshot);
+      syncApply(pull.snapshot, true);
       if (syncVersionsBox) syncVersionsBox.hidden = true;
       syncShowNote('رجعت للنسخة الحالية من الدرايف.', false);
       toast('رجعت للنسخة الحالية ✓');
@@ -8394,7 +8578,44 @@
           ? '⚠ اتُكتشف أقسام تالفة واتصلحت تلقائياً من النسخة الاحتياطية: ' + esc(rep.bad.join('، '))
           : '✓ مفيش أقسام تالفة — البيانات محفوظة ومتطابقة.') +
         ' — مفيش أي عملية بتمسح بياناتك من تلقائها: أي استبدال من المزامنة لقسم فارغ بيتجاهل تلقائياً.' +
-      '</p>';
+      '</p>' +
+      guardBoxHTML();
+  }
+
+  /* قسم «حارس البيانات» — آخر حالة سليمة + النسخ المحفوظة */
+  function guardBoxHTML() {
+    var g = guardRead();
+    var hist = guardHistoryList();
+    var kept = 0;
+    GUARD_KEYS.forEach(function (k) { if (sectionState(g.sections ? g.sections[k] : null) === 'ok') kept++; });
+    var when = '';
+    try { when = g.at ? new Date(g.at).toLocaleString('ar-EG') : ''; } catch (e) { when = g.at || ''; }
+
+    var histRows = hist.map(function (h, i) {
+      var at = '';
+      try { at = h.at ? new Date(h.at).toLocaleString('ar-EG') : ''; } catch (e) { at = h.at || ''; }
+      var cnt = 0;
+      if (h.sections) {
+        Object.keys(h.sections).forEach(function (k) {
+          if (sectionState(h.sections[k]) === 'ok') cnt += countOfFromRaw(h.sections[k]);
+        });
+      }
+      return '<li>' + esc(at) + (h.note ? ' — ' + esc(h.note) : '') +
+        ' <button type="button" class="btn btn--ghost btn--sm" data-guard-hist="' + i + '">استرجاع النسخة دي</button>' +
+        ' <small class="panel__hint">(' + cnt + ' سجل)</small></li>';
+    }).join('');
+
+    return '<div class="panel__note" style="margin-top:14px">' +
+      '<b>حارس البيانات:</b> ' + kept + ' قسم محفوظ كنسخة سليمة' +
+      (when ? ' — آخر تحديث: ' + esc(when) : ' — لسه ما اتسجلش') + '.<br />' +
+      'لو أي قسم بقى صفر أو ضاع، التطبيق بيرجّعه لوحده أول ما يفتح. ولو حصل مسح بالغلط، استخدم ' +
+      '«استعادة آخر حالة سليمة» أو ارجع لأي نسخة من اللستة تحت.' +
+      '</div>' +
+      '<div class="form__actions" style="margin-top:10px">' +
+        '<button type="button" class="btn btn--primary" data-guard-restore="1">استعادة آخر حالة سليمة</button>' +
+      '</div>' +
+      (histRows ? '<div class="panel__note" style="margin-top:12px"><b>نسخ محفوظة على الجهاز:</b>' +
+        '<ul class="sync-diff">' + histRows + '</ul></div>' : '');
   }
 
   /* ---------- أزرار العمليات ---------- */
@@ -9485,6 +9706,7 @@
     }
   }
   bootStep(function () { installOpsHook(); }, 'سجل العمليات');
+  bootStep(function () { guardBoot(); }, 'حارس البيانات');
   bootStep(function () { repairStorage(); }, 'فحص التخزين');
   bootStep(function () {
     renderHomeStats();
@@ -9504,6 +9726,9 @@
   } catch (eLockHome) {}
   /* علامة للمراقب: الإقلاع وصل للنهاية */
   try { window.__appBooted = true; } catch (e) {}
+  if (guardHealed.length) {
+    toast('تم استرجاع بيانات كانت اختفت: ' + guardHealed.join('، ') + ' ✓', false);
+  }
   if (bootFailed.length) {
     toast('تعذّر تحميل: ' + bootFailed.join('، ') + ' — بياناتك سليمة، أعد تشغيل التطبيق.', true);
   }
@@ -9523,6 +9748,37 @@
       safeRun(renderHomeStats, 'إحصاءات الرئيسية بعد تغيّر الدور');
     });
   } catch (eRole) {}
+
+  /* ---------- أزرار حارس البيانات ---------- */
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+    if (t.closest('[data-guard-restore]')) {
+      var n = guardRestoreAll();
+      guardHistoryPush('قبل الاستعادة اليدوية');
+      try {
+        renderHomeStats();
+        if (typeof renderCustomers === 'function') renderCustomers($('#custSearch') ? $('#custSearch').value : '');
+        if (typeof renderSuppliers === 'function') renderSuppliers($('#supplierSearch') ? $('#supplierSearch').value : '');
+        renderLedger(); renderLedgerSummary(); renderPartners(); renderAssociations();
+        renderDataSafety();
+      } catch (e2) {}
+      toast(n ? 'اترجّعت ' + n + ' أقسام من آخر حالة سليمة ✓' : 'مفيش نسخة سليمة محفوظة بعد', !n);
+      return;
+    }
+    var hb = t.closest('[data-guard-hist]');
+    if (hb) {
+      var i = Number(hb.getAttribute('data-guard-hist'));
+      var m = restoreHistoryAt(i);
+      try {
+        renderHomeStats();
+        if (typeof renderCustomers === 'function') renderCustomers($('#custSearch') ? $('#custSearch').value : '');
+        renderLedger(); renderLedgerSummary(); renderPartners(); renderAssociations();
+        renderDataSafety();
+      } catch (e3) {}
+      toast(m ? 'اترجّعت ' + m + ' أقسام من النسخة المحفوظة ✓' : 'النسخة دي فاضية', !m);
+    }
+  });
 
   /* جسر بسيط للوحدات المنفصلة (الموظفون / المصنعية / تصنيف المخازن) */
   window.NizamApp = {
@@ -9546,6 +9802,10 @@
     isSectionLocked: isSectionLocked,
     lockedSectionCount: lockedSectionCount,
     toast: toast,
+    guardBoot: guardBoot,
+    guardRestoreAll: guardRestoreAll,
+    guardHistoryList: guardHistoryList,
+    restoreHistoryAt: restoreHistoryAt,
     money: money,
     esc: esc,
     formatDate: formatDate,
