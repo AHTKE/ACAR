@@ -1,138 +1,109 @@
 /* ============================================================
-   activation.js — خدمة تفعيل الأجهزة المشتركة (/api/activation/*)
+   activation.js — خدمة تفعيل الأجهزة (/api/activation/*)
    ------------------------------------------------------------
-   الفكرة: التطبيقان (ده وأي تطبيق تاني) بيقروا من نفس السجلات
-   المركزية هنا — مفيش مولّد أكواد محلي في أي تطبيق.
+   الفكرة (زي ما المستخدم وصفها بالظبط):
+     1) أول ما التطبيق يفتح بيظهر قفل «تفعيل الجهاز» — قبل أي حاجة،
+        وقبل ربط حساب Google.
+     2) المستخدم بيكتب كلمة مرور تشغيلية بتتغيّر كل 5 دقائق،
+        المالك بيولّدها من أداة التوليد اللي معاه (activation-generator.html).
+     3) بعد كلمة المرور، الجهاز بيعرض كود من 6 أرقام خاص بيه هو بس.
+     4) المالك بيدخّل الكود ده في أداة التوليد، فبتطلّع كود تفعيل
+        من 6 أرقام صالح 3 دقائق ومربوط بكود الجهاز ده — مش أي جهاز تاني.
+     5) المستخدم بيكتب كود التفعيل → الخادم بيتحقق → التطبيق بيفتح
+        ويتفضل مفتوح (الجهاز اتسجّل مرة واحدة).
 
-   المسارات:
-     GET  /api/activation/status    ?device=...      عام
-     POST /api/activation/request   {device,name,passcode}  عام
-     POST /api/activation/verify    {device,passcode,code}  عام
-     POST /api/activation/passcode  (أدمن)  كلمة مرور تشغيلية 5 دقائق
-     POST /api/activation/issue     (أدمن)  {device} → كود تفعيل للجهاز
-     GET  /api/activation/devices   (أدمن)  كل الأجهزة وحالتها
-     POST /api/activation/revoke    (أدمن)  {device}
-     POST /api/activation/enforce   (أدمن)  {enabled}
+   الأمان:
+     • كل التحقق على الخادم بـ HMAC-SHA256 بمفتاح ACTIVATION_SECRET.
+     • مفيش أي سر أو مفتاح في المتصفح — الجهاز بياخد «توكن تفعيل»
+       ناتج HMAC فقط، وده إشارة واجهة بيتم التحقق منها على الخادم.
+     • محدودية المحاولات، وسجل تدقيق (لو D1 موجود) بدون كلمات مرور أو أكواد.
+     • مفيش D1؟ التفعيل بيشتغل عادي (stateless). فيه D1؟ بنسجّل
+       الأجهزة ونقدر نلغي تفعيل أي جهاز من مسار الأدمن.
 
-   قواعد الأمان:
-   • كلمة المرور المؤقتة وأكواد التفعيل تُخزَّن كـ SHA-256 فقط — لا نص صريح.
-   • الكود مربوط بمعرّف الجهاز نفسه، ومحدود الصلاحية، ويُستهلك بعد النجاح.
-   • التحقق كله على الخادم، وأي فشل اتصال أو خطأ لا يمنح تفعيلاً.
-   • التخزين المركزي = D1. على Vercel (تخزين كوكي للجهاز نفسه) الخدمة
-     بترجّع available:false بدل ما تدّعي تفعيلاً مشترك غير حقيقي.
+   متغيّرات البيئة:
+     ACTIVATION_SECRET   سر التوليد (16 حرف على الأقل) — نفس القيمة
+                         اللي في أداة التوليد. من غيره الخدمة «غير متاحة»
+                         والتطبيق بيفتح عادي بدون قفل (ما نكسرش حاجة).
+     ACTIVATION_ENFORCE  اختياري: حطّ 0 عشان توقف القفل مؤقتًا.
    ============================================================ */
 
-const PASS_TTL_MS = 5 * 60 * 1000;            /* كلمة المرور التشغيلية: 5 دقائق */
-const CODE_TTL_MS = 24 * 60 * 60 * 1000;      /* كود التفعيل: 24 ساعة */
-const MAX_FAILS = 8;                           /* حد المحاولات داخل النافذة */
+const PASS_WINDOW_MS = 5 * 60 * 1000;    /* كلمة المرور التشغيلية: 5 دقائق */
+const CODE_WINDOW_MS = 3 * 60 * 1000;    /* كود التفعيل: 3 دقائق */
+const MAX_FAILS = 8;
 const FAIL_WINDOW_MS = 15 * 60 * 1000;
-const DEVICE_RE = /^[A-Za-z0-9_-]{8,64}$/;
+const DEVICE_RE = /^\d{6}$/;             /* كود الجهاز */
 const PASS_RE = /^\d{6}$/;
-const CODE_RE = /^\d{8}$/;
+const CODE_RE = /^\d{6}$/;
 
-const NO_STORE_MSG = 'خدمة التفعيل المشتركة تحتاج قاعدة بيانات مركزية (D1). ' +
-  'النسخة الحالية بتخزّن الحالة في المتصفح نفسه، فمفيش سجل أجهزة مشترك — ' +
-  'شغّل التطبيق على Cloudflare/Sites بقاعدة D1 عشان التفعيل يشتغل بين الأجهزة.';
+const NO_SECRET_MSG = 'خدمة تفعيل الأجهزة مش متفعّلة على الخادم: ' +
+  'محتاج تضيف المتغيّر ACTIVATION_SECRET (نفس السر اللي في أداة التوليد). ' +
+  'لحد ما تضيفه، التطبيق بيفتح عادي بدون قفل.';
 
 const schemaDone = new WeakSet();
+const failMemo = new Map();   /* حد المحاولات في الذاكرة (لكل نسخة تشغيل) */
 
 /* ---------- أدوات ---------- */
 
 function str(v) { return String(v == null ? '' : v); }
 
-async function sha256Hex(s) {
-  const data = new TextEncoder().encode(str(s));
-  const buf = await crypto.subtle.digest('SHA-256', data);
-  const b = new Uint8Array(buf);
+function enc(s) { return new TextEncoder().encode(str(s)); }
+
+function hex(bytes) {
   let out = '';
-  for (let i = 0; i < b.length; i++) out += ('0' + b[i].toString(16)).slice(-2);
+  for (let i = 0; i < bytes.length; i++) out += ('0' + bytes[i].toString(16)).slice(-2);
   return out;
 }
 
-/* أرقام عشوائية آمنة (بدون Math.random) */
-function randomDigits(n) {
-  let out = '';
-  while (out.length < n) {
-    const buf = new Uint8Array(n * 2);
-    crypto.getRandomValues(buf);
-    for (let i = 0; i < buf.length && out.length < n; i++) {
-      if (buf[i] < 250) out += String(buf[i] % 10);   /* 250 = 25×10 → بدون انحياز */
-    }
-  }
-  return out;
+function b64url(bytes) {
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function hmacBytes(secret, msg) {
+  const key = await crypto.subtle.importKey('raw', enc(secret),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, enc(msg));
+  return new Uint8Array(sig);
+}
+
+/* 6 أرقام من أول 4 بايت — بدون انحياز ملفت */
+function sixDigits(bytes) {
+  const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0);
+  return String(v % 1000000).padStart(6, '0');
+}
+
+function safeEqual(a, b) {
+  const x = str(a), y = str(b);
+  if (x.length !== y.length) return false;
+  let d = 0;
+  for (let i = 0; i < x.length; i++) d |= x.charCodeAt(i) ^ y.charCodeAt(i);
+  return d === 0;
+}
+
+async function secretOf(env) {
+  const s = str(env && env.ACTIVATION_SECRET).trim();
+  return s.length >= 16 ? s : '';
+}
+
+async function passcodeFor(secret, win) {
+  return sixDigits(await hmacBytes(secret, 'pass:' + win));
+}
+
+async function actCodeFor(secret, device, win) {
+  return sixDigits(await hmacBytes(secret, 'act:' + device + ':' + win));
+}
+
+/* توكن التفعيل: إثبات موقّع بالسر إن الجهاز ده اتفعّل */
+async function tokenFor(secret, device) {
+  return b64url(await hmacBytes(secret, 'ok:' + device));
 }
 
 function iso(ms) { return new Date(ms).toISOString(); }
 
-function passHash(p) { return sha256Hex('pass:' + p); }
-function codeHash(device, c) { return sha256Hex('dev:' + device + ':' + c); }
-
-function storeReady(env) {
-  return !!(env && env.DB) && !env.COOKIE_STORE;
-}
-
-async function ensureSchema(db) {
-  if (schemaDone.has(db)) return;
-  await db.exec(
-    'CREATE TABLE IF NOT EXISTS activation_settings (' +
-    'k TEXT PRIMARY KEY, v TEXT NOT NULL DEFAULT \'\')'
-  );
-  await db.exec(
-    'CREATE TABLE IF NOT EXISTS activation_devices (' +
-    'device_id TEXT PRIMARY KEY, ' +
-    "name TEXT DEFAULT '', " +
-    "status TEXT DEFAULT 'pending', " +
-    "code_hash TEXT DEFAULT '', " +
-    'code_exp INTEGER DEFAULT 0, ' +
-    "activated_at TEXT DEFAULT '', " +
-    "revoked_at TEXT DEFAULT '', " +
-    'fails INTEGER DEFAULT 0, ' +
-    'first_fail INTEGER DEFAULT 0, ' +
-    "last_seen TEXT DEFAULT '', " +
-    "created_at TEXT DEFAULT ''" +
-    ')'
-  );
-  await db.exec(
-    'CREATE TABLE IF NOT EXISTS activation_passes (' +
-    'pass_hash TEXT PRIMARY KEY, ' +
-    'expires_at INTEGER NOT NULL, ' +
-    'created_at INTEGER NOT NULL)'
-  );
-  await db.exec(
-    'CREATE TABLE IF NOT EXISTS activation_events (' +
-    'id INTEGER PRIMARY KEY AUTOINCREMENT, ' +
-    "device_id TEXT DEFAULT '', " +
-    "kind TEXT DEFAULT '', " +
-    "note TEXT DEFAULT '', " +
-    "at TEXT DEFAULT ''" +
-    ')'
-  );
-  schemaDone.add(db);
-}
-
-async function settingGet(db, k) {
-  const r = await db.prepare('SELECT v FROM activation_settings WHERE k = ?').bind(k).first();
-  return r ? r.v : null;
-}
-
-async function settingSet(db, k, v) {
-  await db.prepare('INSERT INTO activation_settings (k, v) VALUES (?, ?) ' +
-    'ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind(k, str(v)).run();
-}
-
-function deviceGet(db, id) {
-  return db.prepare('SELECT * FROM activation_devices WHERE device_id = ?').bind(id).first();
-}
-
-async function eventLog(db, deviceId, kind, note) {
-  try {
-    await db.prepare('INSERT INTO activation_events (device_id, kind, note, at) VALUES (?, ?, ?, ?)')
-      .bind(str(deviceId), str(kind), str(note).slice(0, 200), iso(Date.now())).run();
-  } catch (e) { /* السجل تكميلي — ما يوقفش التفعيل */ }
-}
-
 function out(dev) {
   return {
+    code: dev ? dev.device_id : '',
     status: dev ? dev.status : 'none',
     name: dev ? dev.name : '',
     activatedAt: dev ? (dev.activated_at || '') : '',
@@ -146,6 +117,66 @@ async function bodyOf(request) {
 
 function bad(json, code, message, status) {
   return json({ ok: false, code: code, error: message }, status || 400);
+}
+
+/* ---------- حد المحاولات ---------- */
+
+function tooMany(device) {
+  const rec = failMemo.get(device);
+  if (!rec) return 0;
+  if (Date.now() - rec.first > FAIL_WINDOW_MS) { failMemo.delete(device); return 0; }
+  if (rec.fails < MAX_FAILS) return 0;
+  return Math.max(1, Math.ceil((FAIL_WINDOW_MS - (Date.now() - rec.first)) / 60000));
+}
+
+function noteFail(device) {
+  const now = Date.now();
+  const rec = failMemo.get(device);
+  if (!rec || now - rec.first > FAIL_WINDOW_MS) failMemo.set(device, { fails: 1, first: now });
+  else rec.fails++;
+  if (failMemo.size > 5000) failMemo.clear();
+}
+
+/* ---------- D1 (اختياري) ---------- */
+
+function dbOf(env) {
+  return (env && env.DB && !env.COOKIE_STORE) ? env.DB : null;
+}
+
+async function ensureSchema(db) {
+  if (schemaDone.has(db)) return;
+  await db.exec(
+    'CREATE TABLE IF NOT EXISTS activation_devices (' +
+    'device_id TEXT PRIMARY KEY, ' +
+    "name TEXT DEFAULT '', " +
+    "status TEXT DEFAULT 'pending', " +
+    "activated_at TEXT DEFAULT '', " +
+    "revoked_at TEXT DEFAULT '', " +
+    "last_seen TEXT DEFAULT '', " +
+    "created_at TEXT DEFAULT ''" +
+    ')'
+  );
+  await db.exec(
+    'CREATE TABLE IF NOT EXISTS activation_events (' +
+    'id INTEGER PRIMARY KEY AUTOINCREMENT, ' +
+    "device_id TEXT DEFAULT '', " +
+    "kind TEXT DEFAULT '', " +
+    "note TEXT DEFAULT '', " +
+    "at TEXT DEFAULT ''" +
+    ')'
+  );
+  schemaDone.add(db);
+}
+
+function deviceGet(db, id) {
+  return db.prepare('SELECT * FROM activation_devices WHERE device_id = ?').bind(id).first();
+}
+
+async function eventLog(db, deviceId, kind, note) {
+  try {
+    await db.prepare('INSERT INTO activation_events (device_id, kind, note, at) VALUES (?, ?, ?, ?)')
+      .bind(str(deviceId), str(kind), str(note).slice(0, 200), iso(Date.now())).run();
+  } catch (e) { /* السجل تكميلي — ما يوقفش التفعيل */ }
 }
 
 async function adminOnly(request, env, deps, json) {
@@ -163,225 +194,210 @@ export async function handleActivation(request, env, pathname, deps) {
   const json = deps.json;
   const now = Date.now();
   const method = str(request.method || 'GET').toUpperCase();
-  const isAdminRoute = pathname === '/api/activation/passcode' ||
-    pathname === '/api/activation/issue' ||
-    pathname === '/api/activation/devices' ||
-    pathname === '/api/activation/revoke' ||
-    pathname === '/api/activation/enforce';
+  const secret = await secretOf(env);
+  const enforceOff = str(env && env.ACTIVATION_ENFORCE) === '0';
+  const isAdminRoute = pathname === '/api/activation/devices' || pathname === '/api/activation/revoke';
 
-  /* بدون سجل مركزي: نعلنها بوضوح بدل تفعيل وهمي */
-  if (!storeReady(env)) {
-    if (pathname === '/api/activation/status' && method === 'GET') {
+  /* بدون سر: مفيش خدمة، ومفيش قفل — ما نكسرش التطبيق */
+  if (!secret) {
+    if (pathname === '/api/activation/status') {
       return json({
         ok: true, available: false, enforced: false, activated: false,
-        reason: 'NO_STORE', message: NO_STORE_MSG, device: out(null)
+        reason: 'NO_SECRET', message: NO_SECRET_MSG, device: out(null)
       });
     }
-    return json({ ok: false, available: false, code: 'NO_STORE', error: NO_STORE_MSG },
+    return json({ ok: false, available: false, code: 'NO_SECRET', error: NO_SECRET_MSG },
       isAdminRoute ? 503 : 200);
   }
 
-  let db;
+  let db = null;
   try {
-    db = env.DB;
-    await ensureSchema(db);
-  } catch (e) {
-    return json({ ok: false, code: 'DB_ERROR', error: 'تعذّر تجهيز سجل الأجهزة: ' + (e.message || '') }, 503);
-  }
+    db = dbOf(env);
+    if (db) await ensureSchema(db);
+  } catch (e) { db = null; }
 
-  /* ---- حالة الخدمة (عام) ---- */
+  /* ---- الحالة (عام) ---- */
   if (pathname === '/api/activation/status') {
     if (method !== 'GET') return bad(json, 'METHOD', 'الطريقة غير مسموحة', 405);
-    let enforced = false;
-    try { enforced = (await settingGet(db, 'enforce')) === '1'; } catch (e) { enforced = false; }
-    const id = str(new URL(request.url).searchParams.get('device')).trim();
+    const q = new URL(request.url).searchParams;
+    const id = str(q.get('device')).trim();
+    const token = str(q.get('token')).trim();
+    let activated = false;
     let dev = null;
+
     if (DEVICE_RE.test(id)) {
-      dev = await deviceGet(db, id);
-      if (dev) {
-        try { await db.prepare('UPDATE activation_devices SET last_seen = ? WHERE device_id = ?').bind(iso(now), id).run(); }
-        catch (e) { /* تحديث آخر ظهور تكميلي */ }
+      const expected = await tokenFor(secret, id);
+      activated = safeEqual(token, expected);
+      if (db) {
+        try {
+          dev = await deviceGet(db, id);
+          if (dev && dev.status === 'revoked') activated = false;
+          if (dev) {
+            await db.prepare('UPDATE activation_devices SET last_seen = ? WHERE device_id = ?')
+              .bind(iso(now), id).run();
+          }
+        } catch (e) { /* القراءة تكميلية */ }
       }
+      if (!dev) dev = { device_id: id, status: activated ? 'active' : 'pending' };
     }
+
     return json({
-      ok: true, available: true, enforced: enforced,
-      activated: !!(dev && dev.status === 'active'),
+      ok: true, available: true,
+      enforced: !enforceOff,
+      activated: activated,
+      serverNow: now,
       device: out(dev)
     });
   }
 
-  /* ---- تسجيل الجهاز بكلمة المرور المؤقتة (عام) ---- */
-  if (pathname === '/api/activation/request') {
+  /* ---- كلمة المرور التشغيلية (عام) ---- */
+  if (pathname === '/api/activation/passcode') {
     if (method !== 'POST') return bad(json, 'METHOD', 'الطريقة غير مسموحة', 405);
     const b = await bodyOf(request);
     const id = str(b && b.device).trim();
     const pass = str(b && b.passcode).trim();
     const name = str(b && b.name).trim().slice(0, 60);
-    if (!DEVICE_RE.test(id)) return bad(json, 'BAD_DEVICE', 'معرّف الجهاز غير صالح');
-    if (!PASS_RE.test(pass)) return bad(json, 'BAD_PASSCODE', 'كلمة المرور المؤقتة 6 أرقام');
+    if (!DEVICE_RE.test(id)) return bad(json, 'BAD_DEVICE', 'كود الجهاز لازم يكون 6 أرقام');
+    if (!PASS_RE.test(pass)) return bad(json, 'BAD_PASSCODE', 'كلمة المرور التشغيلية 6 أرقام');
 
-    await db.prepare('DELETE FROM activation_passes WHERE expires_at < ?').bind(now).run();
-    const row = await db.prepare('SELECT * FROM activation_passes WHERE pass_hash = ?')
-      .bind(await passHash(pass)).first();
-    if (!row || Number(row.expires_at) <= now) {
-      return bad(json, 'BAD_PASSCODE', 'كلمة المرور المؤقتة غير صحيحة أو انتهت صلاحيتها — اطلب واحدة جديدة', 403);
+    const wait = tooMany(id);
+    if (wait) return bad(json, 'TOO_MANY', 'محاولات كثيرة — حاول بعد ' + wait + ' دقيقة', 429);
+
+    const win = Math.floor(now / PASS_WINDOW_MS);
+    let okPass = false;
+    for (let k = 0; k < 2 && !okPass; k++) {
+      okPass = safeEqual(pass, await passcodeFor(secret, win - k));
+    }
+    if (!okPass) {
+      noteFail(id);
+      if (db) await eventLog(db, id, 'bad_passcode', 'كلمة مرور خاطئة');
+      return bad(json, 'BAD_PASSCODE',
+        'كلمة المرور غير صحيحة أو انتهت صلاحيتها — اطلب واحدة جديدة من المسؤول', 403);
+    }
+    failMemo.delete(id);
+
+    if (db) {
+      try {
+        let dev = await deviceGet(db, id);
+        if (dev && dev.status === 'revoked') {
+          return bad(json, 'REVOKED', 'تم إلغاء تفعيل هذا الجهاز — كلّم المسؤول', 403);
+        }
+        if (!dev) {
+          await db.prepare('INSERT INTO activation_devices (device_id, name, status, created_at, last_seen) ' +
+            "VALUES (?, ?, 'pending', ?, ?)").bind(id, name, iso(now), iso(now)).run();
+          await eventLog(db, id, 'registered', name || 'جهاز جديد');
+          dev = await deviceGet(db, id);
+        } else {
+          await db.prepare('UPDATE activation_devices SET name = ?, last_seen = ? WHERE device_id = ?')
+            .bind(name || dev.name, iso(now), id).run();
+        }
+        return json({
+          ok: true, passcodeValid: true, deviceCode: id,
+          secondsLeft: Math.ceil((PASS_WINDOW_MS - (now % PASS_WINDOW_MS)) / 1000),
+          device: out(dev)
+        });
+      } catch (e) { /* لو D1 وقع نكمل stateless */ }
     }
 
-    let dev = await deviceGet(db, id);
-    if (dev && dev.status === 'revoked') {
-      return bad(json, 'REVOKED', 'تم إلغاء تفعيل هذا الجهاز — كلّم المسؤول عشان يعيد تفعيله', 403);
-    }
-    if (!dev) {
-      await db.prepare('INSERT INTO activation_devices (device_id, name, status, created_at, last_seen) ' +
-        "VALUES (?, ?, 'pending', ?, ?)")
-        .bind(id, name, iso(now), iso(now)).run();
-      await eventLog(db, id, 'requested', name || 'جهاز جديد');
-    } else {
-      await db.prepare('UPDATE activation_devices SET name = ?, last_seen = ?, fails = 0, first_fail = 0 ' +
-        'WHERE device_id = ?').bind(name || dev.name, iso(now), id).run();
-      if (dev.status !== 'active') await eventLog(db, id, 'requested', 'إعادة طلب');
-    }
-    const fresh = await deviceGet(db, id);
-    return json({ ok: true, passcodeValid: true, device: out(fresh) });
+    return json({
+      ok: true, passcodeValid: true, deviceCode: id,
+      secondsLeft: Math.ceil((PASS_WINDOW_MS - (now % PASS_WINDOW_MS)) / 1000),
+      device: out({ device_id: id, status: 'pending' })
+    });
   }
 
-  /* ---- التحقق النهائي (عام) ---- */
+  /* ---- كود التفعيل المخصّص للجهاز (عام) ---- */
   if (pathname === '/api/activation/verify') {
     if (method !== 'POST') return bad(json, 'METHOD', 'الطريقة غير مسموحة', 405);
     const b = await bodyOf(request);
     const id = str(b && b.device).trim();
-    const pass = str(b && b.passcode).trim();
     const code = str(b && b.code).trim();
-    if (!DEVICE_RE.test(id)) return bad(json, 'BAD_DEVICE', 'معرّف الجهاز غير صالح');
-    if (!PASS_RE.test(pass)) return bad(json, 'BAD_PASSCODE', 'كلمة المرور المؤقتة 6 أرقام');
-    if (!CODE_RE.test(code)) return bad(json, 'BAD_CODE', 'كود التفعيل 8 أرقام');
+    if (!DEVICE_RE.test(id)) return bad(json, 'BAD_DEVICE', 'كود الجهاز لازم يكون 6 أرقام');
+    if (!CODE_RE.test(code)) return bad(json, 'BAD_CODE', 'كود التفعيل 6 أرقام');
 
-    const dev = await deviceGet(db, id);
-    if (!dev) return bad(json, 'UNKNOWN_DEVICE', 'الجهاز غير مسجّل — ابدأ بكلمة المرور المؤقتة من المسؤول', 404);
-    if (dev.status === 'revoked') {
-      return bad(json, 'REVOKED', 'تم إلغاء تفعيل هذا الجهاز — كلّم المسؤول عشان يعيد تفعيله', 403);
-    }
-    if (dev.status === 'active') {
-      return json({ ok: true, activated: true, device: out(dev) });   /* مفعّل بالفعل */
-    }
+    const wait = tooMany(id);
+    if (wait) return bad(json, 'TOO_MANY', 'محاولات كثيرة — حاول بعد ' + wait + ' دقيقة', 429);
 
-    const fails = Number(dev.fails || 0);
-    const firstFail = Number(dev.first_fail || 0);
-    if (fails >= MAX_FAILS && now - firstFail < FAIL_WINDOW_MS) {
-      const mins = Math.max(1, Math.ceil((FAIL_WINDOW_MS - (now - firstFail)) / 60000));
-      return bad(json, 'TOO_MANY', 'محاولات كثيرة — حاول بعد ' + mins + ' دقيقة', 429);
-    }
-
-    async function fail(reason, msg, status) {
-      const nextFails = (now - firstFail < FAIL_WINDOW_MS) ? fails + 1 : 1;
+    if (db) {
       try {
-        await db.prepare('UPDATE activation_devices SET fails = ?, first_fail = ? WHERE device_id = ?')
-          .bind(nextFails, (now - firstFail < FAIL_WINDOW_MS) ? firstFail : now, id).run();
-      } catch (e) { /* العدّ تكميلي */ }
-      await eventLog(db, id, 'failed', reason);
-      return bad(json, reason, msg, status || 403);
+        const dev = await deviceGet(db, id);
+        if (dev && dev.status === 'revoked') {
+          return bad(json, 'REVOKED', 'تم إلغاء تفعيل هذا الجهاز — كلّم المسؤول', 403);
+        }
+        if (dev && dev.status === 'active') {
+          return json({ ok: true, activated: true, token: await tokenFor(secret, id), device: out(dev) });
+        }
+      } catch (e) { /* نكمل */ }
     }
 
-    const prow = await db.prepare('SELECT * FROM activation_passes WHERE pass_hash = ?')
-      .bind(await passHash(pass)).first();
-    if (!prow) return fail('BAD_PASSCODE', 'كلمة المرور المؤقتة غير صحيحة');
-    if (Number(prow.expires_at) <= now) {
-      return fail('PASS_EXPIRED', 'انتهت صلاحية كلمة المرور المؤقتة — اطلب واحدة جديدة من المسؤول');
+    const win = Math.floor(now / CODE_WINDOW_MS);
+    let codeOk = false;
+    for (let k = 0; k < 2 && !codeOk; k++) {
+      codeOk = safeEqual(code, await actCodeFor(secret, id, win - k));
+    }
+    if (!codeOk) {
+      noteFail(id);
+      if (db) await eventLog(db, id, 'bad_code', 'كود تفعيل غير مطابق');
+      return bad(json, 'BAD_CODE',
+        'كود التفعيل غلط أو انتهت صلاحيته (3 دقائق) أو مش مخصّص للجهاز ده', 403);
+    }
+    failMemo.delete(id);
+
+    if (db) {
+      try {
+        const at = iso(now);
+        const dev = await deviceGet(db, id);
+        if (dev) {
+          await db.prepare('UPDATE activation_devices SET status = ?, activated_at = ?, ' +
+            "revoked_at = '', last_seen = ? WHERE device_id = ?")
+            .bind('active', at, at, id).run();
+        } else {
+          await db.prepare('INSERT INTO activation_devices (device_id, name, status, activated_at, last_seen, created_at) ' +
+            "VALUES (?, '', 'active', ?, ?, ?)").bind(id, at, at, at).run();
+        }
+        await eventLog(db, id, 'activated', 'تم التفعيل');
+        const done = await deviceGet(db, id);
+        return json({ ok: true, activated: true, token: await tokenFor(secret, id), device: out(done) });
+      } catch (e) { /* نكمل stateless */ }
     }
 
-    if (!dev.code_hash) return fail('NO_CODE', 'مفيش كود تفعيل صادر لهذا الجهاز — المسؤول يصدره من الإعدادات');
-    if (Number(dev.code_exp || 0) <= now) {
-      return fail('CODE_EXPIRED', 'انتهت صلاحية كود التفعيل — اطلب كوداً جديداً');
-    }
-    if (str(dev.code_hash) !== await codeHash(id, code)) {
-      return fail('BAD_CODE', 'كود التفعيل غير صحيح أو ليس مخصصاً لهذا الجهاز');
-    }
-
-    const at = iso(now);
-    await db.prepare('UPDATE activation_devices SET status = ?, code_hash = ?, code_exp = ?, ' +
-      'activated_at = ?, revoked_at = ?, fails = 0, first_fail = 0, last_seen = ? WHERE device_id = ?')
-      .bind('active', '', 0, at, '', at, id).run();
-    await eventLog(db, id, 'activated', 'تم التفعيل');
-    const done = await deviceGet(db, id);
-    return json({ ok: true, activated: true, device: out(done) });
+    return json({
+      ok: true, activated: true, token: await tokenFor(secret, id),
+      device: out({ device_id: id, status: 'active', activated_at: iso(now) })
+    });
   }
 
-  /* ===== من هنا: مسارات الأدمن ===== */
+  /* ===== مسارات الأدمن (اختيارية) ===== */
 
   if (pathname === '/api/activation/devices' && method === 'GET') {
     const a = await adminOnly(request, env, deps, json);
     if (a.error) return a.error;
-    let enforced = false;
-    try { enforced = (await settingGet(db, 'enforce')) === '1'; } catch (e) { enforced = false; }
+    if (!db) {
+      return json({ ok: true, enforced: !enforceOff, devices: [], count: 0,
+        note: 'مفيش سجل أجهزة مركزي على النشر ده — التفعيل شغّال بدون سجل.' });
+    }
     const rows = await db.prepare('SELECT * FROM activation_devices ORDER BY last_seen DESC LIMIT 200').all();
     const list = ((rows && rows.results) || []).map(function (d) {
       return {
-        device: d.device_id, name: d.name || '',
-        status: d.status || 'pending',
-        activatedAt: d.activated_at || '',
-        revokedAt: d.revoked_at || '',
-        lastSeen: d.last_seen || '',
-        codePending: !!(d.code_hash && Number(d.code_exp || 0) > now)
+        device: d.device_id, name: d.name || '', status: d.status || 'pending',
+        activatedAt: d.activated_at || '', revokedAt: d.revoked_at || '', lastSeen: d.last_seen || ''
       };
     });
-    return json({ ok: true, enforced: enforced, devices: list, count: list.length });
-  }
-
-  if (pathname === '/api/activation/enforce' && method === 'POST') {
-    const a = await adminOnly(request, env, deps, json);
-    if (a.error) return a.error;
-    const b = await bodyOf(request);
-    const enabled = !!(b && b.enabled);
-    await settingSet(db, 'enforce', enabled ? '1' : '0');
-    const saved = (await settingGet(db, 'enforce')) === '1';
-    if (saved !== enabled) return bad(json, 'SAVE_FAILED', 'تعذّر حفظ إعداد التفعيل', 500);
-    await eventLog(db, 'admin', enabled ? 'enforce_on' : 'enforce_off', str(a.conn && a.conn.email));
-    return json({ ok: true, enforced: saved });
-  }
-
-  if (pathname === '/api/activation/passcode' && method === 'POST') {
-    const a = await adminOnly(request, env, deps, json);
-    if (a.error) return a.error;
-    const pass = randomDigits(6);
-    await db.prepare('DELETE FROM activation_passes WHERE expires_at < ?').bind(now).run();
-    await db.prepare('INSERT INTO activation_passes (pass_hash, expires_at, created_at) VALUES (?, ?, ?)')
-      .bind(await passHash(pass), now + PASS_TTL_MS, now).run();
-    await eventLog(db, 'admin', 'passcode_issued', str(a.conn && a.conn.email));
-    return json({
-      ok: true, passcode: pass, expiresIn: Math.floor(PASS_TTL_MS / 1000),
-      expiresAt: iso(now + PASS_TTL_MS)
-    });
-  }
-
-  if (pathname === '/api/activation/issue' && method === 'POST') {
-    const a = await adminOnly(request, env, deps, json);
-    if (a.error) return a.error;
-    const b = await bodyOf(request);
-    const id = str(b && b.device).trim();
-    if (!DEVICE_RE.test(id)) return bad(json, 'BAD_DEVICE', 'معرّف الجهاز غير صالح');
-    const dev = await deviceGet(db, id);
-    if (!dev) return bad(json, 'UNKNOWN_DEVICE', 'الجهاز غير مسجّل — لازم يطلب التفعيل الأول بكلمة المرور المؤقتة', 404);
-    const code = randomDigits(8);
-    const exp = now + CODE_TTL_MS;
-    await db.prepare('UPDATE activation_devices SET status = ?, code_hash = ?, code_exp = ?, ' +
-      "revoked_at = '', last_seen = ? WHERE device_id = ?")
-      .bind('pending', await codeHash(id, code), exp, iso(now), id).run();
-    await eventLog(db, id, 'code_issued', str(a.conn && a.conn.email));
-    return json({ ok: true, device: id, code: code, expiresAt: iso(exp), expiresIn: Math.floor(CODE_TTL_MS / 1000) });
+    return json({ ok: true, enforced: !enforceOff, devices: list, count: list.length });
   }
 
   if (pathname === '/api/activation/revoke' && method === 'POST') {
     const a = await adminOnly(request, env, deps, json);
     if (a.error) return a.error;
+    if (!db) return bad(json, 'NO_STORE', 'إلغاء التفعيل محتاج سجل أجهزة مركزي (D1)', 503);
     const b = await bodyOf(request);
     const id = str(b && b.device).trim();
-    if (!DEVICE_RE.test(id)) return bad(json, 'BAD_DEVICE', 'معرّف الجهاز غير صالح');
+    if (!DEVICE_RE.test(id)) return bad(json, 'BAD_DEVICE', 'كود الجهاز لازم يكون 6 أرقام');
     const dev = await deviceGet(db, id);
     if (!dev) return bad(json, 'UNKNOWN_DEVICE', 'الجهاز غير مسجّل', 404);
     const at = iso(now);
-    await db.prepare('UPDATE activation_devices SET status = ?, code_hash = ?, code_exp = ?, ' +
-      'revoked_at = ?, last_seen = ? WHERE device_id = ?')
-      .bind('revoked', '', 0, at, at, id).run();
+    await db.prepare('UPDATE activation_devices SET status = ?, activated_at = ?, revoked_at = ?, ' +
+      'last_seen = ? WHERE device_id = ?').bind('revoked', '', at, at, id).run();
     await eventLog(db, id, 'revoked', str(a.conn && a.conn.email));
     const done = await deviceGet(db, id);
     return json({ ok: true, device: out(done) });

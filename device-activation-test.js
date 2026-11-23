@@ -1,9 +1,12 @@
 /* ============================================================
    device-activation-test.js — اختبار واجهة قفل/تفعيل الجهاز
    ------------------------------------------------------------
-   يشغّل index.html في jsdom مع device-activation.js وخادم وهمي،
-   ويتأكد من: القفل عند الطلب، خطوتي كلمة المرور والكود، عدم قفل
-   جهاز مفعّل عند انقطاع الاتصال، ورجوع القفل بعد إلغاء التفعيل.
+   يشغّل index.html في jsdom مع device-activation.js وخادم وهمي:
+     • القفل يظهر أول ما التطبيق يفتح (جهاز غير مفعّل).
+     • خطوة كلمة المرور → كود الجهاز (6 أرقام) → كود التفعيل.
+     • الكود الغلط بيعرض رسالة، والصحيح بيفتح التطبيق ويحفظ التوكن.
+     • خدمة غير متاحة أو شبكة واقعة ما بتقفلش جهاز جديد.
+     • مفيش لوحة أدمن بتتضاف في الإعدادات.
    التشغيل: NODE_PATH=/tmp/nizam-jsdom/node_modules node device-activation-test.js
    ============================================================ */
 const fs = require('fs');
@@ -13,149 +16,148 @@ const src = fs.readFileSync('dist/device-activation.js', 'utf8');
 let html = fs.readFileSync('dist/index.html', 'utf8');
 html = html.replace(/<script[^>]*src="device-activation\.js"[^>]*>\s*<\/script>/,
   () => '<script>' + src + '</script>');
-if (html.indexOf('__deviceActivation') === -1 && html.indexOf('deviceActivation') === -1) {
-  console.log('✗ السكربت مش موجود في index.html');
+if (html.indexOf('__deviceActivation') === -1) {
+  console.log('✗ السكربت مش موصول في index.html');
   process.exit(1);
 }
-
-const errors = [];
-const vc = new VirtualConsole();
-vc.on('jsdomError', (e) => errors.push('JSDOM: ' + (e && e.message ? e.message : e)));
-vc.on('error', (...a) => errors.push('console.error: ' + a.join(' ')));
-
-/* خادم وهمي متحكَّم فيه من الاختبار */
-const server = {
-  status: { ok: true, available: true, enforced: false, activated: false, device: { status: 'none' } },
-  request: { ok: true, passcodeValid: true, device: { status: 'pending' } },
-  verify: { ok: true, activated: true, device: { status: 'active' } },
-  offline: false,
-  calls: []
-};
-
-const dom = new JSDOM(html, {
-  runScripts: 'dangerously',
-  url: 'https://example.test/',
-  pretendToBeVisual: true,
-  virtualConsole: vc,
-  beforeParse(window) {
-    window.fetch = (url) => {
-      const u = String(url);
-      const action = (u.split('/api/activation/')[1] || '').split('?')[0].split('&')[0];
-      server.calls.push({ action: action, url: u });
-      if (server.offline) return Promise.reject(new Error('offline'));
-      let payload = { ok: false, error: 'مسار غير معروف' }, status = 200;
-      if (action === 'status') payload = server.status;
-      else if (action === 'request') payload = server.request;
-      else if (action === 'verify') payload = server.verify;
-      else if (action === 'devices') { payload = { ok: true, enforced: true, devices: [] }; status = 200; }
-      else if (action === 'passcode') payload = { ok: true, passcode: '123456', expiresIn: 300 };
-      else if (action === 'issue') payload = { ok: true, code: '87654321' };
-      else if (action === 'enforce') payload = { ok: true, enforced: true };
-      else if (action === 'revoke') payload = { ok: true };
-      return Promise.resolve({
-        ok: status < 400, status: status,
-        text: () => Promise.resolve(JSON.stringify(payload))
-      });
-    };
-    window.confirm = () => true;
-    window.HTMLAnchorElement.prototype.click = function () {};
-  }
-});
-
-const { window } = dom;
-const doc = window.document;
-const $ = (s) => doc.querySelector(s);
-const wait = (ms) => new Promise((r) => setTimeout(r, ms || 0));
-const tick = async (n) => { for (let i = 0; i < (n || 6); i++) await wait(5); };
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra) => {
   if (cond) { pass++; console.log('  PASS  ' + name); }
   else { fail++; console.log('  FAIL  ' + name + (extra ? '  -> ' + extra : '')); }
 };
-const click = (el) => el && el.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+const wait = (ms) => new Promise((r) => setTimeout(r, ms || 60));
 
-(async function () {
-  await tick(10);
-  console.log('\n— قفل وتفعيل الجهاز (واجهة) —\n');
+function boot(server) {
+  const calls = [];
+  const errors = [];
+  const vc = new VirtualConsole();
+  vc.on('jsdomError', (e) => errors.push(String(e && e.message ? e.message : e)));
 
-  ok('الوحدة اشتغلت', !!window.__deviceActivation, 'window.__deviceActivation');
-  const id = window.__deviceActivation.deviceId();
-  ok('معرّف جهاز ثابت بصيغة صحيحة', /^[A-Za-z0-9_-]{8,64}$/.test(id), id);
-  ok('المعرّف محفوظ محليًا', window.localStorage.getItem('device_activation_id') === id);
+  const dom = new JSDOM(html, {
+    runScripts: 'dangerously',
+    url: 'https://example.test/',
+    pretendToBeVisual: true,
+    virtualConsole: vc,
+    beforeParse(win) {
+      win.fetch = (url, init) => {
+        const u = String(url);
+        const action = (u.split('/api/activation/')[1] || '').split('?')[0];
+        calls.push({ action, url: u, body: init && init.body });
+        if (server.offline) return Promise.reject(new Error('offline'));
+        let payload = { ok: false, error: 'مسار غير معروف' };
+        if (action === 'status') payload = server.status;
+        else if (action === 'passcode') payload = server.passcode;
+        else if (action === 'verify') payload = server.verify;
+        return Promise.resolve({
+          ok: true, status: 200,
+          text: () => Promise.resolve(JSON.stringify(payload))
+        });
+      };
+    }
+  });
+  return { dom, win: dom.window, calls, errors };
+}
 
-  /* 1) التفعيل متوقف → مفيش قفل */
-  ok('بدون طلب تفعيل: التطبيق مفتوح', !$('#deviceActivation'));
+const overlay = (win) => win.document.getElementById('deviceActivation');
 
-  /* 2) طلب التفعيل → شاشة قفل */
-  server.status = { ok: true, available: true, enforced: true, activated: false, device: { status: 'none' } };
-  await window.__deviceActivation.refresh();
-  await tick(4);
-  ok('التفعيل مطلوب → شاشة القفل ظهرت', !!$('#deviceActivation'));
-  ok('عنوان الشاشة «تفعيل الجهاز»', /تفعيل الجهاز/.test($('.dev-act__title') ? $('.dev-act__title').textContent : ''));
-  ok('معرّف الجهاز معروض', ($('#daDeviceId') || {}).textContent === id);
-  ok('زر نسخ المعرّف موجود', !!$('#daCopyId'));
+(async function run() {
+  console.log('\n— جهاز جديد: القفل بيظهر —');
+  const server = {
+    offline: false,
+    status: { ok: true, available: true, enforced: true, activated: false },
+    passcode: { ok: true, deviceCode: '482913', secondsLeft: 280 },
+    verify: { ok: false, code: 'BAD_CODE', error: 'كود التفعيل غلط أو انتهت صلاحيته' }
+  };
+  const app = boot(server);
+  await wait();
 
-  /* 3) كلمة مرور غلط */
-  server.request = { ok: false, code: 'BAD_PASSCODE', error: 'كلمة المرور المؤقتة غير صحيحة' };
-  $('#daPass').value = '123456';
-  click($('#daNext'));
-  await tick(6);
-  ok('كلمة مرور غلط → رسالة واضحة', /غير صحيحة/.test(($('#daErr') || {}).textContent || ''));
-  ok('فضل في خطوة كلمة المرور', !!$('#daPass') && !$('#daCode'));
+  ok('القفل ظهر أول ما التطبيق فتح', !!overlay(app.win));
+  ok('فيه حقل كلمة المرور', !!app.win.document.getElementById('daPass'));
+  ok('بيتحقق من الحالة على الخادم', app.calls.some((c) => c.action === 'status'));
+  ok('مفيش لوحة أدمن في الإعدادات', app.win.document.getElementById('activationAdminPanel') === null);
 
-  /* 4) كلمة مرور صحيحة → خطوة الكود */
-  server.request = { ok: true, passcodeValid: true, device: { status: 'pending' } };
-  const passEl = $('#daPass');
-  if (passEl) passEl.value = '654321';
-  click($('#daNext'));
-  await tick(6);
-  ok('كلمة المرور الصح → خطوة كود التفعيل', !!$('#daCode'));
-  const reqCall = server.calls.filter((c) => c.action === 'request').pop();
-  ok('الطلب بعت معرّف الجهاز وكلمة المرور', !!reqCall);
+  console.log('\n— كلمة المرور ثم كود الجهاز —');
+  const passInput = app.win.document.getElementById('daPass');
+  passInput.value = '135790';
+  app.win.document.getElementById('daNext').click();
+  await wait();
 
-  /* 5) كود غلط */
-  server.verify = { ok: false, code: 'BAD_CODE', error: 'كود التفعيل غير صحيح' };
-  $('#daCode').value = '11111111';
-  click($('#daGo'));
-  await tick(6);
-  ok('كود غلط → رسالة واضحة', /غير صحيح/.test(($('#daErr') || {}).textContent || ''));
-  ok('الشاشة لسه مقفولة', !!$('#deviceActivation'));
+  const passCall = app.calls.filter((c) => c.action === 'passcode').pop();
+  ok('بيتبعت كلمة المرور للخادم', !!passCall);
+  let sent = {};
+  try { sent = JSON.parse((passCall && passCall.body) || '{}'); } catch (e) {}
+  ok('بيبعت كود جهاز 6 أرقام للخادم', /^\d{6}$/.test(String(sent.device || '')), JSON.stringify(sent));
+  ok('بيبعت كلمة المرور', String(sent.passcode || '') === '135790', JSON.stringify(sent));
+  const deviceCodeEl = app.win.document.getElementById('daDeviceId');
+  ok('كود الجهاز ظاهر بعد كلمة المرور', !!deviceCodeEl);
+  ok('كود الجهاز 6 أرقام', deviceCodeEl && /^\d{6}$/.test(deviceCodeEl.textContent), deviceCodeEl ? deviceCodeEl.textContent : '');
+  ok('فيه حقل كود التفعيل', !!app.win.document.getElementById('daCode'));
 
-  /* 6) كود صح → التفعيل */
-  server.verify = { ok: true, activated: true, device: { status: 'active' } };
-  server.status = { ok: true, available: true, enforced: true, activated: true, device: { status: 'active' } };
-  $('#daCode').value = '87654321';
-  click($('#daGo'));
-  await tick(8);
-  ok('التفعيل نجح → الشاشة اتقفلت', !$('#deviceActivation'));
-  ok('حالة التفعيل محفوظة محليًا', /"activated":true/.test(window.localStorage.getItem('device_activation_cache') || ''));
+  console.log('\n— كود غلط —');
+  const codeInput = app.win.document.getElementById('daCode');
+  codeInput.value = '000000';
+  app.win.document.getElementById('daGo').click();
+  await wait();
+  const err = app.win.document.getElementById('daErr');
+  ok('رسالة خطأ ظاهرة', err && !err.hidden && err.textContent.length > 5, err ? err.textContent : '');
+  ok('القفل لسه شغال', !!overlay(app.win));
 
-  /* 7) انقطاع الاتصال بعد التفعيل → ما يقفلش */
+  console.log('\n— كود صح —');
+  server.verify = { ok: true, activated: true, token: 'tok_abcdefghijklmnopqrstuvwxyz' };
+  const codeInput2 = app.win.document.getElementById('daCode');
+  codeInput2.value = '654321';
+  app.win.document.getElementById('daGo').click();
+  await wait();
+
+  ok('التوكن اتحفظ على الجهاز', app.win.localStorage.getItem('device_activation_token') === 'tok_abcdefghijklmnopqrstuvwxyz');
+  ok('القفل اتشال والتطبيق فتح', !overlay(app.win));
+  ok('مفيش لوحة أدمن اتضافت', app.win.document.getElementById('activationAdminPanel') === null);
+
+  console.log('\n— بعد التفعيل: انقطاع الشبكة ما بيقفلش —');
   server.offline = true;
-  await window.__deviceActivation.refresh();
-  await tick(4);
-  ok('انقطاع الاتصال بعد التفعيل: التطبيق ما بيتقفلش', !$('#deviceActivation'));
-  server.offline = false;
+  await app.win.__deviceActivation.refresh(false);
+  await wait(20);
+  ok('مفيش قفل بعد التفعيل وقت الانقطاع', !overlay(app.win));
 
-  /* 8) إلغاء التفعيل من الخادم → رجوع القفل */
-  server.status = { ok: true, available: true, enforced: true, activated: false, device: { status: 'revoked' } };
-  await window.__deviceActivation.refresh();
-  await tick(4);
-  ok('إلغاء التفعيل من الخادم → القفل رجع', !!$('#deviceActivation'));
+  console.log('\n— خدمة غير متاحة (مفيش ACTIVATION_SECRET) —');
+  const off = boot({
+    offline: false,
+    status: { ok: true, available: false, enforced: false, reason: 'NO_SECRET' },
+    passcode: { ok: false, code: 'NO_SECRET', error: 'x' },
+    verify: { ok: false, code: 'NO_SECRET', error: 'x' }
+  });
+  await wait();
+  ok('مفيش قفل لما الخدمة غير متاحة', !overlay(off.win));
 
-  /* 9) الخدمة غير متاحة (نشر Vercel بدون سجل مركزي) */
-  window.__deviceActivation.state.activated = false;
-  server.status = { ok: true, available: false, enforced: false, activated: false, reason: 'NO_STORE' };
-  await window.__deviceActivation.refresh();
-  await tick(4);
-  ok('خدمة غير متاحة → ما بتقفلش التطبيق', !$('#deviceActivation'));
+  console.log('\n— جهاز جديد + شبكة واقعة —');
+  const down = boot({
+    offline: true,
+    status: {}, passcode: {}, verify: {}
+  });
+  await wait();
+  ok('مفيش قفل لجهاز جديد بدون اتصال (ما نكسرش التطبيق)', !down.win.document.getElementById('deviceActivation'));
 
-  /* 10) أخطاء JS */
-  ok('مفيش أخطاء JS من الوحدة', errors.filter((e) => /device-activation|dev-act/.test(e)).length === 0,
-    errors.join(' | ').slice(0, 300));
+  console.log('\n— جهاز مفعّل قبل كده + شبكة واقعة —');
+  const cached = boot({
+    offline: false,
+    status: { ok: true, available: true, enforced: true, activated: false },
+    passcode: {}, verify: {}
+  });
+  await wait();
+  ok('القفل ظهر وهو متصل', !!overlay(cached.win));
+  cached.win.localStorage.removeItem('device_activation_token');
+  cached.win.fetch = () => Promise.reject(new Error('offline'));
+  await cached.win.__deviceActivation.refresh(false);
+  await wait(20);
+  ok('فضل مقفول وقت الانقطاع (كان معروف إن التفعيل مطلوب)', !!overlay(cached.win));
 
-  console.log('\nPASS: ' + pass + '   FAIL: ' + fail + '\n');
-  if (fail) process.exit(1);
-  window.close();
-})();
+  const allErrors = app.errors.concat(off.errors, down.errors, cached.errors);
+  ok('مفيش أخطاء JS في الشاشة', allErrors.length === 0, allErrors.join(' | '));
+
+  console.log('\n' + (fail ? '✗ فشل ' + fail + ' / ' + (pass + fail) : '✓ نجح ' + pass + ' / ' + (pass + fail)));
+  process.exit(fail ? 1 : 0);
+})().catch((e) => {
+  console.error('✗ خطأ غير متوقع:', e);
+  process.exit(1);
+});

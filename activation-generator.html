@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>مولّد أكواد تفعيل الأجهزة — WorkFlow</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 14px 60px;
+    font-family: "Segoe UI", Tahoma, "Noto Naskh Arabic", Arial, sans-serif;
+    background: #eef2ff; color: #0f172a;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  .card {
+    background: #fff; border: 1px solid #dfe5ff; border-radius: 18px;
+    padding: 22px; margin-bottom: 16px; box-shadow: 0 10px 30px rgba(49,46,129,.08);
+  }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  h2 { font-size: 17px; margin: 0 0 12px; color: #312e81; }
+  p { line-height: 1.8; margin: 6px 0; color: #334155; font-size: 14px; }
+  .muted { color: #64748b; font-size: 13px; }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .mark {
+    width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+    background: linear-gradient(135deg,#312e81,#4f46e5); color: #fff; font-size: 20px;
+  }
+  label { display: block; margin: 14px 0 6px; font-weight: 600; font-size: 14px; }
+  input {
+    width: 100%; padding: 13px 14px; font-size: 20px; letter-spacing: .14em;
+    border: 1.5px solid #c7d2fe; border-radius: 12px; background: #f8faff;
+    font-family: ui-monospace, Menlo, Consolas, monospace; direction: ltr; text-align: center;
+  }
+  input:focus { outline: none; border-color: #4f46e5; background: #fff; }
+  .row { display: flex; gap: 8px; align-items: stretch; }
+  .row input { flex: 1; }
+  button {
+    cursor: pointer; border: 0; border-radius: 12px; padding: 12px 16px;
+    font-size: 14px; font-weight: 700; font-family: inherit; background: #eef2ff; color: #312e81;
+  }
+  button.primary { background: linear-gradient(135deg,#312e81,#4f46e5); color: #fff; }
+  button.ghost { background: #f1f5f9; color: #334155; }
+  button:disabled { opacity: .5; cursor: default; }
+  .out {
+    margin-top: 16px; background: #f8faff; border: 1.5px dashed #c7d2fe;
+    border-radius: 14px; padding: 16px; text-align: center;
+  }
+  .code {
+    font-family: ui-monospace, Menlo, Consolas, monospace; direction: ltr;
+    font-size: 44px; font-weight: 800; letter-spacing: .22em; color: #312e81;
+    margin: 6px 0; line-height: 1.2;
+  }
+  .timer { font-size: 13px; color: #047857; font-weight: 700; }
+  .timer.warn { color: #b91c1c; }
+  .actions { display: flex; gap: 8px; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
+  .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 999px;
+    background: #e0e7ff; color: #312e81; font-size: 12px; font-weight: 700;
+  }
+  .warnbox {
+    background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412;
+    border-radius: 12px; padding: 12px 14px; font-size: 13px; line-height: 1.8; margin-top: 12px;
+  }
+  ol { padding-inline-start: 20px; line-height: 2; font-size: 14px; color: #334155; }
+  code.small { background: #eef2ff; padding: 2px 6px; border-radius: 6px; font-size: 13px; }
+  .status { font-size: 13px; margin-top: 8px; min-height: 20px; font-weight: 600; }
+  .status.ok { color: #047857; }
+  .status.bad { color: #b91c1c; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="card">
+    <div class="brand">
+      <div class="mark">🔐</div>
+      <div>
+        <h1>مولّد أكواد تفعيل الأجهزة</h1>
+        <div class="muted">WorkFlow — نظام الإدارة المتكامل</div>
+      </div>
+    </div>
+    <p>
+      الأداة دي بتشتغل على جهازك لوحده بدون إنترنت، ومفيش فيها أي بيانات بتتبعت لأي مكان.
+      كل الحسابات بتتعمل هنا في المتصفح بنفس الخوارزمية اللي على الخادم.
+    </p>
+    <div class="warnbox">
+      ⚠️ خلّي الملف ده على جهازك أنت بس. <b>السر</b> اللي تحت هو مفتاح التوليد —
+      متحطّهوش على السيرفر ولا تبعته لحد، ولا ترفعه على GitHub.
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>1) السر المشترك</h2>
+    <p class="muted">لازم يكون نفس القيمة اللي في متغيّر البيئة <code class="small">ACTIVATION_SECRET</code> على الخادم (16 حرف على الأقل).</p>
+    <label for="secret">السر (ACTIVATION_SECRET)</label>
+    <div class="row">
+      <input id="secret" type="password" autocomplete="off" spellcheck="false" placeholder="••••••••••••••••" />
+      <button class="ghost" id="toggleSecret" type="button">إظهار</button>
+      <button class="primary" id="saveSecret" type="button">حفظ</button>
+    </div>
+    <div class="actions" style="justify-content:flex-start;margin-top:10px">
+      <button class="ghost" id="genSecret" type="button">توليد سر جديد</button>
+      <button class="ghost" id="copySecret" type="button">نسخ السر</button>
+    </div>
+    <div class="status" id="secretStatus"></div>
+  </div>
+
+  <div class="card">
+    <h2>2) كلمة المرور التشغيلية <span class="badge">تتغيّر كل 5 دقائق</span></h2>
+    <p class="muted">اكتبها للمستخدم اللي عايز يفعّل جهازه. ملاحظة: الخادم بيقبل كلمة المرور الحالية واللي قبلها بسماحية، لكن خلّيه يبدأ فورًا.</p>
+    <div class="out">
+      <div class="code" id="passCode">------</div>
+      <div class="timer" id="passTimer">—</div>
+      <div class="actions"><button class="primary" id="copyPass" type="button">نسخ كلمة المرور</button></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>3) كود تفعيل جهاز <span class="badge">صالح 3 دقائق</span></h2>
+    <p class="muted">المستخدم بعد ما يكتب كلمة المرور هيشوف «كود الجهاز» (6 أرقام). اكتبه هنا وطلّع له كود التفعيل.</p>
+    <label for="deviceCode">كود الجهاز (6 أرقام)</label>
+    <input id="deviceCode" type="text" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="off" />
+    <div class="out">
+      <div class="code" id="actCode">------</div>
+      <div class="timer" id="actTimer">—</div>
+      <div class="actions"><button class="primary" id="copyAct" type="button" disabled>نسخ كود التفعيل</button></div>
+    </div>
+    <div class="status" id="actStatus"></div>
+  </div>
+
+  <div class="card">
+    <h2>طريقة التشغيل لأول مرة</h2>
+    <ol>
+      <li>دوس <b>توليد سر جديد</b> وانسخه.</li>
+      <li>على Vercel: Settings ← Environment Variables ← أضف <code class="small">ACTIVATION_SECRET</code> بنفس القيمة، ثم أعِد النشر (Redeploy).</li>
+      <li>ارجع هنا واضغط <b>حفظ</b> — الأداة هتفضل فاكرة السر على الجهاز ده.</li>
+      <li>المستخدم بيفتح التطبيق ← بيكتب كلمة المرور اللي بتطلع فوق.</li>
+      <li>بيظهر له كود الجهاز ← تكتبه هنا ← بتديله كود التفعيل (3 دقائق).</li>
+      <li>بيكتبه ويضغط «تفعيل الجهاز» — التطبيق بيفتح وبيفضل مفعّل.</li>
+    </ol>
+    <p class="muted">
+      لو غيّرت السر، كل الأجهزة المفعّلة هتحتاج تفعيل جديد (التوكن القديم بيبقى غير صالح).
+      ساعة الجهاز لازم تكون مضبوطة، لأن الأكواد مرتبطة بالوقت.
+    </p>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var PASS_WINDOW = 5 * 60 * 1000;
+  var CODE_WINDOW = 3 * 60 * 1000;
+  var KEY = 'nizam_activation_secret';
+
+  function $(id) { return document.getElementById(id); }
+  function enc(s) { return new TextEncoder().encode(String(s)); }
+
+  async function hmacHex(secret, msg) {
+    var key = await crypto.subtle.importKey('raw', enc(secret),
+      { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    var sig = await crypto.subtle.sign('HMAC', key, enc(msg));
+    var b = new Uint8Array(sig), out = '';
+    for (var i = 0; i < b.length; i++) out += ('0' + b[i].toString(16)).slice(-2);
+    return out;
+  }
+
+  async function six(secret, msg) {
+    var h = await hmacHex(secret, msg);
+    var n = parseInt(h.slice(0, 8), 16) % 1000000;
+    return String(n).padStart(6, '0');
+  }
+
+  function secret() { return String(($('secret').value || '')).trim(); }
+
+  function setStatus(el, text, cls) {
+    el.textContent = text || '';
+    el.className = 'status' + (cls ? ' ' + cls : '');
+  }
+
+  function fmt(ms) {
+    var s = Math.max(0, Math.ceil(ms / 1000));
+    var m = Math.floor(s / 60);
+    s = s % 60;
+    return (m > 0 ? m + ' دقيقة و ' : '') + s + ' ثانية';
+  }
+
+  var tick = 0;
+
+  async function render() {
+    var s = secret();
+    var now = Date.now();
+    var passEl = $('passCode'), actEl = $('actCode');
+
+    if (s.length < 16) {
+      passEl.textContent = '------';
+      actEl.textContent = '------';
+      $('passTimer').textContent = 'اكتب السر الأول';
+      $('actTimer').textContent = '—';
+      $('copyAct').disabled = true;
+      return;
+    }
+
+    var pWin = Math.floor(now / PASS_WINDOW);
+    var pass = await six(s, 'pass:' + pWin);
+    passEl.textContent = pass;
+    var pLeft = PASS_WINDOW - (now % PASS_WINDOW);
+    var pt = $('passTimer');
+    pt.textContent = 'باقي ' + fmt(pLeft) + ' (يتغيّر تلقائيًا)';
+    pt.className = 'timer' + (pLeft < 45000 ? ' warn' : '');
+
+    var dev = String($('deviceCode').value || '').replace(/\D/g, '').slice(0, 6);
+    $('deviceCode').value = dev;
+    if (dev.length !== 6) {
+      actEl.textContent = '------';
+      $('actTimer').textContent = 'اكتب كود الجهاز (6 أرقام)';
+      $('copyAct').disabled = true;
+      return;
+    }
+    var cWin = Math.floor(now / CODE_WINDOW);
+    var act = await six(s, 'act:' + dev + ':' + cWin);
+    actEl.textContent = act;
+    var cLeft = CODE_WINDOW - (now % CODE_WINDOW);
+    var at = $('actTimer');
+    at.textContent = 'باقي ' + fmt(cLeft) + ' لكود الجهاز ' + dev;
+    at.className = 'timer' + (cLeft < 30000 ? ' warn' : '');
+    $('copyAct').disabled = false;
+    window.__actCode = act;
+    window.__passCode = pass;
+    setStatus($('actStatus'), 'الكود ده مبيشتغلش على أي جهاز تاني.', 'ok');
+  }
+
+  function copy(text, label) {
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta);
+      setStatus($('secretStatus'), 'تم نسخ ' + label + ' ✓', 'ok');
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        setStatus($('secretStatus'), 'تم نسخ ' + label + ' ✓', 'ok');
+      }, fallback);
+      return;
+    }
+    fallback();
+  }
+
+  $('secret').addEventListener('input', function () {
+    setStatus($('secretStatus'), '');
+    render();
+  });
+  $('deviceCode').addEventListener('input', function () { render(); });
+
+  $('toggleSecret').addEventListener('click', function () {
+    var i = $('secret');
+    i.type = i.type === 'password' ? 'text' : 'password';
+    $('toggleSecret').textContent = i.type === 'password' ? 'إظهار' : 'إخفاء';
+  });
+
+  $('saveSecret').addEventListener('click', function () {
+    var s = secret();
+    if (s.length < 16) return setStatus($('secretStatus'), 'السر لازم 16 حرف على الأقل', 'bad');
+    try { localStorage.setItem(KEY, s); } catch (e) {}
+    setStatus($('secretStatus'), 'تم الحفظ على الجهاز ده ✓ — حطّ نفس القيمة في ACTIVATION_SECRET على الخادم', 'ok');
+    render();
+  });
+
+  $('genSecret').addEventListener('click', function () {
+    var a = new Uint8Array(24);
+    crypto.getRandomValues(a);
+    var s = '';
+    for (var i = 0; i < a.length; i++) s += ('0' + a[i].toString(16)).slice(-2);
+    $('secret').value = s;
+    $('secret').type = 'text';
+    $('toggleSecret').textContent = 'إخفاء';
+    setStatus($('secretStatus'), 'سر جديد جاهز — انسخه واحفظه، وبعد كده حطه في ACTIVATION_SECRET على الخادم', 'ok');
+    render();
+  });
+
+  $('copySecret').addEventListener('click', function () {
+    var s = secret();
+    if (s.length < 16) return setStatus($('secretStatus'), 'مفيش سر صالح', 'bad');
+    copy(s, 'السر');
+  });
+
+  $('copyPass').addEventListener('click', function () {
+    if (window.__passCode) copy(window.__passCode, 'كلمة المرور');
+  });
+
+  $('copyAct').addEventListener('click', function () {
+    if (window.__actCode) copy(window.__actCode, 'كود التفعيل');
+  });
+
+  try {
+    var saved = localStorage.getItem(KEY);
+    if (saved) $('secret').value = saved;
+  } catch (e) {}
+
+  if (!(window.crypto && window.crypto.subtle)) {
+    setStatus($('secretStatus'), 'المتصفح ده مش بيدعم Web Crypto — افتح الملف في Chrome أو Edge حديث.', 'bad');
+  }
+
+  render();
+  setInterval(function () {
+    tick++;
+    if (tick % 1 === 0) render();
+  }, 1000);
+})();
+</script>
+</body>
+</html>

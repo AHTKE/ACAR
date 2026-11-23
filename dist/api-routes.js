@@ -32,13 +32,10 @@ export const SYNC_ACTIONS = [
 /* تفعيل الأجهزة — خدمة مركزية مشتركة بين التطبيقات */
 export const ACTIVATION_ACTIONS = [
   'status',
-  'request',
-  'verify',
   'passcode',
-  'issue',
+  'verify',
   'devices',
-  'revoke',
-  'enforce'
+  'revoke'
 ];
 
 /* تنبيهات البريد (أدمن) — مسارات مسطّحة عشان تمرّ من الـcatch-all */

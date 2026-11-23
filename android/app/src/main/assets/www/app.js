@@ -1468,7 +1468,7 @@
     if (typeof ExportKit === 'undefined') { toast('محرك التصدير غير محمّل', true); return; }
     if (!ExportKit.hasCanvas()) { toast('تصدير PDF يحتاج متصفحاً حقيقياً', true); return; }
     try {
-      var pdf = ExportKit.reportToPdf(customerProfileReport(c));
+      var pdf = sheetsToPdf(customerProfileSheets(c));
       if (!pdf) { toast('تعذّر إنشاء ملف PDF', true); return; }
       openExportModal('customer-' + safeFileName(c.name) + '-' + exportStamp() + '.pdf', MIME_PDF, pdf);
     } catch (e) { toast('خطأ في التصدير: ' + (e && e.message ? e.message : e), true); }
@@ -2798,7 +2798,7 @@
     if (typeof ExportKit === 'undefined') { toast('محرك التصدير غير محمّل', true); return; }
     if (!ExportKit.hasCanvas()) { toast('تصدير PDF يحتاج متصفحاً حقيقياً', true); return; }
     try {
-      var pdf = ExportKit.reportToPdf(supplierProfileReport(s));
+      var pdf = sheetsToPdf(supplierProfileSheets(s));
       if (!pdf) { toast('تعذّر إنشاء ملف PDF', true); return; }
       openExportModal('supplier-' + safeFileName(s.name) + '-' + exportStamp() + '.pdf', MIME_PDF, pdf);
     } catch (e) { toast('خطأ في التصدير: ' + (e && e.message ? e.message : e), true); }
@@ -5223,6 +5223,82 @@
     };
   }
 
+  /* ورقة ملف (صف رأس + صفوف) → تقرير للـPDF بنفس التفصيل */
+  function sheetToReport(sh) {
+    var rows = sh.rows || [];
+    var header = (rows[0] || []).slice();
+    var body = rows.slice(1).map(function (r) { return (r || []).slice(); });
+    return {
+      title: sh.title || sh.name || '',
+      subtitle: sh.subtitle || '',
+      columns: header,
+      rows: body,
+      moneyCols: sh.moneyCols || [],
+      totalRow: sh.totalRow !== false
+    };
+  }
+
+  /* كل أوراق الملف في PDF واحد — تفصيل كامل زي الشاشة، مش اختصار */
+  function sheetsToPdf(sheets) {
+    if (typeof ExportKit === 'undefined' || !ExportKit.hasCanvas || !ExportKit.hasCanvas()) return null;
+    var canvases = [];
+    (sheets || []).forEach(function (sh) {
+      var pages = ExportKit.drawReportPages(sheetToReport(sh));
+      if (pages && pages.length) canvases = canvases.concat(pages);
+    });
+    if (!canvases.length) return null;
+    return ExportKit.canvasesToPdf(canvases);
+  }
+
+  /* تفصيل إضافي مع تقرير القسم: نفس بيانات الشاشة سطر بسطر */
+  function reportCustomerSends() {
+    var rows = [['العميل', 'الشغلانة', 'التاريخ', 'المرسل / البيان', 'الكمية', 'السعر', 'الإجمالي', 'المصدر']];
+    getCustomers().forEach(function (c) {
+      var d = derive(c);
+      mergedSendEntries(c, d).forEach(function (e) {
+        var x = e.x;
+        rows.push([c.name || '', x.work || '', formatDate(x.date), x.desc || '',
+          x.qty === '' || x.qty == null ? '—' : x.qty,
+          x.price === '' || x.price == null ? '—' : x.price,
+          Number(x.total || 0),
+          e.linked ? ('توريد مورد: ' + (x.supplier || '')) : 'مرسل من موارد']);
+      });
+    });
+    return {
+      title: 'تفصيل المرسل من موارد (كل العملاء)',
+      subtitle: 'كل بند مرسل على حدة — زي شاشة ملف العميل',
+      columns: rows[0], rows: rows.slice(1),
+      moneyCols: [6], totalRow: true,
+      summary: [{ label: 'عدد البنود', value: String(rows.length - 1) }]
+    };
+  }
+
+  function reportSupplierTx() {
+    var rows = [['المورد', 'التاريخ', 'رقم الإيصال', 'البيان', 'الشغلانة', 'ورّد إلى', 'الوارد', 'المدفوع', 'الباقي', 'ملاحظات']];
+    getSuppliers().forEach(function (s) {
+      var d = deriveSup(s);
+      var running = 0;
+      d.tx.forEach(function (t) {
+        running += Number(t.incoming || 0) - Number(t.paid || 0);
+        rows.push([s.name || '', formatDate(t.date), t.no || '', t.desc || '', t.work || '', t.to || '',
+          Number(t.incoming || 0), Number(t.paid || 0), running, t.note || '']);
+      });
+    });
+    return {
+      title: 'تفصيل حركات الموردين',
+      subtitle: 'كل حركة على حدة — زي كشف حساب المورد',
+      columns: rows[0], rows: rows.slice(1),
+      moneyCols: [6, 7, 8], totalRow: true,
+      summary: [{ label: 'عدد الحركات', value: String(rows.length - 1) }]
+    };
+  }
+
+  function detailSheets(key) {
+    if (key === 'customers') return [reportToSheet(reportCollection()), reportToSheet(reportCustomerSends())];
+    if (key === 'suppliers') return [reportToSheet(reportSupplierTx())];
+    return [];
+  }
+
   /* ملف «كامل» = ورقة ملخص + ورقة لكل قسم */
   function allSheets() {
     var sheets = [reportToSheet(reportAll())];
@@ -5240,6 +5316,12 @@
         sheets.push(itemSheet);
       }
     } catch (e3) {}
+    /* تفصيل إضافي: كل الدفعات وكل الحركات سطر بسطر */
+    try {
+      ['customers', 'suppliers'].forEach(function (k) {
+        detailSheets(k).forEach(function (sh) { sheets.push(sh); });
+      });
+    } catch (eDet) {}
     /* فهرس واضح: أسماء الأوراق وعدد صفوف كل واحدة */
     try {
       var idxRows = sheets.map(function (sh, i) {
@@ -5325,6 +5407,12 @@
     try {
       var reports = [reportAll()];
       EXPORT_SECTIONS.forEach(function (s) { reports.push(buildReport(s.key)); });
+      /* تفصيل كل دفعة وكل حركة سطر بسطر — نفس بيانات الشاشة */
+      try {
+        detailSheets('customers').concat(detailSheets('suppliers')).forEach(function (sh) {
+          reports.push(sheetToReport(sh));
+        });
+      } catch (eDet) {}
       /* كل بيانات المخازن: رصيد كل بضاعة على حدة (مش موجودة في تقرير المخازن العادي) */
       try {
         var stItemsRep = reportStoresItems();
@@ -5349,7 +5437,8 @@
     if (typeof ExportKit === 'undefined') { toast('محرك التصدير غير محمّل', true); return; }
     try {
       if (kind === 'xlsx') {
-        var sheets = key === 'all' ? allSheets() : [reportToSheet(buildReport(key))];
+        var sheets = key === 'all' ? allSheets()
+          : [reportToSheet(buildReport(key))].concat(detailSheets(key));
         var bytes = ExportKit.buildXlsx(sheets);
         var fname = 'nizam-' + (key === 'all' ? 'full' : key) + '-' + exportStamp() + '.xlsx';
         openExportModal(fname, MIME_XLSX, bytes);
@@ -5358,7 +5447,13 @@
           toast('تصدير PDF يحتاج متصفحاً حقيقياً', true);
           return;
         }
-        var pdf = ExportKit.reportToPdf(buildReport(key));
+        var reports = [buildReport(key)].concat(detailSheets(key).map(sheetToReport));
+        var canvases = [];
+        reports.forEach(function (r) {
+          var ps = ExportKit.drawReportPages(r);
+          if (ps && ps.length) canvases = canvases.concat(ps);
+        });
+        var pdf = canvases.length ? ExportKit.canvasesToPdf(canvases) : null;
         if (!pdf) { toast('تعذّر إنشاء ملف PDF', true); return; }
         var pf = 'nizam-' + (key === 'all' ? 'summary' : key) + '-' + exportStamp() + '.pdf';
         openExportModal(pf, MIME_PDF, pdf);
@@ -7571,7 +7666,7 @@
     if (typeof ExportKit === 'undefined') { toast('محرك التصدير غير محمّل', true); return; }
     if (!ExportKit.hasCanvas()) { toast('تصدير PDF يحتاج متصفحاً حقيقياً', true); return; }
     try {
-      var pdf = ExportKit.reportToPdf(partnerProfileReport(p));
+      var pdf = sheetsToPdf(partnerProfileSheets(p));
       if (!pdf) { toast('تعذّر إنشاء ملف PDF', true); return; }
       openExportModal('partner-' + safeFileName(p.name) + '-' + exportStamp() + '.pdf', MIME_PDF, pdf);
     } catch (e) { toast('خطأ في التصدير: ' + (e && e.message ? e.message : e), true); }
@@ -7925,7 +8020,7 @@
     if (typeof ExportKit === 'undefined') { toast('محرك التصدير غير محمّل', true); return; }
     if (!ExportKit.hasCanvas()) { toast('تصدير PDF يحتاج متصفحاً حقيقياً', true); return; }
     try {
-      var pdf = ExportKit.reportToPdf(memberProfileReport(m));
+      var pdf = sheetsToPdf(memberProfileSheets(m));
       if (!pdf) { toast('تعذّر إنشاء ملف PDF', true); return; }
       openExportModal('member-' + safeFileName(m.name) + '-' + exportStamp() + '.pdf', MIME_PDF, pdf);
     } catch (e) { toast('خطأ في التصدير: ' + (e && e.message ? e.message : e), true); }

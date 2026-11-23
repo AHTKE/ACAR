@@ -14,7 +14,7 @@
     "desktop:dist:win32": "npm run build && npm --prefix desktop run dist:win32",
     "desktop:dist:portable": "npm run build && npm --prefix desktop run dist:win-portable64"
   },
-  "dependencies": {
+  "optionalDependencies": {
     "canvas": "^3.2.3"
   },
   "devDependencies": {

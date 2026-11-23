@@ -1494,4 +1494,12 @@ label.btn{cursor:pointer;user-select:none}
 .dev-act__link{display:block;width:100%;margin-top:10px;background:none;border:0;color:#38bdf8;font:inherit;font-size:.82rem;cursor:pointer;text-decoration:underline}
 .dev-act__issued{margin-top:10px;padding:12px 14px;border-radius:12px;border:1px solid rgba(56,189,248,.45);background:rgba(56,189,248,.08);font-size:.82rem;line-height:1.9;text-align:right}
 .dev-act__code{font-size:1.5rem;font-weight:800;letter-spacing:6px;margin:6px 0;color:#7dd3fc}
+.dev-act__brand{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:14px}
+.dev-act__mark{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;font-size:1.25rem;background:linear-gradient(135deg,#312e81,#4f46e5);box-shadow:0 8px 22px rgba(79,70,229,.45)}
+.dev-act__name{display:block;font-size:1.02rem;letter-spacing:.5px}
+.dev-act__tag{display:block;font-size:.72rem;color:var(--muted);margin-top:2px}
+.dev-act__contact{margin-top:14px;font-size:.76rem;color:var(--muted);line-height:1.9}
+.dev-act__contact a{color:#7dd3fc;font-weight:700;text-decoration:none}
+.dev-act__id{font-size:2rem!important;font-weight:800;letter-spacing:8px;text-align:center;color:#7dd3fc}
+.dev-act__code-input{font-size:1.6rem!important;font-weight:800;letter-spacing:8px}
 .activation-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
