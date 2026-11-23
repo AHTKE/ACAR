@@ -278,6 +278,7 @@
     if (id === 'member-profile') step(function () { renderMemberProfile(); }, 'ملف العضو');
     if (id === 'operations') step(function () { renderOperations(); }, 'العمليات');
     if (id === 'settings') step(function () { renderDataSafety(); }, 'سلامة البيانات');
+    if (id === 'settings') step(function () { renderImportPanel(); }, 'استبدال البيانات من ملف');
     if (id === 'settings') step(function () { renderSectionLocks(); }, 'أقفال الأقسام');
     if (id === 'supplier-profile') step(function () { fillPartyLists(); }, 'قوائم الأطراف');
     if (id === 'settings') step(function () { renderExportGrid(); refreshDriveStatus(); loadSyncFolder(); renderNetworkToggle(); renderLocalBackup(); }, 'الإعدادات');
@@ -6219,6 +6220,301 @@
     } catch (e) { return false; }
   }
 
+  /* ============================================================
+     استبدال البيانات من فولدر/ملف JSON على الجهاز
+     ------------------------------------------------------------
+     المستخدم بيختار فولدر من جهازه فيه ملف نسخة (JSON)، والتطبيق
+     بيقرا الملف ويستبدل بيه الأقسام اللي فيه. قبل الاستبدال
+     بيتحفظ نسخة كاملة من الحالة الحالية في مفتاح مستقل، فيقدر
+     يرجع لها بضغطة واحدة — والعملية محمية بكلمة المرور.
+     ============================================================ */
+  var IMPORT_BACKUP_KEY = 'app_pre_replace_backup';
+  var IMPORT_MAX_FILE = 20 * 1024 * 1024;   /* أقصى حجم للملف الواحد */
+  var IMPORT_MAX_FILES = 400;               /* أقصى عدد ملفات نقراها من الفولدر */
+  var importPending = null;                 /* الملف اللي اتقرأ ومستني التأكيد */
+  var importReading = false;
+  var importStatus = '';
+
+  function importBackupInfo() {
+    try {
+      var b = JSON.parse(localStorage.getItem(IMPORT_BACKUP_KEY) || 'null');
+      if (!b || typeof b !== 'object' || !b.sections) return null;
+      return b;
+    } catch (e) { return null; }
+  }
+
+  /* يقرا نص JSON ويرجّع الأقسام المعروفة بس، أو null لو مفيش بيانات */
+  function importParseText(text, fileName) {
+    var obj;
+    try { obj = JSON.parse(String(text || '')); } catch (e) { return null; }
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
+    var src = (obj.sections && typeof obj.sections === 'object' && !Array.isArray(obj.sections)) ? obj.sections : obj;
+    var sections = {}, found = 0, total = 0;
+    SYNC_KEYS.forEach(function (k) {
+      if (!Object.prototype.hasOwnProperty.call(src, k)) return;
+      var v = src[k], raw = null;
+      if (typeof v === 'string') {
+        try { JSON.parse(v); raw = v; } catch (e) { return; }
+      } else if (v !== null && typeof v === 'object') {
+        raw = JSON.stringify(v);
+      } else { return; }
+      sections[k] = raw;
+      found++;
+      if (sectionState(raw) === 'ok') total += countOfFromRaw(raw);
+    });
+    if (!found) return null;
+    return {
+      sections: sections,
+      found: found,
+      total: total,
+      fileName: String(fileName || ''),
+      at: String(obj.updatedAt || obj.at || ''),
+      note: String(obj.reason || obj.note || '')
+    };
+  }
+
+  /* الفولدر ممكن يكون فيه أكتر من ملف — نختار أغنى ملف بالبيانات */
+  function importPickBest(cands) {
+    var best = null, bestScore = -1, bestAt = '';
+    (cands || []).forEach(function (p) {
+      var score = p.total * 1000 + p.found;
+      var at = p.at || '';
+      if (score > bestScore || (score === bestScore && at > bestAt)) {
+        best = p; bestScore = score; bestAt = at;
+      }
+    });
+    return best;
+  }
+
+  function readFileText(file) {
+    return new Promise(function (resolve, reject) {
+      try {
+        var fr = new FileReader();
+        fr.onload = function () { resolve(String(fr.result || '')); };
+        fr.onerror = function () { reject(new Error('تعذّر قراءة الملف')); };
+        fr.readAsText(file);
+      } catch (e) { reject(e); }
+    });
+  }
+
+  /* قراءة الفولدر/الملف اللي اختاره المستخدم وتجهيز المعاينة */
+  function handleImportFiles(fileList, sourceLabel) {
+    if (importReading) return;
+    var files = Array.prototype.slice.call(fileList || []);
+    if (!files.length) return;
+    if (files.length > IMPORT_MAX_FILES) files = files.slice(0, IMPORT_MAX_FILES);
+    importReading = true;
+    importPending = null;
+    importStatus = 'جارٍ قراءة الملفات…';
+    renderImportPanel();
+    var cands = [], bad = 0, read = 0, idx = 0;
+
+    function next() {
+      if (idx >= files.length) {
+        importReading = false;
+        var best = importPickBest(cands);
+        if (!best) {
+          importStatus = 'مفيش ملف JSON فيه بيانات معروفة في اللي اخترته' +
+            (read ? ' — اتقرأ ' + read + ' ملف' : '') + (bad ? ' وفشل ' + bad : '') + '.';
+          renderImportPanel();
+          toast('مفيش ملف بيانات صالح في اللي اخترته', true);
+          return;
+        }
+        importPending = best;
+        importStatus = 'تم قراءة «' + best.fileName + '» من ' + sourceLabel +
+          (cands.length > 1 ? ' (اختارنا أغنى ملف من ' + cands.length + ' ملف فيه بيانات)' : '') +
+          ' — راجع الأقسام واضغط استبدال.';
+        renderImportPanel();
+        toast('الملف جاهز — راجع الأقسام وطبّق الاستبدال');
+        return;
+      }
+      var f = files[idx++];
+      if (!f) { next(); return; }
+      var nm = String(f.name || '');
+      if (!/\.json$/i.test(nm)) { next(); return; }
+      if (f.size && f.size > IMPORT_MAX_FILE) { bad++; next(); return; }
+      readFileText(f).then(function (txt) {
+        read++;
+        var p = importParseText(txt, nm);
+        if (p) cands.push(p); else bad++;
+        next();
+      }).catch(function () { bad++; next(); });
+    }
+    next();
+  }
+
+  /* نسخة كاملة من الحالة الحالية — نقطة الرجوع قبل الاستبدال */
+  function saveImportBackup(meta) {
+    var b = {
+      at: new Date().toISOString(),
+      source: (meta && meta.source) || '',
+      fileName: (meta && meta.fileName) || '',
+      sections: {}
+    };
+    SYNC_KEYS.forEach(function (k) { var raw = readRawKey(k); if (raw !== null) b.sections[k] = raw; });
+    try { localStorage.setItem(IMPORT_BACKUP_KEY, JSON.stringify(b)); return true; }
+    catch (e) { return false; }
+  }
+
+  /* تطبيق الاستبدال بعد تأكيد كلمة المرور */
+  function applyImport() {
+    var p = importPending;
+    if (!p || !p.sections) { toast('اختار الملف الأول', true); return false; }
+    var keys = Object.keys(p.sections);
+    if (!keys.length) { toast('الملف مفيهوش بيانات', true); return false; }
+
+    /* ١) نسخة الرجوع — لو مفيش مساحة نوقف قبل أي تغيير */
+    if (!saveImportBackup({ source: 'فولدر/ملف من الجهاز', fileName: p.fileName })) {
+      toast('مساحة التخزين مش كفاية لحفظ نسخة الرجوع — البيانات ما اتغيرتش', true);
+      importStatus = 'فشل: مساحة التخزين مش كفاية لحفظ نسخة الرجوع. البيانات ما اتغيرتش خالص.';
+      renderImportPanel();
+      return false;
+    }
+    guardHistoryPush('قبل استبدال البيانات من ملف');
+
+    /* ٢) الاستبدال — مع رجوع تلقائي لو أي كتابة فشلت */
+    var before = {};
+    SYNC_KEYS.forEach(function (k) { before[k] = readRawKey(k); });
+    var applied = 0, failed = 0;
+    opBusy = true;
+    try {
+      keys.forEach(function (k) {
+        try { localStorage.setItem(k, p.sections[k]); applied++; }
+        catch (e) { failed++; }
+      });
+    } finally { opBusy = false; }
+
+    if (failed) {
+      opBusy = true;
+      try {
+        keys.forEach(function (k) {
+          try {
+            if (before[k] === null) localStorage.removeItem(k);
+            else localStorage.setItem(k, before[k]);
+          } catch (e) {}
+        });
+      } finally { opBusy = false; }
+      importStatus = 'فشل الاستبدال (مساحة التخزين مش كفاية) — رجّعنا بياناتك زي ما كانت.';
+      renderImportPanel();
+      toast('فشل الاستبدال — بياناتك رجعت زي ما كانت', true);
+      return false;
+    }
+
+    /* ٣) نزامن الحارس مع البيانات الجديدة عشان ما يرجّعش القديم */
+    try {
+      var g = guardRead();
+      if (!g.sections) g.sections = {};
+      keys.forEach(function (k) {
+        if (sectionState(p.sections[k]) === 'ok') g.sections[k] = p.sections[k];
+        else delete g.sections[k];
+      });
+      g.at = new Date().toISOString();
+      guardWrite(g);
+    } catch (e) {}
+
+    importPending = null;
+    importStatus = 'تم استبدال ' + applied + ' قسم من «' + p.fileName + '» ✓ — تقدر ترجع للنسخة القديمة بزر «رجوع للنسخة قبل الاستبدال».';
+    try { refreshAllViews(); } catch (e) {}
+    try { renderDataSafety(); } catch (e) {}
+    renderImportPanel();
+    toast('تم استبدال البيانات ✓ (' + applied + ' أقسام)');
+    return true;
+  }
+
+  /* الرجوع للحالة اللي كانت قبل الاستبدال — ونحتفظ بالحالة الحالية كمان */
+  function restoreBeforeReplace() {
+    var b = importBackupInfo();
+    if (!b) { toast('مفيش نسخة محفوظة قبل الاستبدال', true); return false; }
+    var current = { at: new Date().toISOString(), source: 'قبل الرجوع للنسخة السابقة', fileName: 'الحالة الحالية', sections: {} };
+    SYNC_KEYS.forEach(function (k) { var r = readRawKey(k); if (r !== null) current.sections[k] = r; });
+    guardHistoryPush('قبل الرجوع للنسخة السابقة');
+
+    var applied = 0, failed = 0;
+    opBusy = true;
+    try {
+      SYNC_KEYS.forEach(function (k) {
+        if (typeof b.sections[k] !== 'string') return;
+        try { localStorage.setItem(k, b.sections[k]); applied++; }
+        catch (e) { failed++; }
+      });
+    } finally { opBusy = false; }
+    if (failed) { toast('فشل الرجوع — مساحة التخزين مش كفاية', true); return false; }
+
+    try {
+      var g = guardRead();
+      if (!g.sections) g.sections = {};
+      SYNC_KEYS.forEach(function (k) {
+        if (typeof b.sections[k] !== 'string') return;
+        if (sectionState(b.sections[k]) === 'ok') g.sections[k] = b.sections[k];
+        else delete g.sections[k];
+      });
+      g.at = new Date().toISOString();
+      guardWrite(g);
+    } catch (e) {}
+
+    try { localStorage.setItem(IMPORT_BACKUP_KEY, JSON.stringify(current)); } catch (e) {}
+    importPending = null;
+    importStatus = 'تم الرجوع للنسخة اللي قبل الاستبدال ✓ (' + applied + ' أقسام). الحالة اللي كانت قبل الرجوع محفوظة كمان لو حبيت ترجع لها.';
+    try { refreshAllViews(); } catch (e) {}
+    try { renderDataSafety(); } catch (e) {}
+    renderImportPanel();
+    toast('تم الرجوع للنسخة السابقة ✓');
+    return true;
+  }
+
+  function importRowsHTML(sections) {
+    var rows = Object.keys(sections || {}).map(function (k) {
+      var n = sectionState(sections[k]) === 'ok' ? countOfFromRaw(sections[k]) : 0;
+      return '<tr><td>' + esc(SYNC_LABELS[k] || k) + '</td>' +
+        '<td class="amount">' + (n ? n + ' سجل' : 'فاضي (٠)') + '</td></tr>';
+    }).join('');
+    if (!rows) return '';
+    return '<div class="table-wrap" style="margin-top:10px"><table class="table"><thead><tr>' +
+      '<th>القسم</th><th>السجلات اللي هتتحط</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  }
+
+  function renderImportPanel() {
+    var box = $('#importBody');
+    if (!box) return;
+    var b = importBackupInfo();
+    var undo = $('#importUndoBtn');
+    if (undo) {
+      undo.hidden = !b;
+      if (b) {
+        var at = '';
+        try { at = b.at ? new Date(b.at).toLocaleString('ar-EG') : ''; } catch (e) { at = b.at || ''; }
+        undo.textContent = 'رجوع للنسخة قبل الاستبدال' + (at ? ' (' + at + ')' : '');
+      }
+    }
+
+    var html = '';
+    if (importStatus) html += '<p class="panel__note">' + esc(importStatus) + '</p>';
+
+    if (importPending) {
+      var p = importPending;
+      html += '<div class="panel__note" style="margin-top:10px"><b>الملف:</b> ' + esc(p.fileName) +
+        (p.at ? ' — تاريخ النسخة: ' + esc(p.at) : '') +
+        '<br />هيتم استبدال <b>' + p.found + '</b> قسم فيها <b>' + p.total + '</b> سجل بالبيانات اللي في الملف ده.</div>' +
+        importRowsHTML(p.sections) +
+        '<div class="form__actions" style="margin-top:12px">' +
+          '<button type="button" class="btn btn--primary" data-import-apply="1">استبدال البيانات بالنسخة دي</button>' +
+          '<button type="button" class="btn btn--ghost" data-import-cancel="1">إلغاء</button>' +
+        '</div>';
+    } else if (b) {
+      var bn = 0;
+      Object.keys(b.sections || {}).forEach(function (k) { if (sectionState(b.sections[k]) === 'ok') bn += countOfFromRaw(b.sections[k]); });
+      var bat = '';
+      try { bat = b.at ? new Date(b.at).toLocaleString('ar-EG') : ''; } catch (e) { bat = b.at || ''; }
+      html += '<p class="panel__note" style="margin-top:10px">نسخة الرجوع محفوظة' +
+        (bat ? ' من ' + esc(bat) : '') + ' — فيها ' + bn + ' سجل' +
+        (b.fileName ? ' (الملف: ' + esc(b.fileName) + ')' : '') + '.</p>';
+    } else {
+      html += '<p class="panel__note" style="margin-top:10px">لسه ما اتعملش استبدال من ملف على الجهاز ده. أول ما تستبدل، نسخة بياناتك القديمة هتتحفظ هنا تلقائيًا.</p>';
+    }
+
+    box.innerHTML = html;
+  }
+
   /* هل القيمة الخام تمثّل بيانات فارغة؟ — لمنع استبدال بيانات ببيانات فاضية */
   function isEmptyPayload(raw) {
     if (raw == null || raw === '') return true;
@@ -9778,6 +10074,62 @@
       } catch (e3) {}
       toast(m ? 'اترجّعت ' + m + ' أقسام من النسخة المحفوظة ✓' : 'النسخة دي فاضية', !m);
     }
+  });
+
+  /* ---------- استبدال البيانات من فولدر/ملف JSON ---------- */
+  var importFolderInput = $('#importFolderInput');
+  if (importFolderInput) importFolderInput.addEventListener('change', function () {
+    var files = this.files;
+    try { handleImportFiles(files, 'فولدر على الجهاز'); } finally { try { this.value = ''; } catch (e) {} }
+  });
+
+  var importFileInput = $('#importFileInput');
+  if (importFileInput) importFileInput.addEventListener('change', function () {
+    var files = this.files;
+    try { handleImportFiles(files, 'ملف على الجهاز'); } finally { try { this.value = ''; } catch (e) {} }
+  });
+
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+
+    if (t.closest('[data-import-apply]')) {
+      if (!importPending) { toast('اختار الملف الأول', true); return; }
+      var p = importPending;
+      openConfirm({
+        title: 'استبدال البيانات من ملف',
+        message: 'هيتم استبدال بيانات ' + p.found + ' قسم (' + p.total + ' سجل) باللي في الملف «' +
+          p.fileName + '». نسخة بياناتك الحالية هتتحفظ تلقائيًا وتقدر ترجع لها. سيُطلب كلمة المرور.',
+        yes: 'نعم، استبدال',
+        no: 'تراجع',
+        password: true,
+        onYes: function () { applyImport(); }
+      });
+      return;
+    }
+
+    if (t.closest('[data-import-cancel]')) {
+      importPending = null;
+      importStatus = 'اتلغى الاستبدال — البيانات ما اتغيرتش.';
+      renderImportPanel();
+      return;
+    }
+  });
+
+  var importUndoBtn = $('#importUndoBtn');
+  if (importUndoBtn) importUndoBtn.addEventListener('click', function () {
+    var b = importBackupInfo();
+    if (!b) { toast('مفيش نسخة محفوظة قبل الاستبدال', true); return; }
+    var n = 0;
+    Object.keys(b.sections || {}).forEach(function (k) { if (sectionState(b.sections[k]) === 'ok') n += countOfFromRaw(b.sections[k]); });
+    openConfirm({
+      title: 'رجوع للنسخة قبل الاستبدال',
+      message: 'هل تريد إرجاع البيانات لحالتها قبل الاستبدال؟ (' + n + ' سجل محفوظ). سيُطلب كلمة المرور.',
+      yes: 'نعم، رجوع',
+      no: 'تراجع',
+      password: true,
+      onYes: function () { restoreBeforeReplace(); }
+    });
   });
 
   /* جسر بسيط للوحدات المنفصلة (الموظفون / المصنعية / تصنيف المخازن) */
