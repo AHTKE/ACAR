@@ -1,7 +1,7 @@
 /* ============================================================
    نظام الإدارة المتكامل — Service Worker (عمل بدون إنترنت)
    ============================================================ */
-var CACHE = 'nizam-idara-v24';
+var CACHE = 'nizam-idara-v25';
 
 var SHELL = [
   './',
@@ -13,6 +13,7 @@ var SHELL = [
   './customer-extra.js',
   './warehouse-catalog.js',
   './app-lock.js',
+  './device-activation.js',
   './splash.js',
   './period.js',
   './auth-gate-addon.js',

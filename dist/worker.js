@@ -9,6 +9,8 @@
    قاعدة البيانات (D1) بتتخزن فيها ربط الحساب — binding: DB
    ============================================================ */
 
+import { handleActivation } from './activation.js';
+
 const JSON_HEADERS = {
   'Content-Type': 'application/json; charset=utf-8',
   'Cache-Control': 'no-store'
@@ -734,6 +736,12 @@ async function fetchProfile(accessToken) {
 /* ---------- مسارات API ---------- */
 async function handleApi(request, env, pathname) {
   const origin = originOf(request);
+
+  /* تفعيل الأجهزة — خدمة مركزية مشتركة (راجع activation.js).
+     قبل أي مسار تاني، وما بتأثرش على بقية المسارات. */
+  if (pathname.indexOf('/api/activation/') === 0) {
+    return handleActivation(request, env, pathname, { json: json, requireAdmin: requireAdmin });
+  }
   /* مفاتيح المشروع المنشور — الديسكتوب بيعمل OAuth المحلي بمفاتيحه لوحده */
   const reqCreds = googleCreds(env);
 

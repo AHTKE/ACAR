@@ -29,6 +29,18 @@ export const SYNC_ACTIONS = [
   'version'
 ];
 
+/* تفعيل الأجهزة — خدمة مركزية مشتركة بين التطبيقات */
+export const ACTIVATION_ACTIONS = [
+  'status',
+  'request',
+  'verify',
+  'passcode',
+  'issue',
+  'devices',
+  'revoke',
+  'enforce'
+];
+
 /* تنبيهات البريد (أدمن) — مسارات مسطّحة عشان تمرّ من الـcatch-all */
 export const NOTIFY_ROUTES = [
   '/api/notify-list',
@@ -39,5 +51,6 @@ export const NOTIFY_ROUTES = [
 export const ROUTES = [
   ...GOOGLE_ACTIONS.map((action) => '/api/google/' + action),
   ...SYNC_ACTIONS.map((action) => '/api/sync/' + action),
+  ...ACTIVATION_ACTIONS.map((action) => '/api/activation/' + action),
   ...NOTIFY_ROUTES
 ];

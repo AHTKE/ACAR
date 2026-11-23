@@ -1,7 +1,8 @@
 # Vercel Hobby allows at most 12 Serverless Functions per deployment.
-# The API is deployed as three functions:
+# The API is deployed as four functions:
 #   api/[...path].js       — single-segment routes and unknown-route 404
 #   api/google/[action].js — all /api/google/* routes
 #   api/sync/[action].js   — all /api/sync/* routes
+#   api/activation/[action].js — all /api/activation/* routes
 # Do not ignore api/google or api/sync: Vercel needs them to route
 # nested paths, which the root catch-all does not receive.

@@ -136,7 +136,7 @@ ok('404 و JSON', r.status === 404 && !!j, r.status + ' ' + r.body.slice(0, 60))
 r = await run(makeReq({ url: '/index.html' }));
 ok('مسار خارج /api ما يوصلش للـAPI (Vercel بيخدم الملفات الثابتة قبل الـfunctions)', r.status === 404, String(r.status));
 
-console.log('\n[V4ب] ثلاث دوال Vercel تخدم كل المسارات');
+console.log('\n[V4ب] أربع دوال Vercel تخدم كل المسارات');
 const apiFiles = [];
 (function walkApi(dir, prefix) {
   for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -145,10 +145,11 @@ const apiFiles = [];
     else if (ent.name.endsWith('.js')) apiFiles.push(rel);
   }
 })('api', '');
-ok('عدد دوال api = 3 (تحت حد Hobby 12)', apiFiles.length === 3, apiFiles.join(', '));
+ok('عدد دوال api = 4 (تحت حد Hobby 12)', apiFiles.length === 4 && apiFiles.length <= 12, apiFiles.join(', '));
 ok('catch-all موجود', apiFiles.includes('[...path].js'), apiFiles.join(', '));
 ok('دالة Google المتداخلة موجودة', apiFiles.includes('google/[action].js'), apiFiles.join(', '));
 ok('دالة Sync المتداخلة موجودة', apiFiles.includes('sync/[action].js'), apiFiles.join(', '));
+ok('دالة التفعيل المتداخلة موجودة', apiFiles.includes('activation/[action].js'), apiFiles.join(', '));
 const vercelIgnore = fs.readFileSync('.vercelignore', 'utf8');
 ok('.vercelignore لا يتجاهل مسارات google', !/(^|\n)api\/google\s*($|\n)/.test(vercelIgnore), vercelIgnore);
 ok('.vercelignore لا يتجاهل مسارات sync', !/(^|\n)api\/sync\s*($|\n)/.test(vercelIgnore), vercelIgnore);

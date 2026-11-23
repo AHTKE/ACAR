@@ -19,6 +19,7 @@ const FILES = [
   'customer-extra.js',
   'warehouse-catalog.js',
   'app-lock.js',
+  'device-activation.js',
   'splash.js',
   'period.js',
   'export.js',
@@ -37,6 +38,8 @@ const API_FILES = [
   ['api/[...path].js', 'api/[...path].js'],
   ['api/google/[action].js', 'api/google/[action].js'],
   ['api/sync/[action].js', 'api/sync/[action].js'],
+  ['api/activation/[action].js', 'api/activation/[action].js'],
+  ['activation.js', 'activation.js'],
   ['api-routes.js', 'api-routes.js'],
   ['vercel-dispatch.js', 'vercel-dispatch.js'],
   ['vercel-run.js', 'vercel-run.js'],
@@ -95,7 +98,7 @@ written.push('vercel.json');
 
 /* فحص سريع: كل ملفات الويب المطلوبة موجودة في dist */
 const REQUIRED = ['index.html', 'styles.css', 'app.js', 'manifest.webmanifest', 'sw.js', 'icons/icon-192.png', 'icons/icon-512.png',
-  'api/[...path].js', 'api/google/[action].js', 'api/sync/[action].js', 'api-routes.js', 'vercel-dispatch.js',
+  'api/[...path].js', 'api/google/[action].js', 'api/sync/[action].js', 'api/activation/[action].js', 'activation.js', 'api-routes.js', 'vercel-dispatch.js',
   'vercel-run.js', 'worker.js', 'vercel-db.js'];
 const missing = REQUIRED.filter((f) => !fs.existsSync(path.join(out, f)));
 if (missing.length) {

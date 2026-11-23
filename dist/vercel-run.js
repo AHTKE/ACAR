@@ -68,6 +68,9 @@ export default async function run(req, res, apiPath) {
       GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
       GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
       DB: store.db,
+      /* التخزين هنا كوكي على الجهاز نفسه — مفيش سجل أجهزة مركزي،
+         فخدمة التفعيل بتعلن عدم توفرها بدل ما تدّعي تفعيلاً مشترك. */
+      COOKIE_STORE: true,
       ASSETS: { fetch: async () => new Response('غير مدعوم على Vercel', { status: 404 }) }
     });
   } catch (e) {

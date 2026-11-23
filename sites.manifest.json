@@ -2,7 +2,8 @@
   "entrypoint": "index.js",
   "compatibilityDate": "2025-09-01",
   "modules": [
-    { "name": "index.js", "type": "esm", "path": "./worker.js" }
+    { "name": "index.js", "type": "esm", "path": "./worker.js" },
+    { "name": "activation.js", "type": "esm", "path": "./activation.js" }
   ],
   "assetsDirectory": "./dist",
   "spa": true
