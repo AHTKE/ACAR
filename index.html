@@ -1402,6 +1402,12 @@
             <label class="field"><span>المرة الكام في الدفع *</span><input type="number" name="no" min="1" step="1" required placeholder="1" /></label>
           </div>
           <div class="form__row">
+            <label class="field field--full"><span>الشهر اللي بتسدد عنه</span>
+              <select name="month" id="collectMonth"></select>
+              <small class="field__hint">اختار الشهر اللي العميل بيدفعه — حتى لو فيه شهر أقدم متأخر. «تلقائي» بيخصم من أقدم شهر ناقص.</small>
+            </label>
+          </div>
+          <div class="form__row">
             <label class="field field--full"><span>ملاحظة (اختياري)</span><input type="text" name="note" placeholder="ملاحظة حول هذه الدفعة…" /></label>
           </div>
           <div class="calc-grid">

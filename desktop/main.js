@@ -11,6 +11,14 @@ const path = require('path');
 const http = require('http');
 const server = require('./server');
 
+/* ترتيب التاريخ في حقول <input type="date"> بيتبع لغة واجهة Chromium.
+   من غير السطر ده الواجهة بتطلع بالإنجليزي (شهر/يوم/سنة) — بنفرض العربي
+   عشان التاريخ يبقى يوم/شهر/سنة زي المتوقع. لازم قبل app.whenReady(). */
+try {
+  app.commandLine.appendSwitch('lang', 'ar-EG');
+  app.commandLine.appendSwitch('accept-lang', 'ar-EG,ar');
+} catch (e) { /* لو التبديل مش مدعوم نكمّل عادي */ }
+
 let win = null;
 let info = null;
 

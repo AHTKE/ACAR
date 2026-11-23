@@ -58,6 +58,12 @@
       return m ? m[1] + '-' + m[2] : '';
     }
 
+    /* الشهر اللي بيدفعه العميل (لو المستخدم حدّده في الدفعة) */
+    function paymentMonthKey(p) {
+      var k = String((p && p.month) || '').slice(0, 7);
+      return keyParts(k) ? k : '';
+    }
+
     function addMonthKey(key, k) {
       var p = keyParts(key);
       if (!p) return '';
@@ -101,7 +107,7 @@
         active: !!day, day: day, monthly: 0, count: 0, startKey: '',
         months: [], overdueMonths: [], prevUnpaid: [], current: null,
         requiredNow: 0, overdueAmount: 0, settled: false,
-        isLate: false, hasPrev: false, status: 'none'
+        isLate: false, hasPrev: false, status: 'none', partialMonths: []
       };
       if (!day) return plan;
       var due = Math.max(Number(d.due || 0) + Number(d.storeCharge || 0) - Number(d.storeReturn || 0), 0);
@@ -130,38 +136,66 @@
         return String(a.p.date || '').localeCompare(String(b.p.date || '')) || (a.i - b.i);
       });
 
-      var seed = Number(c.later || 0) + Number(d.ledIn || 0);
-      var available = seed;
-      pays.forEach(function (x) { available += Math.max(Number(x.p.amount || 0), 0); });
-
       var amounts = [];
+      var keys = [];
       var sumDue = 0;
       var ii;
       for (ii = 0; ii < count; ii++) {
         var amt = (ii === count - 1) ? Math.max(due - sumDue, 0) : monthly;
         amounts.push(amt);
+        keys.push(addMonthKey(startKey, ii));
         sumDue += amt;
       }
 
-      var left = available;
-      var before = 0;
+      /* توزيع الفلوس على الشهور: الدفعة اللي ليها شهر محدّد تتحسب على
+         الشهر ده، والباقي (أو الدفعة بدون تحديد) على أقدم شهر لسه ناقص.
+         أي زيادة عن الشهر بتكمّل على الشهور اللي بعده. */
+      var coveredAmounts = [];
+      var allocs = [];
+      for (ii = 0; ii < count; ii++) { coveredAmounts.push(0); allocs.push([]); }
+
+      function addMoney(startIdx, value, date) {
+        var left = Math.max(Number(value || 0), 0);
+        var k = startIdx;
+        while (left > 0.004 && k < count) {
+          var room = amounts[k] - coveredAmounts[k];
+          if (room <= 0.004) { k++; continue; }
+          var take = Math.min(room, left);
+          coveredAmounts[k] += take;
+          allocs[k].push({ date: String(date || '').slice(0, 10), amount: take });
+          left -= take;
+          k++;
+        }
+        return left;
+      }
+      function firstOpenMonth() {
+        for (var k = 0; k < count; k++) if (amounts[k] - coveredAmounts[k] > 0.004) return k;
+        return count;
+      }
+
+      var seed = Number(c.later || 0) + Number(d.ledIn || 0);
+      addMoney(0, seed, '');
+      var available = seed;
+      pays.forEach(function (x) {
+        var v = Math.max(Number(x.p.amount || 0), 0);
+        available += v;
+        var target = paymentMonthKey(x.p);
+        var ti = target ? keys.indexOf(target) : -1;
+        addMoney(ti >= 0 ? ti : firstOpenMonth(), v, x.p.date);
+      });
+
       var currentKey = monthKeyOf(now.getFullYear(), now.getMonth());
       for (ii = 0; ii < count; ii++) {
-        var key = addMonthKey(startKey, ii);
+        var key = keys[ii];
         var amount = amounts[ii];
-        var covered = Math.min(left, amount);
-        var isPaid = amount <= 0 || covered >= amount - 0.005;
-        var paidAt = '';
-        if (isPaid && before + amount > seed + 0.005) {
-          var threshold = before + amount;
-          var acc = seed;
-          var pi;
-          for (pi = 0; pi < pays.length; pi++) {
-            acc += Math.max(Number(pays[pi].p.amount || 0), 0);
-            if (acc >= threshold - 0.005) { paidAt = pays[pi].p.date || ''; break; }
-          }
+        var covered = Math.min(coveredAmounts[ii], amount);
+        var isPaid = amount <= 0.005 || covered >= amount - 0.005;
+        var isPartial = !isPaid && covered > 0.005;
+        var entries = allocs[ii].slice();
+        var paidISO = '';
+        if (isPaid) {
+          entries.forEach(function (e) { if (e.date && (!paidISO || e.date > paidISO)) paidISO = e.date; });
         }
-        left = Math.max(left - covered, 0);
         var dueISO = monthDueISO(key, day);
         var dueEnd = monthDueEnd(key, day);
         var state;
@@ -169,21 +203,21 @@
         else if (dueEnd && now.getTime() > dueEnd.getTime()) state = 'overdue';
         else if (key === currentKey) state = 'due';
         else state = 'upcoming';
-        var paidISO = paidAt ? String(paidAt).slice(0, 10) : '';
         var latePaid = !!(isPaid && paidISO && dueISO && paidISO > dueISO);
         var item = {
           key: key, index: ii, amount: amount, paidAmount: covered,
           remaining: Math.max(amount - covered, 0), paid: isPaid,
-          paidAt: paidAt, dueISO: dueISO, state: state, latePaid: latePaid
+          partial: isPartial, payments: entries,
+          paidAt: paidISO, dueISO: dueISO, state: state, latePaid: latePaid
         };
         plan.months.push(item);
         if (state === 'overdue') {
           plan.overdueMonths.push(item);
           plan.overdueAmount += item.remaining;
         }
+        if (isPartial) plan.partialMonths.push(item);
         if (state === 'overdue' && key < currentKey) plan.prevUnpaid.push(item);
         if (key === currentKey) plan.current = item;
-        before += amount;
       }
 
       plan.monthly = monthly;
@@ -201,7 +235,11 @@
       if (!plan || !plan.active) return '<span class="tag">بدون يوم تحصيل</span>';
       if (plan.settled) return '<span class="tag tag--in">مكتمل السداد ✓</span>';
       if (plan.overdueMonths.length) {
-        return '<span class="tag tag--out">متأخر · ' + plan.overdueMonths.length + ' شهر</span>';
+        var allPartial = plan.overdueMonths.every(function (m) { return m.partial; });
+        return '<span class="tag tag--out">' + (allPartial ? 'متأخر · دفع جزئي' : 'متأخر · ' + plan.overdueMonths.length + ' شهر') + '</span>';
+      }
+      if (plan.partialMonths.length) {
+        return '<span class="tag tag--warn">دفع جزئي · ' + plan.partialMonths.length + ' شهر</span>';
       }
       if (plan.current && plan.current.state === 'paid') return '<span class="tag tag--in">مدفوع ✓</span>';
       if (plan.current && plan.current.state === 'due') {
@@ -215,15 +253,17 @@
     function monthStateText(m) {
       if (!m) return '';
       if (m.state === 'paid') return 'مدفوع';
-      if (m.state === 'overdue') return 'لم يُدفع — متأخر';
-      if (m.state === 'due') return 'مستحق الآن';
-      return 'لم يحن بعد';
+      if (m.state === 'overdue') return m.partial ? 'دفع جزئي — متأخر' : 'لم يُدفع — متأخر';
+      if (m.state === 'due') return m.partial ? 'دفع جزئي — مستحق' : 'مستحق الآن';
+      if (m.state === 'upcoming') return m.partial ? 'دفع جزئي — لم يحن بعد' : 'لم يحن بعد';
+      return '';
     }
 
     function monthCardHTML(m) {
       var cls = m.state === 'paid' ? 'is-paid'
         : m.state === 'overdue' ? 'is-overdue'
           : m.state === 'due' ? 'is-due' : 'is-upcoming';
+      if (m.partial) cls += ' is-partial';
       var stateText = monthStateText(m);
       var dateLine;
       if (m.state === 'paid' && m.latePaid) {
@@ -231,18 +271,27 @@
         dateLine = 'غير مدفوع ← مدفوع في ' + formatDate(m.paidAt);
       } else if (m.state === 'paid') {
         dateLine = m.paidAt ? ('دُفع في ' + formatDate(m.paidAt)) : 'مدفوع ضمن الدفعات السابقة';
+      } else if (m.partial) {
+        dateLine = 'مدفوع ' + money(m.paidAmount) + ' · متبقي ' + money(m.remaining) +
+          ' — كان مستحقاً ' + formatDate(m.dueISO);
       } else if (m.state === 'overdue') {
         dateLine = 'غير مدفوع حتى الآن — كان مستحقاً ' + formatDate(m.dueISO);
       } else {
         dateLine = 'الاستحقاق ' + formatDate(m.dueISO);
+      }
+      var paysLine = '';
+      if (m.payments && m.payments.length) {
+        paysLine = '<small class="month-card__pays">الدفعات: ' + m.payments.map(function (e) {
+          return (e.date ? formatDate(e.date) : 'رصيد سابق') + ' (' + money(e.amount) + ')';
+        }).join(' · ') + '</small>';
       }
       return '<div class="month-card ' + cls + (m.latePaid ? ' is-late-paid' : '') + '">' +
         '<div class="month-card__top"><b>' + esc(monthLabel(m.key)) + '</b><span class="month-card__dot"></span></div>' +
         '<div class="month-card__amount">' + money(m.amount) + '</div>' +
         '<div class="month-card__state">' + stateText + '</div>' +
         '<small>' + esc(dateLine) + '</small>' +
-        (m.state === 'overdue' && m.remaining < m.amount - 0.005
-          ? '<small class="month-card__rest">متبقي منه: ' + money(m.remaining) + '</small>' : '') +
+        (m.partial ? '<small class="month-card__rest">متبقي منه: ' + money(m.remaining) + '</small>' : '') +
+        paysLine +
         '</div>';
     }
 
@@ -298,6 +347,7 @@
       planDetailHTML: planDetailHTML,
       monthCardHTML: monthCardHTML,
       monthStateText: monthStateText,
+      paymentMonthKey: paymentMonthKey,
       durationMonthCount: durationMonthCount
     };
   }

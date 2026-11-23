@@ -203,6 +203,25 @@
   var customerDueDay = MC ? MC.customerDueDay : function () { return 0; };
   var monthKeyFromISO = MC ? MC.monthKeyFromISO : function () { return ''; };
   var monthKeyOf = MC ? MC.monthKeyOf : function (y, m) { return y + '-' + pad(m + 1); };
+  var paymentMonthKey = (MC && MC.paymentMonthKey) ? MC.paymentMonthKey : function (p) {
+    var k = String((p && p.month) || '').slice(0, 7);
+    return /^\d{4}-(0[1-9]|1[0-2])$/.test(k) ? k : '';
+  };
+
+  /* خيارات الشهر في نموذج التحصيل: المستخدم هو اللي يحدّد الشهر المدفوع */
+  function collectMonthOptionsHTML(c, selected) {
+    var plan = monthlyPlan(c);
+    var out = '<option value="">تلقائي — أقدم شهر ناقص</option>';
+    if (plan && plan.active) {
+      plan.months.forEach(function (m) {
+        var tag = m.state === 'paid' ? 'مدفوع ✓'
+          : m.remaining > 0 ? 'متبقي ' + money(m.remaining) : '';
+        out += '<option value="' + esc(m.key) + '"' + (selected === m.key ? ' selected' : '') + '>' +
+          esc(monthLabel(m.key) + (tag ? ' — ' + tag : '')) + '</option>';
+      });
+    }
+    return out;
+  }
 
   /* ---------- التنقل ---------- */
   function showView(id) {
@@ -909,7 +928,12 @@
     var out = [];
     if (!form) return out;
     var f = form.elements;
-    REQUIRED_FIELDS.forEach(function (fld) {
+    /* في وضع التعديل السجل موجود بالفعل: نطلب الاسم فقط ونسمح بتعديل أي حقل
+       (بعض العملاء القدامى ناقصهم حقول مش إلزامية أصلاً). */
+    var required = editingCustomerIdx >= 0
+      ? REQUIRED_FIELDS.filter(function (fld) { return fld.key === 'name'; })
+      : REQUIRED_FIELDS;
+    required.forEach(function (fld) {
       var el = f[fld.key];
       var val = el ? String(el.value == null ? '' : el.value).trim() : '';
       var bad = fld.num ? !(parseFloat(val) > 0) : !val;
@@ -991,6 +1015,12 @@
       entry.payments.forEach(function (p) { paidPays += Number(p.amount || 0); });
       entry.rest = Math.max(due - later - paidPays, 0);
       entry.balance = entry.rest;
+      /* نحافظ على أي بيانات مش موجودة في النموذج (المصنعية، حركات المخازن،
+         الحقول الإضافية…) بدل ما تتمسح مع كل تعديل. */
+      var merged = {};
+      Object.keys(old).forEach(function (k) { merged[k] = old[k]; });
+      Object.keys(entry).forEach(function (k) { merged[k] = entry[k]; });
+      entry = merged;
       list[editingCustomerIdx] = entry;
       var backIdx = editingCustomerIdx;
       editingCustomerIdx = -1;
@@ -1505,7 +1535,15 @@
     var el = $('#collectForm').elements;
     var amt = parseFloat(el.amount.value) || 0;
     $('#collectRest').value = money(d.rest);
-    $('#collectAfter').value = money(Math.max(d.rest - amt, 0));
+    var target = null;
+    var mKey = paymentMonthKey({ month: el.month ? el.month.value : '' });
+    if (mKey) {
+      var plan = monthlyPlan(c);
+      (plan.months || []).forEach(function (m) { if (m.key === mKey) target = m; });
+    }
+    $('#collectAfter').value = target
+      ? money(Math.max(target.remaining - amt, 0)) + ' في ' + monthLabel(target.key)
+      : money(Math.max(d.rest - amt, 0));
   }
 
   function renderProfile() {
@@ -1639,6 +1677,10 @@
     cf.elements.no.value = String(d.pays.length + 1);
     cf.elements.amount.value = '';
     cf.elements.note.value = '';
+    if (cf.elements.month) {
+      cf.elements.month.innerHTML = collectMonthOptionsHTML(c, '');
+      cf.elements.month.value = '';
+    }
     $('#collectError').hidden = true;
     updateCollectCalc();
 
@@ -1687,7 +1729,10 @@
       if (amt > d.rest) return fail('المبلغ المدفوع أكبر من المتبقي (' + money(d.rest) + ')');
 
       var pays = d.pays.slice();
-      pays.push({ date: date, amount: amt, no: no, note: String(el.note.value || '').trim() });
+      var newPay = { date: date, amount: amt, no: no, note: String(el.note.value || '').trim() };
+      var payMonth = paymentMonthKey({ month: el.month ? el.month.value : '' });
+      if (payMonth) newPay.month = payMonth;
+      pays.push(newPay);
       pays.sort(function (a, b) { return String(a.date).localeCompare(String(b.date)); });
       c.payments = pays;
       c.rest = Math.max(d.rest - amt, 0);
@@ -3151,6 +3196,11 @@
           '<label class="field"><span>المرة الكام في الدفع *</span><input type="number" name="no" min="1" step="1" required value="' + (d.pays.length + 1) + '" /></label>' +
         '</div>' +
         '<div class="form__row">' +
+          '<label class="field field--full"><span>الشهر اللي بتسدد عنه</span><select name="month">' +
+            collectMonthOptionsHTML(c, '') +
+          '</select><small class="field__hint">اختار الشهر اللي العميل بيدفعه — حتى لو فيه شهر أقدم متأخر. «تلقائي» بيخصم من أقدم شهر ناقص.</small></label>' +
+        '</div>' +
+        '<div class="form__row">' +
           '<label class="field field--full"><span>ملاحظة (اختياري)</span><input type="text" name="note" placeholder="ملاحظة حول هذه الدفعة…" /></label>' +
         '</div>' +
         '<div class="calc-grid">' +
@@ -3186,7 +3236,15 @@
       oldAmt = Number(c.payments[editPi].amount || 0);
     }
     form.elements.restBefore.value = money(d.rest);
-    form.elements.restAfter.value = money(Math.max(d.rest + oldAmt - amt, 0));
+    var target = null;
+    var mKey = paymentMonthKey({ month: form.elements.month ? form.elements.month.value : '' });
+    if (mKey) {
+      var plan = monthlyPlan(c);
+      (plan.months || []).forEach(function (m) { if (m.key === mKey) target = m; });
+    }
+    form.elements.restAfter.value = target
+      ? money(Math.max(target.remaining - amt + oldAmt, 0)) + ' في ' + monthLabel(target.key)
+      : money(Math.max(d.rest + oldAmt - amt, 0));
   }
 
   function resetMainCollectForm(form) {
@@ -3205,6 +3263,10 @@
     if (form.elements.amount) form.elements.amount.value = '';
     if (form.elements.note) form.elements.note.value = '';
     if (form.elements.no) form.elements.no.value = d ? String(d.pays.length + 1) : '1';
+    if (form.elements.month && c) {
+      form.elements.month.innerHTML = collectMonthOptionsHTML(c, '');
+      form.elements.month.value = '';
+    }
     var err = form.querySelector('.form__error');
     if (err) err.hidden = true;
     if (c) updateMainCalc(form);
@@ -3232,6 +3294,10 @@
     if (form.elements.amount) form.elements.amount.value = String(Number(p.amount || 0));
     if (form.elements.no) form.elements.no.value = String(p.no || (pi + 1));
     if (form.elements.note) form.elements.note.value = p.note || '';
+    if (form.elements.month) {
+      form.elements.month.innerHTML = collectMonthOptionsHTML(c, paymentMonthKey(p));
+      form.elements.month.value = paymentMonthKey(p);
+    }
     var note = form.querySelector('[data-edit-note]');
     if (note) {
       note.hidden = false;
@@ -3262,9 +3328,11 @@
       var cls = m.state === 'paid' ? (m.latePaid ? 'is-late-paid' : 'is-paid')
         : m.state === 'overdue' ? 'is-overdue'
           : m.state === 'due' ? 'is-due' : 'is-upcoming';
+      if (m.partial) cls += ' is-partial';
       var stateText = m.state === 'paid' ? (m.latePaid ? 'مدفوع بعد التأخير' : 'مدفوع')
-        : m.state === 'overdue' ? 'غير مدفوع — متأخر'
-          : m.state === 'due' ? 'مستحق الآن' : 'لم يحن بعد';
+        : m.state === 'overdue' ? (m.partial ? 'دفع جزئي — متأخر' : 'غير مدفوع — متأخر')
+          : m.state === 'due' ? (m.partial ? 'دفع جزئي — مستحق' : 'مستحق الآن')
+            : (m.partial ? 'دفع جزئي' : 'لم يحن بعد');
       if (m.state === 'paid') paid++;
       if (m.state === 'overdue') late++;
       var tip = monthLabel(m.key) + ' — ' + stateText;
@@ -3432,6 +3500,8 @@
       payEdit.amount = amt;
       payEdit.no = no;
       payEdit.note = String(el.note.value || '').trim();
+      var editMonth = paymentMonthKey({ month: el.month ? el.month.value : '' });
+      if (editMonth) payEdit.month = editMonth; else delete payEdit.month;
       delete payEdit.months;
       paysEdit[editPi] = payEdit;
       paysEdit.sort(function (a, b) { return String(a.date).localeCompare(String(b.date)); });
@@ -3451,6 +3521,8 @@
     var planBefore = monthlyPlan(c);
     var pays = d.pays.slice();
     var pay = { date: date, amount: amt, no: no, note: String(el.note.value || '').trim() };
+    var payMonth = paymentMonthKey({ month: el.month ? el.month.value : '' });
+    if (payMonth) pay.month = payMonth;
     pays.push(pay);
     pays.sort(function (a, b) { return String(a.date).localeCompare(String(b.date)); });
     c.payments = pays;
@@ -3466,7 +3538,10 @@
     planAfter.months.forEach(function (m) {
       if (m.paid && !paidBefore[m.key]) coveredMonths.push(m.key);
     });
-    if (coveredMonths.length) {
+    if (payMonth) {
+      pay.months = [payMonth];
+      if (!pay.note) pay.note = 'سداد شهر: ' + monthLabel(payMonth);
+    } else if (coveredMonths.length) {
       pay.months = coveredMonths;
       if (!pay.note) pay.note = 'سداد شهور: ' + coveredMonths.map(monthLabel).join('، ');
     }

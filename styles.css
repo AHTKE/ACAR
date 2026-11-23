@@ -1146,6 +1146,12 @@ label.btn{cursor:pointer;user-select:none}
 .month-card.is-due .month-card__dot{background:#fbbf24;box-shadow:0 0 0 3px rgba(245,158,11,.18)}
 .month-card.is-due .month-card__state{color:#fcd34d}
 .month-card.is-upcoming{opacity:.72}
+/* دفع جزئي: الشهر مدفوع شويه — بنّي/أصفر لحد ما يكتمل ويبقى أخضر */
+.month-card.is-partial{border-color:rgba(245,158,11,.55);background:rgba(245,158,11,.09)}
+.month-card.is-partial .month-card__dot{background:#fbbf24;box-shadow:0 0 0 3px rgba(245,158,11,.18)}
+.month-card.is-partial .month-card__state{color:#fcd34d}
+.month-card__pays{color:#93c5fd}
+.month-card__rest{color:#fcd34d!important;font-weight:700}
 .month-card__rest{color:#fca5a5!important}
 @media (max-width:640px){.plan-kpis{grid-template-columns:1fr}}
 
@@ -1310,6 +1316,7 @@ label.btn{cursor:pointer;user-select:none}
 .mcell.is-overdue{background:rgba(248,113,113,.18);border-color:rgba(248,113,113,.6);color:#fecaca;box-shadow:0 0 0 2px rgba(248,113,113,.08)}
 .mcell.is-due{background:rgba(245,158,11,.14);border-color:rgba(245,158,11,.55);color:#fde68a}
 .mcell.is-upcoming{opacity:.55}
+.mcell.is-partial{background:rgba(245,158,11,.18);border-color:rgba(245,158,11,.6);color:#fcd34d}
 .mcell.is-current{outline:2px solid rgba(79,140,255,.75);outline-offset:1px}
 .month-strip__none{font-size:11.5px;color:var(--muted-2)}
 
