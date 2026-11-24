@@ -102,6 +102,23 @@ const list = (win, k) => {
   ok('العملاء رجعوا بعد التلف', list(c.window, 'app_customers').length === 3,
     list(c.window, 'app_customers').length);
 
+  console.log('\n[3ب] المخازن وتعريفات الحقول المخصصة محميين من المسح');
+  const e = boot(Object.assign({}, saved, {
+    app_stores: JSON.stringify({ stores: ['المخزن الرئيسي'], docs: [{ id: 'd1', item: 'شاشة', qty: 3, type: 'in' }] }),
+    app_custom_fields: JSON.stringify({ customers: [{ name: 'رقم الملف', required: false }] })
+  }));
+  await wait(500);
+  await e.window.syncApply({
+    updatedAt: new Date().toISOString(),
+    sections: { app_stores: '[]', app_custom_fields: '{}' }
+  });
+  await wait(150);
+  let stores = {}, fields = {};
+  try { stores = JSON.parse(e.window.localStorage.getItem('app_stores') || '{}'); } catch (err) {}
+  try { fields = JSON.parse(e.window.localStorage.getItem('app_custom_fields') || '{}'); } catch (err) {}
+  ok('حركات المخازن ما اتمسحتش من نسخة فاضية', (stores.docs || []).length === 1, JSON.stringify(stores));
+  ok('تعريفات الحقول المخصصة ما اتمسحت', (fields.customers || []).length === 1, JSON.stringify(fields));
+
   console.log('\n[4] المزامنة التلقائية ما تنقصش بياناتك');
   const d = boot(saved);
   await wait(500);

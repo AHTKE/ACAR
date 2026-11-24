@@ -119,7 +119,15 @@
     return {};
   }
   function writeAll(v) {
-    try { localStorage.setItem(KEY, JSON.stringify(cleanCatalog(v))); } catch (e) {}
+    var raw = JSON.stringify(cleanCatalog(v));
+    try {
+      /* الحفظ الآمن من app.js: تنبيه لو التخزين مليان + نسخة داخلية */
+      if (typeof window !== 'undefined' && typeof window.__nizamPutRaw === 'function') {
+        window.__nizamPutRaw(KEY, raw);
+        return;
+      }
+      localStorage.setItem(KEY, raw);
+    } catch (e) {}
   }
   function ensureStore(all, store) {
     if (!all[store]) all[store] = { categories: [] };

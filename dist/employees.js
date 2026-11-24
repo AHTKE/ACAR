@@ -71,7 +71,15 @@
     return [];
   }
   function saveEmployees(list) {
-    try { localStorage.setItem(KEY, JSON.stringify((list || []).map(normalize).filter(Boolean))); } catch (e) {}
+    var raw = JSON.stringify((list || []).map(normalize).filter(Boolean));
+    try {
+      /* الحفظ الآمن من app.js: بيوضّح لو التخزين مليان وبيحدّث النسخة الداخلية */
+      if (typeof window !== 'undefined' && typeof window.__nizamPutRaw === 'function') {
+        window.__nizamPutRaw(KEY, raw);
+        return;
+      }
+      localStorage.setItem(KEY, raw);
+    } catch (e) {}
   }
 
   var state = { q: '', editId: '', openId: '', customSeed: 0 };

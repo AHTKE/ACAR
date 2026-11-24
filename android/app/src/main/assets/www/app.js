@@ -189,6 +189,10 @@
     }
   }
 
+  /* مكتوب آمن للوحدات التانية (الموظفون/كتالوج المخازن): نفس الحماية
+     والتحديث التلقائي للنسخة الداخلية، بدل setItem صامت يفشل بدون علم. */
+  try { window.__nizamPutRaw = putRaw; } catch (ePutRaw) {}
+
   /* ---------- الموظفون ---------- */
   var KEY_EMPLOYEES = 'app_employees';
   function getEmployees() {
@@ -737,7 +741,7 @@
     return { customers: [], ledger: [] };
   }
   function getCustomFields(section) { return getAllCustomFields()[section] || []; }
-  function saveAllCustomFields(all) { try { localStorage.setItem(KEY_CUSTOM_FIELDS, JSON.stringify(all)); } catch (e) {} }
+  function saveAllCustomFields(all) { putRaw(KEY_CUSTOM_FIELDS, JSON.stringify(all)); }
 
   function findCustomInput(scope, name) {
     if (!scope) return null;
@@ -6129,7 +6133,9 @@
     app_wa_log: 'رسائل التحصيل (واتساب) — سجل الإرسال',
     app_default_due_day: 'التحصيل الشهري — يوم التحصيل الافتراضي',
     app_employees: 'الموظفون',
-    app_store_catalog: 'تصنيف المخازن والأصناف'
+    app_store_catalog: 'تصنيف المخازن والأصناف',
+    app_stores: 'حركات المخازن',
+    app_custom_fields: 'تعريفات الحقول المخصصة'
   };
   var SYNC_KEYS = Object.keys(SYNC_LABELS);
   var SYNC_PUSH_MS = 60 * 60 * 1000;    /* رفع تلقائي كل ساعة */
@@ -6725,7 +6731,11 @@
   var GUARD_HISTORY = 'app_data_history';
   var GUARD_HISTORY_MAX = 4;
   var GUARD_HISTORY_BYTES = 1200 * 1024;   /* سقف حجم تاريخ النسخ */
-  var GUARD_KEYS = SYNC_KEYS.concat(['app_stores']);
+  /* كل مفاتيح بيانات المستخدم — من غير تكرار لو مفتاح بقى جو SYNC_KEYS */
+  var GUARD_KEYS = SYNC_KEYS.slice();
+  ['app_stores'].forEach(function (k) {
+    if (GUARD_KEYS.indexOf(k) === -1) GUARD_KEYS.push(k);
+  });
   var guardHealed = [];
 
   function sectionState(raw) {
@@ -9641,7 +9651,7 @@
     return { stores: [DEFAULT_STORE_NAME], docs: [] };
   }
   function saveStores(v) {
-    try { localStorage.setItem(KEY_STORES, JSON.stringify(normStores(v))); } catch (e2) {}
+    putRaw(KEY_STORES, JSON.stringify(normStores(v)));
   }
   function getStoreNames() { return getStores().stores; }
   /* حركات مخزن معيّن — أو كل المخازن لو مفيش تحديد */
