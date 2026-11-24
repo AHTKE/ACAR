@@ -173,6 +173,8 @@
       /* المسح المتعمّد من المستخدم معناه إن القسم ده خلص فعلاً —
          نشيله من الحارس عشان ما يرجعش لوحده في التشغيل الجاي. */
       try { if (isEmptyPayload(raw)) guardForget(key); } catch (eG) {}
+      /* كل تعديل بيجدّد النسخة الداخلية (IndexedDB) بشكل مؤجّل */
+      try { mirrorSchedule(); } catch (eM) {}
       return true;
     }
     catch (e) {
@@ -6836,10 +6838,134 @@
     }
     if (typeof document !== 'undefined' && document.addEventListener) {
       document.addEventListener('visibilitychange', function () {
-        if (document.visibilityState === 'hidden') { try { guardHistoryPush('قبل الإغلاق'); } catch (e) {} }
+        if (document.visibilityState === 'hidden') {
+          try { guardHistoryPush('قبل الإغلاق'); } catch (e) {}
+          try { mirrorSaveNow('قبل الإغلاق'); } catch (eM) {}
+        }
       });
     }
   } catch (eGuardTimer) {}
+
+  /* ============================================================
+     النسخة الداخلية الثانية (IndexedDB) — الويب والأندرويد
+     ------------------------------------------------------------
+     localStorage هو المخزن الأساسي، لكن المتصفح أو WebView ممكن
+     يمسحه (ضغط مساحة / تحديث WebView / تلف الملف). هنا بنحتفظ بنسخة
+     كاملة في IndexedDB (مخزن مستقل تمامًا)، ووقت الإقلاع بنرجّع أي
+     قسم ضاع أو بقى فاضي — من غير ما نلمس الأقسام السليمة. النسخة
+     دي كمان هي اللي بتخلّي زر «استرجاع من النسخة الداخلية» شغّال.
+     ============================================================ */
+  var MIRROR_DB = 'nizam_data_mirror';
+  var MIRROR_STORE = 'snapshots';
+  var MIRROR_KEY = 'latest';
+  var mirrorTimer = null;
+  var mirrorBusy = false;
+
+  function mirrorOpen() {
+    return new Promise(function (resolve, reject) {
+      if (typeof indexedDB === 'undefined' || !indexedDB) return reject(new Error('no idb'));
+      var r = indexedDB.open(MIRROR_DB, 1);
+      r.onupgradeneeded = function () { try { r.result.createObjectStore(MIRROR_STORE); } catch (e) {} };
+      r.onsuccess = function () { resolve(r.result); };
+      r.onerror = function () { reject(r.error || new Error('idb')); };
+    });
+  }
+  function mirrorWrite(rec) {
+    return mirrorOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(MIRROR_STORE, 'readwrite');
+        tx.objectStore(MIRROR_STORE).put(rec, MIRROR_KEY);
+        tx.oncomplete = function () { try { db.close(); } catch (e) {} resolve(true); };
+        tx.onerror = function () { reject(tx.error); };
+        tx.onabort = function () { reject(tx.error); };
+      });
+    });
+  }
+  function mirrorRead() {
+    return mirrorOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(MIRROR_STORE, 'readonly');
+        var q = tx.objectStore(MIRROR_STORE).get(MIRROR_KEY);
+        q.onsuccess = function () { try { db.close(); } catch (e) {} resolve(q.result || null); };
+        q.onerror = function () { reject(q.error); };
+      });
+    });
+  }
+  function mirrorSaveNow(reason) {
+    if (mirrorBusy) return Promise.resolve(false);
+    var sections = {}, n = 0;
+    GUARD_KEYS.forEach(function (k) {
+      var raw = readRawKey(k);
+      if (raw === null || sectionState(raw) !== 'ok') return;
+      sections[k] = raw; n++;
+    });
+    if (!n) return Promise.resolve(false);
+    mirrorBusy = true;
+    return mirrorWrite({ at: new Date().toISOString(), reason: reason || '', sections: sections })
+      .then(function (r) { mirrorBusy = false; return r; })
+      .catch(function () { mirrorBusy = false; return false; });
+  }
+  function mirrorSchedule() {
+    if (typeof indexedDB === 'undefined' || !indexedDB) return;
+    if (mirrorTimer) clearTimeout(mirrorTimer);
+    mirrorTimer = setTimeout(function () { mirrorTimer = null; mirrorSaveNow('تحديث تلقائي'); }, 4000);
+  }
+  /* ترجيع أي قسم ضاع أو بقى أقل من اللي في النسخة الداخلية */
+  function mirrorRecover(manual) {
+    var g = guardRead();
+    return mirrorRead().then(function (rec) {
+      if (!rec || !rec.sections) {
+        if (manual) toast('مفيش نسخة داخلية محفوظة بعد', true);
+        return 0;
+      }
+      var healed = [];
+      GUARD_KEYS.forEach(function (k) {
+        var mir = rec.sections[k];
+        if (typeof mir !== 'string' || sectionState(mir) !== 'ok') return;
+        var cur = readRawKey(k);
+        if (sectionState(cur) === 'ok' && countOfFromRaw(cur) >= countOfFromRaw(mir)) return;
+        try { localStorage.setItem(k, mir); healed.push(k); } catch (e) {}
+        if (!g.sections) g.sections = {};
+        g.sections[k] = mir;
+      });
+      if (healed.length) {
+        g.at = new Date().toISOString();
+        guardWrite(g);
+        try { refreshAllViews(); } catch (e) {}
+        try { renderDataSafety(); } catch (e) {}
+        toast('اترجّعت من النسخة الداخلية: ' +
+          healed.map(function (k) { return SYNC_LABELS[k] || k; }).join('، ') + ' ✓', false);
+      } else if (manual) {
+        toast('النسخة الداخلية مطابقة — مفيش حاجة ضايعة', false);
+      }
+      return healed.length;
+    }).catch(function () { return 0; });
+  }
+  function mirrorInfoText() {
+    return mirrorRead().then(function (rec) {
+      if (!rec || !rec.sections) return 'النسخة الداخلية (IndexedDB): لسه ما اتحفظتش نسخة.';
+      var n = 0;
+      Object.keys(rec.sections).forEach(function (k) {
+        if (sectionState(rec.sections[k]) === 'ok') n += countOfFromRaw(rec.sections[k]);
+      });
+      var at = '';
+      try { at = rec.at ? new Date(rec.at).toLocaleString('ar-EG') : ''; } catch (e) { at = rec.at || ''; }
+      return 'نسخة داخلية (IndexedDB): ' + n + ' سجل' + (at ? ' — آخر تحديث ' + at : '');
+    }).catch(function () { return ''; });
+  }
+  /* إقلاع: تخزين دائم + ترجيع المفقود + كتابة نسخة جديدة */
+  function mirrorBoot() {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.persist) {
+        navigator.storage.persisted().then(function (p) {
+          if (!p) return navigator.storage.persist();
+        }).catch(function () {});
+      }
+    } catch (eP) {}
+    if (typeof indexedDB === 'undefined' || !indexedDB) return;
+    mirrorRecover(false).then(function () { mirrorSaveNow('إقلاع'); });
+  }
+
 
   function restoreHistoryAt(i) {
     var h = guardHistoryList();
@@ -6927,6 +7053,16 @@
       if (!auto) toast('اربط حساب Google أولاً', true);
       return Promise.resolve(null);
     }
+    /* صفر فقدان: جهاز فاضي ما يرفعش فوق نسخة فيها بيانات */
+    var localRecords = 0;
+    SYNC_KEYS.forEach(function (k) { localRecords += countOf(k); });
+    if (!localRecords) {
+      if (!auto) {
+        syncShowNote('الرفع اتمنع: مفيش بيانات على الجهاز (٠ سجل). لو الجهاز جديد، حمّل نسخة من الدرايف الأول — الرفع الفاضي بيمسح نسخة السحابة.', true);
+        toast('الرفع اتمنع: مفيش بيانات على الجهاز', true);
+      }
+      return Promise.resolve(null);
+    }
     syncBusy = true;
     if (!auto) syncSetState('', 'جارٍ رفع النسخة…');
 
@@ -6963,7 +7099,9 @@
         syncShowNote('فشل الرفع: ' + (e && e.message ? e.message : e), true);
         toast(e && e.code === 'PERM'
           ? 'الحساب الحالي صلاحيته مشاهدة فقط على المجلد — الحل مكتوب بالأسفل'
-          : 'فشل رفع المزامنة: ' + (e && e.message ? e.message : e), true);
+          : (e && e.code === 'EMPTY_OVERWRITE'
+            ? 'الرفع اتمنع لحماية بياناتك: النسخة اللي على الدرايف فيها بيانات أكتر'
+            : 'فشل رفع المزامنة: ' + (e && e.message ? e.message : e)), true);
       }
       return null;
     }).then(function (r) { syncBusy = false; return r; });
@@ -9052,6 +9190,14 @@
         ' — مفيش أي عملية بتمسح بياناتك من تلقائها: أي استبدال من المزامنة لقسم فارغ بيتجاهل تلقائياً.' +
       '</p>' +
       guardBoxHTML();
+
+    /* نسخة داخلية ثانية في IndexedDB — معلوماتها بتتحمّل بشكل غير متزامن */
+    safeRun(function () {
+      mirrorInfoText().then(function (t) {
+        var el = document.getElementById('mirrorState');
+        if (el) el.textContent = t || '';
+      });
+    }, 'معلومات النسخة الداخلية');
   }
 
   /* قسم «حارس البيانات» — آخر حالة سليمة + النسخ المحفوظة */
@@ -10180,6 +10326,7 @@
   bootStep(function () { installOpsHook(); }, 'سجل العمليات');
   bootStep(function () { guardBoot(); }, 'حارس البيانات');
   bootStep(function () { repairStorage(); }, 'فحص التخزين');
+  bootStep(function () { mirrorBoot(); }, 'النسخة الداخلية');
   bootStep(function () {
     renderHomeStats();
     renderCustomers();
@@ -10225,6 +10372,10 @@
   document.addEventListener('click', function (e) {
     var t = e.target;
     if (!t || !t.closest) return;
+    if (t.closest('[data-mirror-restore]')) {
+      mirrorRecover(true);
+      return;
+    }
     if (t.closest('[data-guard-restore]')) {
       var n = guardRestoreAll();
       guardHistoryPush('قبل الاستعادة اليدوية');

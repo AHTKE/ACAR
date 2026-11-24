@@ -220,7 +220,31 @@ const snap = (tag) => ({
   r = await call('/api/sync/folder', { folderId: 'not a link' });
   ok('رابط فولدر غلط 400', r.status === 400, r.status);
 
-  console.log('\n[8] مفيش تحويل للموقع');
+  console.log('\n[8] صفر فقدان: رفض الرفع الفاضي + أرشفة الحالة السابقة');
+  const beforeVersions = (await call('/api/sync/versions')).body.versions.length;
+  const beforePull = await call('/api/sync/pull');
+  const beforeCount = (beforePull.body.snapshot.sections.customers || []).length;
+  ok('فيه بيانات على الدرايف قبل الاختبار', beforeCount >= 1, beforeCount);
+
+  r = await call('/api/sync/push', { snapshot: { version: 1, device: 'PC-TEST', updatedAt: new Date().toISOString(), sections: { customers: [], invoices: [] } } });
+  ok('رفع فاضي مرفوض 409', r.status === 409 && r.body && r.body.code === 'EMPTY_OVERWRITE', { s: r.status, b: r.body });
+
+  const afterPull = await call('/api/sync/pull');
+  ok('نسخة الدرايف ما اتمسحتش', (afterPull.body.snapshot.sections.customers || []).length === beforeCount,
+    (afterPull.body.snapshot.sections.customers || []).length);
+
+  r = await call('/api/sync/push', { snapshot: snap('بعد الحماية') });
+  ok('رفع فيه بيانات ناجح', r.status === 200 && r.body.ok, r.body);
+  const oldArchived = files.filter(function (f) {
+    return String(f.name || '').indexOf('نسخة ') === 0 && String(f.content || '').indexOf('مخصص') > -1;
+  });
+  ok('الحالة السابقة اتحفظت كنسخة قبل الكتابة فوقها', oldArchived.length >= 1, oldArchived.map(function (f) { return f.name; }));
+  ok('عدد النسخ ما قلّش', (await call('/api/sync/versions')).body.versions.length >= beforeVersions, { before: beforeVersions });
+
+  r = await call('/api/sync/push', { snapshot: { version: 1, sections: { customers: [] } }, force: true });
+  ok('force يسمح بالتفريغ المتعمد', r.status === 200 && r.body.ok, { s: r.status, b: r.body });
+
+  console.log('\n[10] مفيش تحويل للموقع');
   ok('كل النداءات كانت لـGoogle المحلي', googleCalls > 0);
 
   console.log('\n==================================================');

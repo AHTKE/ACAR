@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ============================================================
+     قواعد النسخ/النقل (Android 12+)
+     نفس الهدف: بيانات WebView (localStorage + IndexedDB) تتنقل مع
+     المستخدم عند إعادة التثبيت أو نقل الجهاز بدل ما تبدأ من صفر.
+     ============================================================ -->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="file" path="." />
+        <include domain="database" path="." />
+        <include domain="sharedpref" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="file" path="." />
+        <include domain="database" path="." />
+        <include domain="sharedpref" path="." />
+    </device-transfer>
+</data-extraction-rules>

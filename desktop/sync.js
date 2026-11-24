@@ -30,6 +30,21 @@ const FOLDER_MIME = 'application/vnd.google-apps.folder';
 
 function pad2(n) { return (n < 10 ? '0' : '') + n; }
 
+/* عدد السجلات — لحماية الرفع الفاضي فوق نسخة فيها بيانات */
+function snapshotRecords(snap) {
+  if (!snap || !snap.sections || typeof snap.sections !== 'object') return 0;
+  let total = 0;
+  Object.keys(snap.sections).forEach(function (k) {
+    const v = snap.sections[k];
+    try {
+      const p = typeof v === 'string' ? JSON.parse(v) : v;
+      if (Array.isArray(p)) total += p.length;
+      else if (p && typeof p === 'object') total += 1;
+    } catch (e) { /* قيمة تالفة */ }
+  });
+  return total;
+}
+
 function versionName(d) {
   return 'نسخة ' + d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
     ' ' + pad2(d.getHours()) + '.' + pad2(d.getMinutes()) + '.' + pad2(d.getSeconds()) + '.json';
@@ -335,6 +350,31 @@ module.exports = function createSync(deps) {
           return true;
         }
 
+        /* ---- نقرا الحالة الحالية قبل الكتابة فوقها ---- */
+        let existingSnap = null, existingText = '';
+        try {
+          const cur = await findSyncFile(folder.id);
+          if (cur && cur.id && Number(cur.size || 0) > 0) {
+            existingText = await download(cur.id);
+            try { existingSnap = JSON.parse(existingText); } catch (e) { existingSnap = null; }
+          }
+        } catch (e) { existingSnap = null; existingText = ''; }
+
+        const incomingRecords = snapshotRecords(snapshot);
+        const existingRecords = snapshotRecords(existingSnap);
+        if (!(body && body.force) && incomingRecords === 0 && existingRecords > 0) {
+          json(res, 409, { ok: false, code: 'EMPTY_OVERWRITE',
+            error: 'الرفع اتمنع: نسخة الجهاز فاضية (٠ سجل) والنسخة اللي على الدرايف فيها ' +
+              existingRecords + ' سجل — ممنوع نمسح بياناتك بالغلط.' });
+          return true;
+        }
+
+        /* النسخة القديمة تتحفظ كأرشيف قبل الكتابة فوقها */
+        let archived = false;
+        if (existingText && existingSnap && existingSnap.sections) {
+          archived = await archive(folder.id, existingText);
+        }
+
         let info = null;
         try { info = await pushFile(folder.id, text); }
         catch (e) {
@@ -343,7 +383,7 @@ module.exports = function createSync(deps) {
           return true;
         }
 
-        const archived = await archive(folder.id, text);
+        if (!archived) archived = await archive(folder.id, text);
 
         /* التنبيه اختياري — إخفاقه ما يفشلش الرفع */
         let emailed = false, emailedTo = '';

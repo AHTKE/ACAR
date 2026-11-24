@@ -141,7 +141,7 @@
       </span>
       <span class="brand__text">
         <strong>WorkFlow</strong>
-        <small>الإصدار 1.0 · b20261124a</small>
+        <small>الإصدار 1.0 · b20261124b</small>
       </span>
     </button>
 
@@ -1487,7 +1487,9 @@
           <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-shield"/></svg> سلامة البيانات والتخزين</h3>
           <p class="panel__hint">فحص لكل أقسام التخزين: هل القيم سليمة ولا تالفة؟ وكم عملية مسجّلة في سجل العمليات؟ <b>الحماية المفعّلة:</b> أي محاولة استبدال قسم فيه بيانات بقسم فارغ من المزامنة بتتجاهل تلقائياً عشان البيانات ما تتمسحش من تلقاء نفسها.</p>
           <div id="dataSafetyBody"></div>
+          <p class="panel__note" id="mirrorState"></p>
           <div class="form__actions" style="margin-top:14px">
+            <button type="button" class="btn btn--ghost" data-mirror-restore="1">استرجاع من النسخة الداخلية</button>
             <button type="button" class="btn btn--primary" data-go="operations" data-relock="1">فتح سجل العمليات والتراجع</button>
           </div>
         </div>

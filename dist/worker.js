@@ -466,6 +466,21 @@ async function archiveVersion(at, folderId, jsonText) {
   await pruneSyncFiles(at, folderId);
 }
 
+/* عدد السجلات في نسخة — بيستخدم في حماية «الرفع الفاضي» */
+function snapshotRecords(snap) {
+  if (!snap || !snap.sections || typeof snap.sections !== 'object') return 0;
+  let total = 0;
+  Object.keys(snap.sections).forEach(function (k) {
+    const v = snap.sections[k];
+    try {
+      const p = typeof v === 'string' ? JSON.parse(v) : v;
+      if (Array.isArray(p)) total += p.length;
+      else if (p && typeof p === 'object') total += 1;
+    } catch (e) { /* قيمة تالفة — مش سجل */ }
+  });
+  return total;
+}
+
 /* التنظيف: كل يوم ماضٍ يبقى بنسخة نهائية واحدة، والحد الكلي ٥٠ ملف */
 async function pruneSyncFiles(at, folderId) {
   try {
@@ -1442,6 +1457,37 @@ async function handleApi(request, env, pathname) {
       return json({ ok: false, code: 'PERM', error: permErrorMessage(conn, access, '') }, 403);
     }
 
+    /* ---- صفر فقدان: نقرا الحالة الحالية قبل الكتابة فوقها ----
+       قبل كده كان الرفع بيعدّل sync-latest.json مباشرة وأرشفة "النسخة الجديدة"
+       بعده — يعني الحالة السابقة (أي آخر نسخة سليمة) كانت تتبدّل بالجديدة.
+       هنا بنأرشف القديم الأول، ونرفض أي رفع فاضي فوق نسخة فيها بيانات. */
+    let existingSnap = null, existingText = '';
+    try {
+      const existing = await findSyncFile(at, folderId);
+      if (existing && existing.id && Number(existing.size || 0) > 0) {
+        const rr = await fetch(DRIVE_FILES + '/' + existing.id + '?alt=media&supportsAllDrives=true',
+          { headers: { Authorization: 'Bearer ' + at } });
+        if (rr.ok) {
+          existingText = await rr.text();
+          try { existingSnap = JSON.parse(existingText); } catch (e) { existingSnap = null; }
+        }
+      }
+    } catch (e) { existingSnap = null; existingText = ''; }
+
+    const incomingRecords = snapshotRecords(snapshot);
+    const existingRecords = snapshotRecords(existingSnap);
+    if (!(body && body.force) && incomingRecords === 0 && existingRecords > 0) {
+      return json({ ok: false, code: 'EMPTY_OVERWRITE',
+        error: 'الرفع اتمنع: نسخة الجهاز فاضية (٠ سجل) والنسخة اللي على الدرايف فيها ' +
+          existingRecords + ' سجل — ممنوع نمسح بياناتك بالغلط. حمّل نسخة الدرايف الأول أو ارفع من الجهاز اللي فيه البيانات.' }, 409);
+    }
+
+    let archivedOld = false;
+    if (existingText && existingSnap && existingSnap.sections) {
+      try { await archiveVersion(at, folderId, existingText); archivedOld = true; }
+      catch (e) { /* الأرشفة تكمّلية — ما نمنعش الرفع */ }
+    }
+
     let info;
     try {
       info = await pushSyncFile(at, folderId, jsonText);
@@ -1472,10 +1518,12 @@ async function handleApi(request, env, pathname) {
       }
     }
 
-    /* أرشفة نسخة مؤرشفة بملف تاريخي — فشلها ما يفشلش الرفع */
-    let archived = false;
-    try { await archiveVersion(at, folderId, jsonText); archived = true; }
-    catch (e) { /* الأرشفة تكمّلي */ }
+    /* أرشفة تكميلية: لو مكنش فيه ملف قديم (أول رفع) نأرشف النسخة الجديدة نفسها */
+    let archived = archivedOld;
+    if (!archived) {
+      try { await archiveVersion(at, folderId, jsonText); archived = true; }
+      catch (e) { /* الأرشفة تكمّلي */ }
+    }
 
     /* تنبيه بالبريد — اختياري، وإخفاقه ما يفشلش الرفع */
     let emailed = false, emailedTo = '';
