@@ -105,6 +105,9 @@ async function editAndSave(changes) {
   ok('نموذج التحصيل فيه اختيار شهر', !!cf.elements.month);
   const optValues = Array.from(cf.elements.month.options).map((o) => o.value);
   ok('الشهور معروضة في القائمة', optValues.includes('2026-09') && optValues.includes('2026-11'), optValues.join(','));
+  const nowKey = new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0');
+  ok('الافتراضي في نموذج البروفايل هو الشهر الحالي',
+    cf.elements.month.value === (optValues.includes(nowKey) ? nowKey : ''), cf.elements.month.value + ' / ' + nowKey);
   cf.elements.date.value = '2026-11-23';
   cf.elements.amount.value = '3000';
   cf.elements.month.value = '2026-11';
@@ -136,6 +139,9 @@ async function editAndSave(changes) {
   if (mForm && mForm.elements.month) {
     const vals = Array.from(mForm.elements.month.options).map((o) => o.value);
     ok('شهور الخطة موجودة في القائمة', vals.includes('2026-11'), vals.join(','));
+    const nowK = new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0');
+    ok('الافتراضي في نموذج التحصيل الرئيسي هو الشهر الحالي',
+      mForm.elements.month.value === (vals.includes(nowK) ? nowK : ''), mForm.elements.month.value + ' / ' + nowK);
   }
 
   console.log('\n' + (fail ? '✗ فشل ' + fail + ' / ' + (pass + fail) : '✓ نجح ' + pass + ' تحقق'));

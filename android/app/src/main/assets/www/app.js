@@ -238,15 +238,28 @@
     return /^\d{4}-(0[1-9]|1[0-2])$/.test(k) ? k : '';
   };
 
+  /* الشهر الافتراضي في نموذج التحصيل = الشهر الحالي (لو داخل خطة العميل)،
+     وإلا «تلقائي» زي الأول. المستخدم يقدر يغيّره لأي شهر تاني. */
+  function defaultCollectMonthKey(c, plan) {
+    var key = currentMonthKey();
+    var months = (plan || monthlyPlan(c)).months || [];
+    for (var i = 0; i < months.length; i++) {
+      if (months[i].key === key) return key;
+    }
+    return '';
+  }
+
   /* خيارات الشهر في نموذج التحصيل: المستخدم هو اللي يحدّد الشهر المدفوع */
   function collectMonthOptionsHTML(c, selected) {
     var plan = monthlyPlan(c);
+    var pick = selected || defaultCollectMonthKey(c, plan);
     var out = '<option value="">تلقائي — أقدم شهر ناقص</option>';
     if (plan && plan.active) {
       plan.months.forEach(function (m) {
         var tag = m.state === 'paid' ? 'مدفوع ✓'
           : m.remaining > 0 ? 'متبقي ' + money(m.remaining) : '';
-        out += '<option value="' + esc(m.key) + '"' + (selected === m.key ? ' selected' : '') + '>' +
+        if (m.key === currentMonthKey()) tag = tag ? 'الشهر الحالي · ' + tag : 'الشهر الحالي';
+        out += '<option value="' + esc(m.key) + '"' + (pick === m.key ? ' selected' : '') + '>' +
           esc(monthLabel(m.key) + (tag ? ' — ' + tag : '')) + '</option>';
       });
     }
@@ -1710,7 +1723,7 @@
     cf.elements.note.value = '';
     if (cf.elements.month) {
       cf.elements.month.innerHTML = collectMonthOptionsHTML(c, '');
-      cf.elements.month.value = '';
+      cf.elements.month.value = defaultCollectMonthKey(c);
     }
     $('#collectError').hidden = true;
     updateCollectCalc();
@@ -3229,7 +3242,7 @@
         '<div class="form__row">' +
           '<label class="field field--full"><span>الشهر اللي بتسدد عنه</span><select name="month">' +
             collectMonthOptionsHTML(c, '') +
-          '</select><small class="field__hint">اختار الشهر اللي العميل بيدفعه — حتى لو فيه شهر أقدم متأخر. «تلقائي» بيخصم من أقدم شهر ناقص.</small></label>' +
+          '</select><small class="field__hint">الافتراضي هو الشهر الحالي — اختار شهر تاني لو العميل بيدفع عن شهر مختلف، أو «تلقائي» عشان يخصم من أقدم شهر ناقص.</small></label>' +
         '</div>' +
         '<div class="form__row">' +
           '<label class="field field--full"><span>ملاحظة (اختياري)</span><input type="text" name="note" placeholder="ملاحظة حول هذه الدفعة…" /></label>' +
@@ -3296,7 +3309,7 @@
     if (form.elements.no) form.elements.no.value = d ? String(d.pays.length + 1) : '1';
     if (form.elements.month && c) {
       form.elements.month.innerHTML = collectMonthOptionsHTML(c, '');
-      form.elements.month.value = '';
+      form.elements.month.value = defaultCollectMonthKey(c);
     }
     var err = form.querySelector('.form__error');
     if (err) err.hidden = true;
