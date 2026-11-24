@@ -38,12 +38,17 @@ if (NODE_MAJOR >= 22) {
 const ROOT = fs.existsSync(path.join(__dirname, 'dist')) ? __dirname : path.join(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
 
+/* مجلد بيانات ثابت لا يعتمد على اسم التطبيق ولا على طريقة التشغيل.
+   المشكلة اللي كان بيسببها: Electron بيحدد userData من اسم التطبيق،
+   والاسم بيختلف بين المثبّت ("Nizam Al-Idara") والتشغيل التطويري
+   ("nizam-al-idara-desktop"). أي اختلاف = مجلد جديد = التطبيق يفتح
+   «من غير بيانات» وبيانات المستخدم موجودة في مجلد تاني. */
 function resolveDataDir() {
   if (process.env.NIZAM_DATA_DIR) return process.env.NIZAM_DATA_DIR;
   try {
     const el = require('electron');
     if (el && el.app && typeof el.app.getPath === 'function') {
-      return path.join(el.app.getPath('userData'), 'data');
+      return path.join(el.app.getPath('appData'), 'Nizam Al-Idara', 'data');
     }
   } catch (e) { /* نسخة عادية بلا Electron */ }
   return path.join(ROOT, 'data');
@@ -51,6 +56,64 @@ function resolveDataDir() {
 
 const DATA_DIR = resolveDataDir();
 const DB_FILE = path.join(DATA_DIR, 'nizam.db');
+
+/* أسماء ملفات البيانات اللي بتهم المستخدم (تترحّل من المجلدات القديمة) */
+const DATA_FILES_RE = /^(nizam-store|nizam\.db|google-auth|google-sync|google-client)/;
+
+/* مجلدات محتملة للإصدارات القديمة (أسماء تطبيق مختلفة أو نسخة portable) */
+function legacyDataDirs() {
+  const out = [];
+  if (process.env.NIZAM_LEGACY_DATA_DIRS) {
+    String(process.env.NIZAM_LEGACY_DATA_DIRS).split(',').forEach(function (d) {
+      const v = String(d || '').trim();
+      if (v) out.push(v);
+    });
+  }
+  try {
+    const el = require('electron');
+    const appData = el.app.getPath('appData');
+    ['nizam-al-idara-desktop', 'nizam-al-idara', 'Nizam Al-Idara', 'WorkFlow', 'nizam-idara', 'Electron']
+      .forEach(function (n) { out.push(path.join(appData, n, 'data')); });
+  } catch (e) { /* مش Electron */ }
+  out.push(path.join(ROOT, 'data'));
+  return out.filter(function (p) {
+    try { return path.resolve(p) !== path.resolve(DATA_DIR); } catch (e) { return false; }
+  });
+}
+
+/* ترحيل غير مدمّر: لو المجلد الحالي مفيهوش بيانات، ننسخ ملفات
+   البيانات من أول مجلد قديم فيه بيانات فعلية. النسخ مش الحذف. */
+function migrateLegacyData() {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    const hasOwn = fs.readdirSync(DATA_DIR).some(function (f) {
+      return DATA_FILES_RE.test(f) && /^(nizam-store\.json|nizam\.db)$/.test(f) &&
+        fs.statSync(path.join(DATA_DIR, f)).size > 0;
+    });
+    if (hasOwn) return { migrated: 0, from: '' };
+    const dirs = legacyDataDirs();
+    for (const dir of dirs) {
+      let files = [];
+      try { files = fs.readdirSync(dir); } catch (e) { continue; }
+      const picks = files.filter(function (f) { return DATA_FILES_RE.test(f); });
+      if (!picks.some(function (f) { return /^(nizam-store\.json|nizam\.db)$/.test(f); })) continue;
+      let n = 0;
+      picks.forEach(function (f) {
+        const src = path.join(dir, f);
+        const dst = path.join(DATA_DIR, f);
+        try {
+          if (!fs.existsSync(dst) && fs.statSync(src).size > 0) { fs.copyFileSync(src, dst); n++; }
+        } catch (e) { /* ملف مش مقروء */ }
+      });
+      if (n) {
+        try { console.log('تم ترحيل ' + n + ' ملف بيانات من: ' + dir); } catch (e) {}
+        return { migrated: n, from: dir };
+      }
+    }
+  } catch (e) { /* الترحيل تكميلي */ }
+  return { migrated: 0, from: '' };
+}
+const MIGRATION = migrateLegacyData();
 const DEFAULT_PORT = Number(process.env.PORT || 4568);
 /* خادم الويب اللي بيشغّل واجهات المزامنة. الربط بـGoogle بيتم محليًا
    في هذا الخادم، وأي NIZAM_API_BASE بيتغلّب على الافتراضي. */
@@ -128,9 +191,45 @@ function backupSqlite() {
   } catch (e) { /* النسخة الاحتياطية اختيارية */ }
 }
 
+/* نسخة أمان من ملف البيانات قبل أي فتح/ترقية للتطبيق (مرة كل يوم،
+   نحتفظ بآخر ٥). لو حصل أي عطل بعد تحديث، دي نقطة الرجوع. */
+function dayStamp() {
+  const s = stamp();               /* YYYYMMDD-HHMMSS */
+  return s.slice(0, 4) + '-' + s.slice(4, 6) + '-' + s.slice(6, 8);
+}
+
+function preOpenBackup() {
+  try {
+    const day = dayStamp();
+    ['nizam-store.json', 'nizam.db'].forEach(function (name) {
+      const src = path.join(DATA_DIR, name);
+      if (!fs.existsSync(src) || !fs.statSync(src).size) return;
+      const dst = path.join(DATA_DIR, name + '.preopen-' + day);
+      if (!fs.existsSync(dst)) {
+        /* نسخة عبر ملف مؤقت ثم إعادة تسمية — ما يسبش نسخة نص-نص لو القفل
+           حصل في نص النسخ */
+        const tmp = dst + '.tmp';
+        try {
+          fs.copyFileSync(src, tmp);
+          fs.renameSync(tmp, dst);
+        } catch (e2) {
+          try { fs.unlinkSync(tmp); } catch (e3) {}
+        }
+      }
+      const old = fs.readdirSync(DATA_DIR)
+        .filter(function (f) { return f.indexOf(name + '.preopen-') === 0; })
+        .sort();
+      while (old.length > 5) {
+        try { fs.unlinkSync(path.join(DATA_DIR, old.shift())); } catch (e) {}
+      }
+    });
+  } catch (e) { /* النسخة التكميلية ما تمنعش الإقلاع */ }
+}
+
 function openDb() {
   if (db) return db;
   fs.mkdirSync(DATA_DIR, { recursive: true });
+  preOpenBackup();
   const wantsJson = String(process.env.NIZAM_STORE || '').toLowerCase() === 'json';
   if (wantsJson || !DatabaseSync) {
     db = makeJsonStore();
@@ -150,6 +249,11 @@ function openDb() {
 function makeSqliteStore() {
   backupSqlite();
   const d = new DatabaseSync(DB_FILE);
+  /* WAL: الكتابة تتحفظ في سجل قبل تعديل الملف الأساسي، فانقطاع الكهرباء
+     أو القفل المفاجئ ما بيسيبش قاعدة تالفة. المشغّل على Node 22+ فقط
+     (Electron 33 بيستخدم مخزن JSON) فالفشل هنا غير مؤثر. */
+  try { d.exec('PRAGMA journal_mode = WAL'); } catch (e) {}
+  try { d.exec('PRAGMA synchronous = FULL'); } catch (e) {}
   d.exec('CREATE TABLE IF NOT EXISTS kv (' +
     'key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)');
   d.exec('CREATE TABLE IF NOT EXISTS meta (' +
@@ -164,6 +268,16 @@ function makeSqliteStore() {
       const rows = d.prepare('SELECT key, value FROM kv').all();
       for (const r of rows) out[r.key] = r.value;
       return out;
+    },
+    loadAllWithTimes: function () {
+      const kv = {}, at = {};
+      const rows = d.prepare('SELECT key, value, updated_at FROM kv').all();
+      for (const r of rows) {
+        kv[r.key] = r.value;
+        const t = Date.parse(String(r.updated_at || ''));
+        at[r.key] = isNaN(t) ? 0 : t;
+      }
+      return { kv: kv, at: at };
     },
     putKey: function (key, value) {
       if (value === null || value === undefined) {
@@ -206,6 +320,9 @@ function makeJsonStore() {
     try {
       const o = JSON.parse(text);
       if (!o || typeof o !== 'object' || !o.kv || typeof o.kv !== 'object') return null;
+      /* أوقات آخر كتابة لكل مفتاح — ضرورية عشان ما نكتبش فوق
+         تعديل أحدث بنفس عدد السجلات (تعديل اسم/مبلغ مش تغيير عدد) */
+      if (!o.at || typeof o.at !== 'object' || Array.isArray(o.at)) o.at = {};
       return o;
     } catch (e) { return null; }
   }
@@ -242,7 +359,7 @@ function makeJsonStore() {
         state.recovered = 'backup';
         try { writeAtomic(FILE, JSON.stringify(bak)); } catch (e) {}
       } else {
-        data = { version: 1, kv: {} };
+        data = { version: 1, kv: {}, at: {} };
         if (exists) state.recovered = 'empty';
       }
     }
@@ -279,10 +396,15 @@ function makeJsonStore() {
     engine: 'json',
     file: FILE,
     loadAll: function () { return Object.assign({}, read().kv); },
+    /* القيم + وقت آخر كتابة لكل مفتاح (للدمج الآمن عند الإقلاع) */
+    loadAllWithTimes: function () {
+      const d = read();
+      return { kv: Object.assign({}, d.kv), at: Object.assign({}, d.at) };
+    },
     putKey: function (key, value) {
       const d = read();
-      if (value === null || value === undefined) delete d.kv[key];
-      else d.kv[key] = String(value);
+      if (value === null || value === undefined) { delete d.kv[key]; delete d.at[key]; }
+      else { d.kv[key] = String(value); d.at[key] = Date.now(); }
       flush();
     },
     count: function () { return Object.keys(read().kv).length; },
@@ -301,6 +423,15 @@ function loadAll() {
   return openDb().loadAll();
 }
 
+/* القيم + أوقات الكتابة (لو المخزن ما بيدعمش الأوقات نرجّع خريطة فاضية) */
+function loadAllWithTimes() {
+  const store = openDb();
+  try {
+    if (typeof store.loadAllWithTimes === 'function') return store.loadAllWithTimes();
+  } catch (e) { /* نكمل بالحالة الأساسية */ }
+  return { kv: store.loadAll(), at: {} };
+}
+
 function putKey(key, value) {
   openDb().putKey(key, value === null || value === undefined ? null : String(value));
 }
@@ -311,7 +442,12 @@ function dbStats() {
   try { bytes = fs.statSync(d.file).size; } catch (e) {}
   let extra = {};
   try { if (typeof d.info === 'function') extra = d.info(); } catch (e) {}
-  return Object.assign({ keys: d.count(), bytes: bytes, file: d.file, dir: DATA_DIR, engine: d.engine }, extra);
+  let preopen = 0;
+  try { preopen = fs.readdirSync(DATA_DIR).filter(function (f) { return /\.preopen-\d{4}-\d{2}-\d{2}$/.test(f); }).length; } catch (e) {}
+  return Object.assign({
+    keys: d.count(), bytes: bytes, file: d.file, dir: DATA_DIR, engine: d.engine,
+    preopen: preopen, migratedFrom: MIGRATION && MIGRATION.from ? MIGRATION.from : ''
+  }, extra);
 }
 
 /* هل القيمة دي "فاضية"؟ (مفتاح مش موجود / مصفوفة فاضية / كائن فاضي) */
@@ -332,10 +468,10 @@ function recoverFromBackups() {
   const current = store.loadAll();
   const files = [path.join(DATA_DIR, 'nizam-store.backup.json')];
   try {
-    fs.readdirSync(DATA_DIR)
-      .filter(function (f) { return /\.corrupt-\d{8}-\d{6}\.json$/.test(f); })
-      .sort().reverse()
-      .forEach(function (f) { files.push(path.join(DATA_DIR, f)); });
+    const extra = fs.readdirSync(DATA_DIR).filter(function (f) {
+      return /\.corrupt-\d{8}-\d{6}\.json$/.test(f) || /\.preopen-\d{4}-\d{2}-\d{2}$/.test(f);
+    }).sort().reverse();
+    extra.forEach(function (f) { files.push(path.join(DATA_DIR, f)); });
   } catch (e) {}
 
   const restored = [];
@@ -358,12 +494,19 @@ function recoverFromBackups() {
 
 /* جافاسكربت يُحقن قبل app.js: يزرع البيانات من SQLite ثم يعرّف خطّاف المزامنة */
 function bootJs() {
-  const data = JSON.stringify(loadAll());
+  const all = loadAllWithTimes();
+  const data = JSON.stringify(all.kv || {});
+  const times = JSON.stringify(all.at || {});
   return '/* نسخة مكتبية — تحميل البيانات من قاعدة البيانات المحلية قبل تشغيل التطبيق */\n' +
     '(function () {\n' +
     '  var DATA = ' + data + ';\n' +
+    '  var TIMES = ' + times + ';\n' +
     '  var ls = window.localStorage;\n' +
+    '  var AT_KEY = "app_kv_at";\n' +
+    '  var LOCAL_AT = {};\n' +
+    '  try { LOCAL_AT = JSON.parse(ls.getItem(AT_KEY) || "{}") || {}; } catch (e) { LOCAL_AT = {}; }\n' +
     '  var keep = [];\n' +
+    '  function saveAt() { try { ls.setItem(AT_KEY, JSON.stringify(LOCAL_AT)); } catch (e) {} }\n' +
     '  function count(v) {\n' +
     '    try { var p = JSON.parse(v); if (Array.isArray(p)) return p.length;\n' +
     '      if (p && typeof p === "object") return Object.keys(p).length; return 1; } catch (e) { return 0; }\n' +
@@ -371,14 +514,24 @@ function bootJs() {
     '  try {\n' +
     '    for (var k in DATA) {\n' +
     '      if (!Object.prototype.hasOwnProperty.call(DATA, k)) continue;\n' +
+    '      if (k === AT_KEY) continue;   /* خريطة أوقات الكتابة محلية بالكامل */\n' +
     '      var cur = null;\n' +
     '      try { cur = ls.getItem(k); } catch (e) { cur = null; }\n' +
-    '      /* القاعدة أقدم من اللي على الجهاز (كتابة فاتت قبل الإغلاق)؟ ما نكتبش\n' +
-    '         فوقه — ده اللي كان بيرجّع بيانات ناقصة بعد كل إعادة تشغيل. */\n' +
-    '      if (cur && cur !== DATA[k] && count(cur) > count(DATA[k])) { keep.push(k); continue; }\n' +
+    '      if (cur === DATA[k]) continue;\n' +
+    '      var localAt = Number(LOCAL_AT[k] || 0);\n' +
+    '      var dbAt = Number(TIMES[k] || 0);\n' +
+    '      /* نسخة الجهاز أحدث من القاعدة (تعديل ما لحقش يتخزن قبل القفل)؟\n' +
+    '         ما نكتبش فوقها ونرجّعها للقاعدة. المقارنة بالوقت مش بالعدد:\n' +
+    '         تعديل اسم/مبلغ بيسب عدد السجلات زي ما هو. */\n' +
+    '      if (cur && (localAt > dbAt || (localAt === dbAt && count(cur) > count(DATA[k])))) {\n' +
+    '        keep.push(k);\n' +
+    '        continue;\n' +
+    '      }\n' +
     '      ls.setItem(k, DATA[k]);\n' +
+    '      LOCAL_AT[k] = dbAt || Date.now();\n' +
     '    }\n' +
     '  } catch (e) {}\n' +
+    '  saveAt();\n' +
     '  if (window.__NIZAM_MIRROR__) return;\n' +
     '  var origSet = Storage.prototype.setItem;\n' +
     '  var origDel = Storage.prototype.removeItem;\n' +
@@ -399,15 +552,29 @@ function bootJs() {
     '  }\n' +
     '  Storage.prototype.setItem = function (k, v) {\n' +
     '    var r = origSet.call(this, k, v);\n' +
-    '    try { if (this === window.localStorage) push(k, String(v)); } catch (e) {}\n' +
+    '    try {\n' +
+    '      if (this === window.localStorage && k !== AT_KEY) {\n' +
+    '        LOCAL_AT[k] = Date.now();\n' +
+    '        try { origSet.call(window.localStorage, AT_KEY, JSON.stringify(LOCAL_AT)); } catch (e2) {}\n' +
+    '        push(k, String(v));\n' +
+    '      }\n' +
+    '    } catch (e) {}\n' +
     '    return r;\n' +
     '  };\n' +
     '  Storage.prototype.removeItem = function (k) {\n' +
     '    var r = origDel.call(this, k);\n' +
-    '    try { if (this === window.localStorage) push(k, null); } catch (e) {}\n' +
+    '    try {\n' +
+    '      if (this === window.localStorage && k !== AT_KEY) {\n' +
+    '        delete LOCAL_AT[k];\n' +
+    '        try { origSet.call(window.localStorage, AT_KEY, JSON.stringify(LOCAL_AT)); } catch (e2) {}\n' +
+    '        push(k, null);\n' +
+    '      }\n' +
+    '    } catch (e) {}\n' +
     '    return r;\n' +
     '  };\n' +
-    '  for (var i = 0; i < keep.length; i++) { try { push(keep[i], ls.getItem(keep[i])); } catch (e) {} }\n' +
+    '  for (var i = 0; i < keep.length; i++) {\n' +
+    '    try { push(keep[i], ls.getItem(keep[i])); } catch (e) {}\n' +
+    '  }\n' +
     '  window.__NIZAM_MIRROR__ = true;\n' +
     '})();\n';
 }
@@ -665,13 +832,27 @@ function start(port) {
 
 function stop() {
   return new Promise((resolve) => {
+    /* البيانات اتكتبت بالفعل (كل putKey بيعمل flush) — القفل هنا ما يضيّعش
+       حاجة، لكن من غير قطع الاتصالات المفتوحة close() ممكن يستنى طويل
+       والتطبيق يبان معلّق لما المستخدم يقفل النافذة. */
     try { if (db) db.close(); } catch (e) {}
     db = null;
-    server.close(() => resolve());
+    let done = false;
+    const finish = () => { if (!done) { done = true; resolve(); } };
+    try {
+      if (typeof server.closeAllConnections === 'function') server.closeAllConnections();
+      else if (typeof server.closeIdleConnections === 'function') server.closeIdleConnections();
+    } catch (e) { /* مش مدعوم */ }
+    try { server.close(finish); } catch (e) { finish(); }
+    const t = setTimeout(finish, 1500);
+    if (t && typeof t.unref === 'function') t.unref();
   });
 }
 
-module.exports = { start, stop, loadAll, putKey, dbStats, bootJs, DB_FILE, DIST, recoverFromBackups };
+module.exports = {
+  start, stop, loadAll, loadAllWithTimes, putKey, dbStats, bootJs,
+  DB_FILE, DATA_DIR, DIST, recoverFromBackups, migrateLegacyData, legacyDataDirs
+};
 
 if (require.main === module) {
   start().then((info) => {

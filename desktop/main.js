@@ -9,6 +9,17 @@ const { app, BrowserWindow, shell, Menu, ipcMain, dialog } = require('electron')
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
+/* ---------- مسار واحد ثابت لكل أوضاع التشغيل ----------
+   Electron بيبني مجلد البيانات من اسم التطبيق، والاسم بيختلف بين
+   المثبّت (Nizam Al-Idara) والتشغيل التطويري (nizam-al-idara-desktop)
+   والنسخة portable. أي اختلاف كان بيعمل بروفايل جديد = localStorage
+   وكوكيز Google جديدة. بنثبّت المسار قبل فتح أي نافذة. */
+try {
+  const FIXED_USER_DATA = path.join(app.getPath('appData'), 'Nizam Al-Idara');
+  fs.mkdirSync(FIXED_USER_DATA, { recursive: true });
+  app.setPath('userData', FIXED_USER_DATA);
+} catch (e) { /* لو مش مدعوم نكمل بالافتراضي */ }
+
 const server = require('./server');
 
 /* ترتيب التاريخ في حقول <input type="date"> بيتبع لغة واجهة Chromium.
@@ -25,13 +36,48 @@ let info = null;
 /* ---------- فولدر نسخ البيانات على قرص الجهاز ---------- */
 const BACKUP_CFG = path.join(app.getPath('userData'), 'local-backup.json');
 
+/* ترحيل إعداد فولدر النسخ من بروفايل قديم (اسم تطبيق مختلف) */
+try {
+  if (!fs.existsSync(BACKUP_CFG)) {
+    const appData = app.getPath('appData');
+    ['nizam-al-idara-desktop', 'nizam-al-idara', 'WorkFlow', 'nizam-idara'].some(function (n) {
+      const src = path.join(appData, n, 'local-backup.json');
+      if (!fs.existsSync(src)) return false;
+      try { fs.copyFileSync(src, BACKUP_CFG); return true; } catch (e) { return false; }
+    });
+  }
+} catch (e) { /* اختياري */ }
+
+/* كتابة ملف النسخة بشكل ذرّي: القفل المفاجئ في نص الكتابة ما يخرّبش
+   آخر نسخة سليمة في فولدر النسخ. */
+function writeBackupFileAtomic(file, data) {
+  const tmp = file + '.tmp';
+  fs.writeFileSync(tmp, data);
+  try {
+    const fd = fs.openSync(tmp, 'r+');
+    try { fs.fsyncSync(fd); } catch (e2) {}
+    try { fs.closeSync(fd); } catch (e2) {}
+  } catch (e2) {}
+  for (let i = 0; i < 4; i++) {
+    try { fs.renameSync(tmp, file); return true; }
+    catch (e3) {
+      if (i === 3) {
+        fs.writeFileSync(file, data);
+        try { fs.unlinkSync(tmp); } catch (e4) {}
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 function readBackupCfg() {
   try { return JSON.parse(fs.readFileSync(BACKUP_CFG, 'utf8')) || {}; } catch (e) { return {}; }
 }
 function writeBackupCfg(cfg) {
   try {
     fs.mkdirSync(path.dirname(BACKUP_CFG), { recursive: true });
-    fs.writeFileSync(BACKUP_CFG, JSON.stringify(cfg || {}));
+    writeBackupFileAtomic(BACKUP_CFG, JSON.stringify(cfg || {}));
   } catch (e) { /* ما نمنعش الواجهة بسبب فشل الحفظ */ }
 }
 function backupInfo() {
@@ -85,7 +131,7 @@ ipcMain.handle('backup:save', (e, payload) => {
   const name = safeName(payload && payload.name);
   if (!name) throw new Error('اسم ملف غير صالح');
   fs.mkdirSync(cfg.folder, { recursive: true });
-  fs.writeFileSync(path.join(cfg.folder, name), String((payload && payload.text) || ''));
+  writeBackupFileAtomic(path.join(cfg.folder, name), String((payload && payload.text) || ''));
   cfg.lastAt = new Date().toISOString();
   writeBackupCfg(cfg);
   pruneBackups(cfg.folder);
@@ -100,7 +146,7 @@ ipcMain.handle('backup:saveBinary', (e, payload) => {
   const buf = Buffer.from(String((payload && payload.base64) || ''), 'base64');
   if (!buf || !buf.length) throw new Error('الملف فاضي');
   fs.mkdirSync(cfg.folder, { recursive: true });
-  fs.writeFileSync(path.join(cfg.folder, name), buf);
+  writeBackupFileAtomic(path.join(cfg.folder, name), buf);
   cfg.lastAt = new Date().toISOString();
   writeBackupCfg(cfg);
   return backupInfo();
