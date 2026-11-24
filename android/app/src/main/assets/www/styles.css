@@ -1503,6 +1503,13 @@ label.btn{cursor:pointer;user-select:none}
 .dev-act__code{font-size:1.5rem;font-weight:800;letter-spacing:6px;margin:6px 0;color:#7dd3fc}
 .dev-act__brand{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:14px}
 .dev-act__mark{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;font-size:1.25rem;background:linear-gradient(135deg,#312e81,#4f46e5);box-shadow:0 8px 22px rgba(79,70,229,.45)}
+.dev-act__logo{width:52px;height:52px;border-radius:14px;display:block;object-fit:contain;background:#070b16;border:1px solid rgba(255,255,255,.12);box-shadow:0 8px 22px rgba(0,0,0,.4)}
+.dev-act__company{margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;align-items:center;gap:6px}
+.dev-act__company-img{max-width:170px;width:100%;height:auto;display:block;opacity:.95}
+.dev-act__company-name{font-size:.78rem;color:#cbd5e1;font-weight:700;line-height:1.7}
+.dev-act__company-tag{font-size:.7rem;color:var(--muted)}
+.dev-act__wa{display:inline-block;margin-top:2px;padding:7px 14px;border-radius:999px;background:rgba(37,211,102,.12);border:1px solid rgba(37,211,102,.45);color:#86efac!important;font-size:.78rem;font-weight:700;text-decoration:none}
+.dev-act__wa b{color:#86efac}
 .dev-act__name{display:block;font-size:1.02rem;letter-spacing:.5px}
 .dev-act__tag{display:block;font-size:.72rem;color:var(--muted);margin-top:2px}
 .dev-act__contact{margin-top:14px;font-size:.76rem;color:var(--muted);line-height:1.9}

@@ -34,6 +34,25 @@
 </head>
 <body>
 
+<!-- غطاء الإقلاع: يمنع ظهور القائمة الرئيسية لحظة قبل شاشة
+     التفعيل/الترحيب/كلمة المرور. أول شاشة جاهزة هي اللي بتشيله. -->
+<div id="appBootCover" aria-hidden="true" style="position:fixed;inset:0;z-index:90000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:radial-gradient(circle at 50% 32%,#141a3f 0%,#0a0d1a 55%,#05070f 100%);color:#e2e8f0;">
+  <img src="icons/logo-amw.png" alt="AMW Code" width="120" height="120" style="width:120px;height:120px;border-radius:26px;display:block;object-fit:contain;background:#0a0d1a;box-shadow:0 16px 40px rgba(0,0,0,.45)" />
+  <div style="font-size:1.15rem;font-weight:800;letter-spacing:.5px">AMW Code</div>
+  <div style="font-size:.82rem;color:#9fadc2">نظام الإدارة المتكامل</div>
+  <div style="font-size:.78rem;color:#64748b">جارٍ التحميل…</div>
+</div>
+<script>
+  /* تُستدعى من أول شاشة جاهزة (تفعيل الجهاز / الترحيب / كلمة المرور) */
+  window.__bootCoverDone = function () {
+    var c = document.getElementById('appBootCover');
+    if (c && c.parentNode) c.parentNode.removeChild(c);
+    try { document.documentElement.setAttribute('data-booted', '1'); } catch (e) {}
+  };
+  /* شبكة أمان: لو أي سكربت وقع، الغطاء ما يعلّقش التطبيق للأبد */
+  setTimeout(function () { try { window.__bootCoverDone(); } catch (e) {} }, 9000);
+</script>
+
 <!-- شاشة الربط الإلزامية -->
 <div id="forceAuthGate" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:#0a0e15;z-index:999999;display:flex;align-items:center;justify-content:center;">
   <div style="background:linear-gradient(180deg,#151b26,#0a0e15);border:1px solid #4f8cff;border-radius:24px;padding:32px 40px 40px;max-width:500px;width:90%;text-align:center;">
@@ -140,7 +159,7 @@
       </span>
       <span class="brand__text">
         <strong>WorkFlow</strong>
-        <small>الإصدار 1.0 · b20261124d</small>
+        <small>الإصدار 1.0 · b20261124e</small>
       </span>
     </button>
 

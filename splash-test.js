@@ -44,16 +44,19 @@ const ok = (n, c, x) => { if (c) { pass++; console.log('  PASS  ' + n); } else {
   await wait(400);
   console.log('\n[1] ظهور شاشة الترحيب');
   ok('الشاشة ظهرت', !!$('#awmSplash'));
-  ok('فيها اسم التطبيق', ($('#awmSplash') || {}).textContent.indexOf('WorkFlow') > -1);
+  ok('فيها اسم الشركة', ($('#awmSplash') || {}).textContent.indexOf('AMW Code') > -1);
+  ok('فيها شعار الشركة مش أيقونة التطبيق', ($('#awmSplash .awm-splash__mark-img') || {}).getAttribute('src') === 'icons/logo-amw.png');
   ok('فيها WELCOME', ($('#awmSplash') || {}).textContent.indexOf('Welcome') > -1);
   ok('فيها زر تخطي وزر صوت', !!$('#awmSkip') && !!$('#awmSound'));
-  ok('شاشة الدخول موجودة تحتها', !!$('#appLock'));
+  ok('شاشة كلمة المرور مؤجلة لحد ما الترحيب يخلص', !$('#appLock'));
 
   console.log('\n[2] التخطي');
   $('#awmSkip').dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
-  await wait(250);
+  await wait(350);
   ok('الشاشة اتشالت بالتخطي', !$('#awmSplash'));
   ok('اتسجلت في الجلسة', window.sessionStorage.getItem('app_splash_shown') === '1');
+  ok('شاشة كلمة المرور ظهرت بعد الترحيب', !!$('#appLock'));
+  ok('غطاء الإقلاع اتشال', !$('#appBootCover'));
   ok('التطبيق اقلع بعدها', !!window.__appBooted || !!$('#appLock'));
 
   console.log('\n[3] ملف صوت ناقص ما يعطّلش');

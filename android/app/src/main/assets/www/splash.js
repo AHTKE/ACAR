@@ -10,6 +10,8 @@
   'use strict';
 
   var AUDIO_SRC = 'assets/audio/welcome.mp3';
+  var LOGO_SRC = 'icons/logo-amw.png';   /* شعار الشركة (AW) — مش أيقونة التطبيق */
+  var COMPANY = 'AMW Code';
   var AUTO_MS = 4200;
   var START_MS = 450;
   var SESSION = 'app_splash_shown';
@@ -27,7 +29,7 @@
     '.awm-splash__tile{position:relative;width:200px;height:200px;border-radius:36px;overflow:hidden;z-index:2;' +
       'background:linear-gradient(160deg,#141a3f,#080b1e 62%,#05070f);display:grid;place-items:center;' +
       'box-shadow:0 0 0 1px rgba(255,255,255,.09),0 26px 60px rgba(0,0,0,.62),inset 0 0 46px rgba(139,92,246,.32)}' +
-    '.awm-splash__mark-img{width:100%;height:100%;object-fit:cover;display:block}' +
+    '.awm-splash__mark-img{width:100%;height:100%;object-fit:contain;padding:16px;display:block}' +
     '.awm-splash__mark{font-size:3.1rem;font-weight:800;letter-spacing:4px;' +
       'background:linear-gradient(90deg,#e879f9,#8b5cf6,#38bdf8,#22d3ee);-webkit-background-clip:text;background-clip:text;' +
       '-webkit-text-fill-color:transparent;color:transparent}' +
@@ -97,6 +99,12 @@
     try {
       if (window.__appLock && typeof window.__appLock.boot === 'function') window.__appLock.boot();
     } catch (e) {}
+    /* لو القفل ما ظهرش لأي سبب، نشيل غطاء الإقلاع بعد لحظة عشان ما نعلّقش التطبيق */
+    setTimeout(function () {
+      try {
+        if (!document.getElementById('appLock') && typeof window.__bootCoverDone === 'function') window.__bootCoverDone();
+      } catch (eCov) {}
+    }, 300);
   }
 
   function particles(canvas) {
@@ -154,10 +162,10 @@
           '<div class="awm-splash__ring awm-splash__ring--a"></div>' +
           '<div class="awm-splash__ring awm-splash__ring--b"></div>' +
           '<div class="awm-splash__tile">' +
-            '<img class="awm-splash__mark-img" src="icons/icon-512.png" alt="WorkFlow" width="200" height="200" />' +
+            '<img class="awm-splash__mark-img" src="' + LOGO_SRC + '" alt="' + COMPANY + '" width="200" height="200" />' +
             '<span class="awm-splash__shine"></span></div>' +
         '</div>' +
-        '<h1 class="awm-splash__title">WorkFlow</h1>' +
+        '<h1 class="awm-splash__title">' + COMPANY + '</h1>' +
         '<p class="awm-splash__sub">Welcome</p>' +
         '<p class="awm-splash__tag">نظام الإدارة المتكامل</p>' +
         '<div class="awm-splash__dots"><i></i><i></i><i></i></div>' +
@@ -166,7 +174,7 @@
         '<button type="button" id="awmSound">🔊 الصوت</button>' +
         '<button type="button" id="awmSkip">تخطّي ›</button>' +
       '</div>' +
-      '<div class="awm-splash__foot">© AW</div>';
+      '<div class="awm-splash__foot">© AMW Code</div>';
     document.body.appendChild(el);
 
     particles(el.querySelector('.awm-splash__fx'));
@@ -188,7 +196,10 @@
     window.addEventListener('keydown', unlockAudio, { once: true });
 
     timer = setTimeout(finish, AUTO_MS);
-    setTimeout(playAudio, START_MS);
+    /* لو شاشة تفعيل الجهاز ظاهرة، الصوت بتاع الترحيب ما يشتعلش تحتها */
+    setTimeout(function () {
+      if (!document.getElementById('deviceActivation')) playAudio();
+    }, START_MS);
   }
 
   function start() {

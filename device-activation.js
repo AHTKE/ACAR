@@ -23,6 +23,9 @@
   var CODE_WINDOW_MS = 3 * 60 * 1000;   /* نفس نافذة كود التفعيل على الخادم */
 
   var BRAND = 'WorkFlow';
+  var COMPANY = 'AMW Code';
+  var LOGO_SRC = 'icons/logo-amw.png';
+  var WORD_SRC = 'icons/logo-amw-word.png';
   var CONTACT_TEXT = '01013318895';
   var CONTACT_URL = 'https://wa.me/201013318895';
 
@@ -143,9 +146,14 @@
 
   function paintTimers() {
     paintTimer('daPassTimer', PASS_WINDOW_MS, 'passWin',
-      'انتهت صلاحية كلمة المرور السابقة — اطلب الكلمة الجديدة من المسؤول.');
+      'انتهت مدة هذا الباسورد — اطلب باسورد جديد من المسؤول.');
     paintTimer('daCodeTimer', CODE_WINDOW_MS, 'codeWin',
       'انتهت صلاحية كود التفعيل السابق — اطلب كودًا جديدًا من المسؤول.');
+  }
+
+  /* أول شاشة جاهزة (تفعيل/ترحيب/كلمة مرور) بتشيل غطاء الإقلاع */
+  function bootCoverDone() {
+    try { if (typeof window.__bootCoverDone === 'function') window.__bootCoverDone(); } catch (e) {}
   }
 
   function platformName() {
@@ -254,19 +262,22 @@
   function headHTML(title, sub) {
     return '<div class="dev-act__card">' +
       '<div class="dev-act__brand">' +
-        '<div class="dev-act__mark">🔒</div>' +
-        '<div><b class="dev-act__name">' + esc(brandName()) + '</b>' +
-        '<small class="dev-act__tag">تفعيل الجهاز</small></div>' +
+        '<img class="dev-act__logo" src="' + LOGO_SRC + '" alt="' + esc(COMPANY) + '" width="52" height="52" />' +
+        '<div><b class="dev-act__name">' + esc(COMPANY) + '</b>' +
+        '<small class="dev-act__tag">' + esc(brandName()) + ' · تفعيل الجهاز</small></div>' +
       '</div>' +
       '<h1 class="dev-act__title">' + esc(title) + '</h1>' +
       '<p class="dev-act__sub">' + sub + '</p>';
   }
 
   function contactHTML() {
-    return '<div class="dev-act__contact">' +
-      '<span>للتواصل وطلب الأكواد:</span> ' +
-      '<a href="' + CONTACT_URL + '" target="_blank" rel="noopener" dir="ltr">' + esc(CONTACT_TEXT) + '</a> ' +
-      '<span>(واتساب)</span>' +
+    return '<div class="dev-act__company">' +
+      '<img class="dev-act__company-img" src="' + WORD_SRC + '" alt="' + esc(COMPANY) + '" />' +
+      '<div class="dev-act__company-name">' + esc(COMPANY) + ' — نظام الإدارة المتكامل</div>' +
+      '<a class="dev-act__wa" href="' + CONTACT_URL + '" target="_blank" rel="noopener">' +
+        'تواصل عبر واتساب: <b dir="ltr">' + esc(CONTACT_TEXT) + '</b>' +
+      '</a>' +
+      '<div class="dev-act__company-tag">جهازك: ' + esc(platformName()) + '</div>' +
       '</div>';
   }
 
@@ -320,6 +331,7 @@
     o.innerHTML = body + '</div>';
     paintTimers();
     wire();
+    bootCoverDone();
   }
 
   function setErr(msg) {
@@ -390,6 +402,10 @@
       if (!d.ok) {
         state.step = 'passcode';
         render();
+        /* الباسورد القديم (انتهت مدته) له رسالة واضحة ومختلفة عن الخطأ العادي */
+        if (d.code === 'BAD_PASSCODE') {
+          return setErr('انتهت مدة هذا الباسورد أو أنه غير صحيح — اطلب باسورد جديد من المسؤول وأعد المحاولة.');
+        }
         return setErr(d.error || 'تعذّر التحقق');
       }
       state.step = 'code';
@@ -443,6 +459,7 @@
         state.activated = false;
         writeCache({ available: false, enforced: false });
         closeOverlay();
+        bootCoverDone();
         return state;
       }
       if (typeof d.serverNow === 'number' && isFinite(d.serverNow)) {
@@ -457,6 +474,7 @@
         render();
       } else {
         closeOverlay();
+        bootCoverDone();
       }
       return state;
     }, function () {
@@ -465,6 +483,7 @@
       if (token()) {          /* مفعّل قبل كده → ما نقفلوش */
         state.activated = true;
         closeOverlay();
+        bootCoverDone();
         return state;
       }
       if (cached.enforced === true) {
@@ -474,6 +493,7 @@
         render();
       } else {
         closeOverlay();       /* جهاز جديد ومفيش اتصال → ما نقفلش التطبيق */
+        bootCoverDone();
       }
       return state;
     });

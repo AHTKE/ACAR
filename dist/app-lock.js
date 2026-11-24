@@ -141,6 +141,8 @@
     var o = overlayEl();
     document.documentElement.setAttribute('data-app-locked', '1');
     o.innerHTML = bodyHTML(mode, rec ? rec.name : '');
+    /* شاشة القفل جاهزة → نشيل غطاء الإقلاع (منع ظهور القائمة الرئيسية قبلها) */
+    try { if (typeof window.__bootCoverDone === 'function') window.__bootCoverDone(); } catch (eCov) {}
     var box = $('#alErr', o);
 
     if (mode === 'create') wireCreate(o, box);
@@ -296,7 +298,11 @@
       settingsPanel();
       var unlocked = false;
       try { unlocked = sessionStorage.getItem(SESSION) === '1'; } catch (e) {}
-      if (unlocked) { closeOverlay(); return; }
+      if (unlocked) {
+        closeOverlay();
+        try { if (typeof window.__bootCoverDone === 'function') window.__bootCoverDone(); } catch (eCov) {}
+        return;
+      }
       show(readRec() ? 'login' : 'create');
     } catch (e) {
       /* أي فشل هنا ما يقفلش التطبيق */
@@ -312,7 +318,16 @@
   };
 
   function start() {
-    boot();
+    /* الترتيب المطلوب: شاشة الترحيب أولاً، وبعدها كلمة المرور، وبعدها القائمة.
+       فلو الترحيب شغّال نسيب boot له (بينده بعد ما يخلص)، وإلا نفتح القفل فوراً. */
+    if (!document.getElementById('awmSplash')) {
+      boot();
+    } else {
+      /* شبكة أمان: لو الترحيب اختفى لأي سبب وما فتحش القفل */
+      setTimeout(function () {
+        if (!document.getElementById('awmSplash') && !document.getElementById('appLock')) boot();
+      }, 6000);
+    }
     /* لو الإعدادات بتترسم بعدين، نحاول نضيف اللوحة كام مرة */
     [800, 2000, 4000].forEach(function (ms) { setTimeout(function () { try { settingsPanel(); } catch (e) {} }, ms); });
     document.addEventListener('click', function (e) {

@@ -1,7 +1,7 @@
 /* ============================================================
    نظام الإدارة المتكامل — Service Worker (عمل بدون إنترنت)
    ============================================================ */
-var CACHE = 'nizam-idara-v32';
+var CACHE = 'nizam-idara-v33';
 
 var SHELL = [
   './',
@@ -22,7 +22,8 @@ var SHELL = [
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',
   './icons/favicon.png',
-  './icons/logo-amw.png'
+  './icons/logo-amw.png',
+  './icons/logo-amw-word.png'
 ];
 
 self.addEventListener('install', function (event) {
