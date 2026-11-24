@@ -19,6 +19,8 @@
   var CACHE_KEY = 'device_activation_cache';
   var API = '/api/activation/';
   var TIMEOUT_MS = 12000;
+  var PASS_WINDOW_MS = 5 * 60 * 1000;   /* نفس نافذة كلمة المرور على الخادم */
+  var CODE_WINDOW_MS = 3 * 60 * 1000;   /* نفس نافذة كود التفعيل على الخادم */
 
   var BRAND = 'WorkFlow';
   var CONTACT_TEXT = '01013318895';
@@ -33,7 +35,10 @@
     busy: false,
     err: '',
     deviceCode: '',
-    secondsLeft: 0
+    secondsLeft: 0,
+    clockOffset: 0,     /* فرق ساعة الجهاز عن الخادم */
+    passWin: 0,
+    codeWin: 0
   };
 
   /* ---------- أدوات ---------- */
@@ -94,6 +99,53 @@
     Object.keys(patch || {}).forEach(function (k) { c[k] = patch[k]; });
     c.at = Date.now();
     lsSet(CACHE_KEY, JSON.stringify(c));
+  }
+
+  /* ---------- عداد الوقت ---------- */
+  function serverNowMs() {
+    return Date.now() + (Number(state.clockOffset) || 0);
+  }
+
+  function fmtClock(msLeft) {
+    var s = Math.max(0, Math.ceil(msLeft / 1000));
+    var m = Math.floor(s / 60);
+    s = s % 60;
+    return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  function timerBoxHTML(id, label, note) {
+    return '<div class="dev-act__timer">' +
+      '<div class="dev-act__timer-row">' +
+        '<span>' + esc(label) + '</span>' +
+        '<b id="' + id + 'Val" dir="ltr">--:--</b>' +
+      '</div>' +
+      '<div class="dev-act__bar"><i id="' + id + 'Bar"></i></div>' +
+      '<p class="dev-act__note" id="' + id + 'Note">' + esc(note) + '</p>' +
+      '</div>';
+  }
+
+  function paintTimer(id, winMs, winStateKey, expiredText) {
+    var val = document.getElementById(id + 'Val');
+    var bar = document.getElementById(id + 'Bar');
+    if (!val) return;
+    var t = serverNowMs();
+    var left = winMs - (t % winMs);
+    var win = Math.floor(t / winMs);
+    val.textContent = fmtClock(left);
+    val.className = left < 45000 ? 'warn' : '';
+    if (bar) bar.style.width = Math.max(0, Math.min(100, (left / winMs) * 100)) + '%';
+    if (state[winStateKey] && state[winStateKey] !== win) {
+      var note = document.getElementById(id + 'Note');
+      if (note) { note.textContent = expiredText; note.className = 'dev-act__note dev-act__note--warn'; }
+    }
+    state[winStateKey] = win;
+  }
+
+  function paintTimers() {
+    paintTimer('daPassTimer', PASS_WINDOW_MS, 'passWin',
+      'انتهت صلاحية كلمة المرور السابقة — اطلب الكلمة الجديدة من المسؤول.');
+    paintTimer('daCodeTimer', CODE_WINDOW_MS, 'codeWin',
+      'انتهت صلاحية كود التفعيل السابق — اطلب كودًا جديدًا من المسؤول.');
   }
 
   function platformName() {
@@ -238,6 +290,8 @@
       body = headHTML('تفعيل الجهاز',
           'الجهاز ده محتاج تفعيل قبل الاستخدام. اكتب كلمة المرور التشغيلية ' +
           '(6 أرقام، بتتغيّر كل 5 دقائق) واطلبها من المسؤول.') +
+        timerBoxHTML('daPassTimer', 'صلاحية كلمة المرور',
+          'كلمة المرور بتتغيّر تلقائيًا كل 5 دقائق — العداد بيوضّح الباقي منها.') +
         '<label class="dev-act__field"><span>كلمة المرور التشغيلية</span>' +
           '<div class="dev-act__pw">' +
             '<input type="password" id="daPass" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="••••••" dir="ltr" />' +
@@ -253,6 +307,8 @@
           'تمام — كلمة المرور مقبولة. ابعت «كود الجهاز» ده للمسؤول، ' +
           'وهو هيطلّع لك كود تفعيل من 6 أرقام صالح 3 دقائق للجهاز ده بس.') +
         deviceBoxHTML() +
+        timerBoxHTML('daCodeTimer', 'صلاحية كود التفعيل',
+          'كود التفعيل صالح 3 دقائق ومربوط بكود جهازك ده بس.') +
         '<label class="dev-act__field"><span>كود التفعيل (6 أرقام)</span>' +
           '<input type="text" id="daCode" class="dev-act__code-input" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="••••••" dir="ltr" />' +
         '</label>' +
@@ -262,6 +318,7 @@
         contactHTML();
     }
     o.innerHTML = body + '</div>';
+    paintTimers();
     wire();
   }
 
@@ -388,6 +445,9 @@
         closeOverlay();
         return state;
       }
+      if (typeof d.serverNow === 'number' && isFinite(d.serverNow)) {
+        state.clockOffset = d.serverNow - Date.now();
+      }
       state.available = true;
       state.enforced = !!d.enforced;
       state.activated = !!d.activated;
@@ -428,6 +488,9 @@
         if (!document.hidden) refresh(false);
       });
       setInterval(function () { if (!document.hidden) refresh(false); }, 10 * 60 * 1000);
+      setInterval(function () {
+        if (!document.hidden && document.getElementById('deviceActivation')) paintTimers();
+      }, 1000);
     } catch (e) {}
   }
 

@@ -1483,6 +1483,13 @@ label.btn{cursor:pointer;user-select:none}
 .dev-act__dev-row code{flex:1;min-width:0;font-size:.78rem;word-break:break-all;background:rgba(0,0,0,.35);border-radius:8px;padding:6px 8px;display:block}
 .dev-act__copy{border:1px solid rgba(56,189,248,.5);background:transparent;color:inherit;border-radius:8px;padding:5px 10px;font:inherit;font-size:.75rem;cursor:pointer;white-space:nowrap}
 .dev-act__note{margin:8px 0 0;font-size:.72rem;color:var(--muted);line-height:1.8}
+.dev-act__timer{margin-bottom:12px;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:10px 12px;text-align:right}
+.dev-act__timer-row{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:.78rem;color:var(--muted)}
+.dev-act__timer-row b{font-size:1.05rem;letter-spacing:1px;color:#7dd3fc;font-variant-numeric:tabular-nums}
+.dev-act__timer-row b.warn{color:#fca5a5}
+.dev-act__bar{height:6px;border-radius:999px;background:rgba(255,255,255,.1);overflow:hidden;margin-top:8px}
+.dev-act__bar i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#38bdf8,#6366f1);transition:width .9s linear}
+.dev-act__note--warn{color:#fca5a5}
 .dev-act__field{display:block;text-align:right;margin-bottom:10px}
 .dev-act__field span{display:block;font-size:.78rem;color:var(--muted);margin-bottom:5px}
 .dev-act__field input{width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.16);background:rgba(0,0,0,.32);color:inherit;font:inherit;letter-spacing:2px;text-align:center}
