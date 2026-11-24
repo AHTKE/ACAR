@@ -98,6 +98,8 @@ async function confirmPassword(win, pwd) {
   ok('رابط «رفع فولدر» موجود', !!doc.querySelector('#importFolderInput'));
   ok('رابط «ملف JSON واحد» موجود', !!doc.querySelector('#importFileInput'));
   ok('زر الرجوع مخفي قبل أي استبدال', !!doc.querySelector('#importUndoBtn') && doc.querySelector('#importUndoBtn').hidden);
+  ok('زر «نسخ Google Drive» موجود', !!doc.querySelector('#importDriveBtn'));
+  ok('مكان لائحة نسخ الدرايف موجود', !!doc.querySelector('#importDriveList'));
 
   console.log('\n[2] فولدر فيه ملفين — اختيار الأغنى');
   const snapSmall = JSON.stringify({ sections: { app_customers: JSON.stringify([{ name: 'واحد' }]) } });
@@ -153,6 +155,77 @@ async function confirmPassword(win, pwd) {
   const swapped = parse(win, 'app_pre_replace_backup');
   ok('الحالة اللي قبل الرجوع اتحفظت (تقدر ترجع لها)', !!swapped && !!swapped.sections && JSON.parse(swapped.sections.app_customers).length === 4, swapped && swapped.sections && JSON.parse(swapped.sections.app_customers).length);
   ok('مفيش أخطاء JS', errors.length === 0, errors.join(' | '));
+
+  console.log('\n[6] ملف نسخة فولدر الجهاز (snapshot + data)');
+  const lbDump = JSON.stringify({
+    app: 'nizam-idara', version: 1, savedAt: '2026-02-02T10:00:00.000Z',
+    snapshot: { sections: { app_customers: JSON.stringify(NEW_CUSTOMERS) } },
+    data: { app_customers: JSON.stringify(NEW_CUSTOMERS), app_suppliers: JSON.stringify(SUPPLIERS) }
+  });
+  chooseFiles(win, doc.querySelector('#importFileInput'), [
+    new win.File([lbDump], 'nizam-backup-20260202-100000.json', { type: 'application/json' })
+  ]);
+  await wait(400);
+  const lbBody = doc.querySelector('#importBody').textContent;
+  ok('ملف نسخة الفولدر اتعرف (كان بيرجّع «مفيش ملف صالح»)', !!doc.querySelector('[data-import-apply]'), lbBody.slice(0, 300));
+  ok('المعاينة فيها ٤ سجل عملاء', lbBody.indexOf('4 سجل') > -1 || lbBody.indexOf('٤') > -1, lbBody.slice(0, 300));
+  ok('تاريخ النسخة اتقرأ من savedAt', lbBody.indexOf('2026') > -1, lbBody.slice(0, 300));
+  doc.querySelector('[data-import-cancel]').click();
+  await wait(60);
+
+  console.log('\n[7] نسخ Google Drive داخل نفس اللوحة');
+  const DRIVE_SNAP = {
+    updatedAt: '2026-03-03T09:00:00.000Z',
+    sections: { app_customers: JSON.stringify(NEW_CUSTOMERS) }
+  };
+  win.fetch = (url) => {
+    const u = String(url);
+    if (u.indexOf('/api/sync/versions') === 0) {
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({
+        ok: true,
+        versions: [{ id: 'ver-1', name: 'نسخة 2026-03-03 09.00.00', modifiedTime: '2026-03-03T09:00:00Z', size: 2048 }],
+        latest: { id: 'latest-1', name: 'nizam-sync.json', modifiedTime: '2026-03-04T09:00:00Z', size: 4096 }
+      }) });
+    }
+    if (u.indexOf('/api/sync/version?id=') === 0) {
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true, snapshot: DRIVE_SNAP }) });
+    }
+    if (u.indexOf('/api/sync/pull') === 0) {
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({
+        ok: true, exists: true, updatedAt: '2026-03-04T09:00:00Z',
+        snapshot: { sections: { app_customers: JSON.stringify(CUSTOMERS) } }
+      }) });
+    }
+    return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({ ok: false }) });
+  };
+  doc.querySelector('#importDriveBtn').click();
+  await wait(200);
+  const driveRows = doc.querySelectorAll('[data-import-drive]');
+  ok('لائحة نسخ الدرايف ظهرت', driveRows.length === 1, doc.querySelector('#importDriveList').textContent.slice(0, 200));
+  ok('زر «أحدث نسخة» ظاهر', !!doc.querySelector('[data-import-latest]'));
+  driveRows[0].click();
+  await wait(250);
+  ok('معاينة نسخة الدرايف ظهرت', !!doc.querySelector('[data-import-apply]'));
+  ok('المصدر مكتوب Google Drive', doc.querySelector('#importBody').textContent.indexOf('Google Drive') > -1);
+  ok('الاستبدال من الدرايف ما اتنفذش قبل كلمة المرور', (parse(win, 'app_customers') || []).length === 2);
+  doc.querySelector('[data-import-apply]').click();
+  await wait(60);
+  await confirmPassword(win, '2468');
+  await wait(300);
+  ok('اتطبق استبدال من الدرايف (٤ عملاء)', (parse(win, 'app_customers') || []).length === 4, (parse(win, 'app_customers') || []).length);
+  ok('الرجوع متاح بعد استبدال الدرايف', doc.querySelector('#importUndoBtn').hidden === false);
+
+  console.log('\n[8] أحدث نسخة على الدرايف');
+  doc.querySelector('#importDriveBtn').click();
+  await wait(200);
+  doc.querySelector('[data-import-latest]').click();
+  await wait(300);
+  const latestBody = doc.querySelector('#importBody').textContent;
+  ok('أحدث نسخة اتحملت للمعاينة', !!doc.querySelector('[data-import-apply]'));
+  ok('المعاينة من «أحدث نسخة»', latestBody.indexOf('أحدث نسخة') > -1, latestBody.slice(0, 200));
+  doc.querySelector('[data-import-cancel]').click();
+  await wait(60);
+  ok('مفيش أخطاء JS بعد الدرايف', errors.length === 0, errors.join(' | '));
 
   console.log('\nالنتيجة: ' + pass + ' ناجح، ' + fail + ' فاشل');
   process.exit(fail ? 1 : 0);

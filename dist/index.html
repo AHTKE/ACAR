@@ -140,7 +140,7 @@
       </span>
       <span class="brand__text">
         <strong>WorkFlow</strong>
-        <small>الإصدار 1.0 · b20261123c</small>
+        <small>الإصدار 1.0 · b20261124a</small>
       </span>
     </button>
 
@@ -1492,15 +1492,17 @@
         </div>
 
         <div class="panel" style="grid-column:1/-1">
-          <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-exchange"/></svg> استبدال البيانات من فولدر على الجهاز</h3>
-          <p class="panel__hint">اختار فولدر من جهازك فيه ملف نسخة بصيغة <b>JSON</b> (زي ملف المزامنة أو النسخة الاحتياطية) — التطبيق بيقرا الملف ويستبدل بيه بيانات الأقسام اللي فيه. <b>قبل الاستبدال</b> بيتحفظ نسخة كاملة من بياناتك الحالية، وتقدر ترجع لها في أي وقت بزر «رجوع للنسخة قبل الاستبدال». العملية محمية بكلمة مرور.</p>
+          <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-exchange"/></svg> استرجاع البيانات — من الجهاز أو Google Drive</h3>
+          <p class="panel__hint">الاسترجاع بيقبل <b>النسختين</b>: ملف/فولدر على جهازك بصيغة <b>JSON</b> (ملف المزامنة أو نسخة الفولدر <b>nizam-backup-…json</b>)، أو أي نسخة محفوظة على <b>Google Drive</b> (أحدث نسخة أو أي نسخة مؤرشفة). التطبيق بيقرا الأقسام ويستبدل بيها بياناتك. <b>قبل الاستبدال</b> بيتحفظ نسخة كاملة من بياناتك الحالية، وتقدر ترجع لها في أي وقت بزر «رجوع للنسخة قبل الاستبدال». العملية محمية بكلمة مرور.</p>
           <div class="form__actions" style="margin-top:4px">
             <label class="btn btn--primary" for="importFolderInput" id="importFolderLabel"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-save"/></svg> رفع فولدر من الجهاز</label>
             <input type="file" id="importFolderInput" webkitdirectory directory multiple accept=".json,application/json" hidden />
             <label class="btn btn--ghost" for="importFileInput" id="importFileLabel">اختيار ملف JSON واحد</label>
             <input type="file" id="importFileInput" accept=".json,application/json" hidden />
+            <button type="button" class="btn btn--primary" id="importDriveBtn"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-link"/></svg> نسخ Google Drive</button>
             <button type="button" class="btn btn--ghost" id="importUndoBtn" hidden>رجوع للنسخة قبل الاستبدال</button>
           </div>
+          <div id="importDriveList" class="drive-diag" hidden></div>
           <div id="importBody"></div>
         </div>
 

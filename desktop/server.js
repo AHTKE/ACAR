@@ -95,8 +95,25 @@ function writeAtomic(file, text) {
   } finally {
     try { fs.closeSync(fd); } catch (e) {}
   }
-  try { fs.renameSync(tmp, file); return true; }
-  catch (e) { try { fs.unlinkSync(tmp); } catch (e2) {} throw e; }
+  /* إعادة التسمية ممكن تفشل مؤقتًا على ويندوز لو مضاد الفيروسات فاتح الملف.
+     بدون إعادة المحاولة كان التعديل يضيع في صمت. */
+  for (let i = 0; i < 4; i++) {
+    try { fs.renameSync(tmp, file); return true; }
+    catch (e) {
+      if (i < 3) {
+        const until = Date.now() + 40;
+        while (Date.now() < until) { /* انتظار قصير قبل المحاولة التالية */ }
+        continue;
+      }
+      /* آخر محاولة: نكتب المحتوى مباشرة بدل ما نلغي الحفظ بالكامل */
+      try {
+        fs.writeFileSync(file, text);
+        try { fs.unlinkSync(tmp); } catch (e2) {}
+        return true;
+      } catch (e3) { try { fs.unlinkSync(tmp); } catch (e2) {} throw e3; }
+    }
+  }
+  return false;
 }
 
 /* نسخة احتياطية من قاعدة SQLite مرة كل ١٢ ساعة (لو الملف موجود وسليم) */
@@ -294,7 +311,7 @@ function dbStats() {
   try { bytes = fs.statSync(d.file).size; } catch (e) {}
   let extra = {};
   try { if (typeof d.info === 'function') extra = d.info(); } catch (e) {}
-  return Object.assign({ keys: d.count(), bytes: bytes, file: d.file, engine: d.engine }, extra);
+  return Object.assign({ keys: d.count(), bytes: bytes, file: d.file, dir: DATA_DIR, engine: d.engine }, extra);
 }
 
 /* هل القيمة دي "فاضية"؟ (مفتاح مش موجود / مصفوفة فاضية / كائن فاضي) */
@@ -346,18 +363,38 @@ function bootJs() {
     '(function () {\n' +
     '  var DATA = ' + data + ';\n' +
     '  var ls = window.localStorage;\n' +
+    '  var keep = [];\n' +
+    '  function count(v) {\n' +
+    '    try { var p = JSON.parse(v); if (Array.isArray(p)) return p.length;\n' +
+    '      if (p && typeof p === "object") return Object.keys(p).length; return 1; } catch (e) { return 0; }\n' +
+    '  }\n' +
     '  try {\n' +
     '    for (var k in DATA) {\n' +
-    '      if (Object.prototype.hasOwnProperty.call(DATA, k)) ls.setItem(k, DATA[k]);\n' +
+    '      if (!Object.prototype.hasOwnProperty.call(DATA, k)) continue;\n' +
+    '      var cur = null;\n' +
+    '      try { cur = ls.getItem(k); } catch (e) { cur = null; }\n' +
+    '      /* القاعدة أقدم من اللي على الجهاز (كتابة فاتت قبل الإغلاق)؟ ما نكتبش\n' +
+    '         فوقه — ده اللي كان بيرجّع بيانات ناقصة بعد كل إعادة تشغيل. */\n' +
+    '      if (cur && cur !== DATA[k] && count(cur) > count(DATA[k])) { keep.push(k); continue; }\n' +
+    '      ls.setItem(k, DATA[k]);\n' +
     '    }\n' +
     '  } catch (e) {}\n' +
     '  if (window.__NIZAM_MIRROR__) return;\n' +
     '  var origSet = Storage.prototype.setItem;\n' +
     '  var origDel = Storage.prototype.removeItem;\n' +
-    '  function push(key, value) {\n' +
+    '  function push(key, value, tries) {\n' +
+    '    tries = tries || 0;\n' +
     '    try {\n' +
     "      fetch('/local/kv', { method: 'POST', headers: { 'Content-Type': 'application/json' }, " +
-    'keepalive: true, body: JSON.stringify({ key: key, value: value }) });\n' +
+    'keepalive: true, body: JSON.stringify({ key: key, value: value }) }).then(function (r) {\n' +
+    '        if (r && r.ok) { window.__NIZAM_MIRROR_ERR__ = \'\'; return; }\n' +
+    '        throw new Error(\'kv \' + (r && r.status));\n' +
+    '      }).catch(function () {\n' +
+    '        /* إعادة المحاولة ضرورية: من غيرها أي فشل شبكة/حجم كان بيسيب\n' +
+    '           القاعدة أقدم من البيانات فتختفي آخر الإضافات بعد إعادة التشغيل. */\n' +
+    '        if (tries < 4) setTimeout(function () { push(key, value, tries + 1); }, 600 * (tries + 1));\n' +
+    '        else window.__NIZAM_MIRROR_ERR__ = String(key);\n' +
+    '      });\n' +
     '    } catch (e) {}\n' +
     '  }\n' +
     '  Storage.prototype.setItem = function (k, v) {\n' +
@@ -370,6 +407,7 @@ function bootJs() {
     '    try { if (this === window.localStorage) push(k, null); } catch (e) {}\n' +
     '    return r;\n' +
     '  };\n' +
+    '  for (var i = 0; i < keep.length; i++) { try { push(keep[i], ls.getItem(keep[i])); } catch (e) {} }\n' +
     '  window.__NIZAM_MIRROR__ = true;\n' +
     '})();\n';
 }
@@ -518,8 +556,29 @@ const server = http.createServer(async (req, res) => {
     catch (e) { json(res, 500, { ok: false, error: String(e && e.message) }); }
     return;
   }
+  /* كتابة كل المفاتيح مرة واحدة — بيستخدمها الإغلاق الآمن في main.js
+     عشان أي كتابة لسه في الطريق ما تضيعش عند قفل النافذة. */
+  if (pathname === '/local/kv-bulk' && req.method === 'POST') {
+    const raw = await readBody(req, 32 * 1024 * 1024);
+    if (!raw) { json(res, 413, { ok: false, error: 'جسم الطلب فارغ أو كبير' }); return; }
+    let body = null;
+    try { body = JSON.parse(raw); } catch (e) { body = null; }
+    if (!body || typeof body !== 'object') { json(res, 400, { ok: false, error: 'JSON غير صالح' }); return; }
+    let n = 0;
+    try {
+      Object.keys(body).forEach(function (k) {
+        if (!k || k.length > 200) return;
+        const v = body[k];
+        putKey(k, (v === undefined || v === null) ? null : String(v));
+        n++;
+      });
+      json(res, 200, { ok: true, keys: n });
+    } catch (e) { json(res, 500, { ok: false, error: String(e && e.message) }); }
+    return;
+  }
+
   if (pathname === '/local/kv' && req.method === 'POST') {
-    const raw = await readBody(req, 2 * 1024 * 1024);
+    const raw = await readBody(req, 32 * 1024 * 1024);
     if (!raw) { json(res, 400, { ok: false, error: 'جسم الطلب فارغ أو كبير' }); return; }
     let body;
     try { body = JSON.parse(raw); } catch (e) { json(res, 400, { ok: false, error: 'JSON غير صالح' }); return; }

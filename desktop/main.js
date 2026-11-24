@@ -195,6 +195,54 @@ function watchLink() {
   }, 1500);
 }
 
+/* ---------- إغلاق آمن: نكتب كل البيانات قبل ما الخادم يقف ----------
+   المشكلة اللي كان العميل يشوفها: يقفل التطبيق، وبعدين يفتحه فيلاقي
+   آخر الإضافات (العملاء الجدد) اختفت. السبب إن الكتابة للقاعدة كانت
+   بتتبعت من الواجهة في الخلفية، والخادم كان بيقف قبل ما توصل.
+   هنا بنقرا localStorage كله ونبعته مرة واحدة قبل الخروج. */
+function flushRendererData() {
+  return new Promise(function (resolve) {
+    if (!win || win.isDestroyed() || !info || !info.port) return resolve(false);
+    let done = false;
+    function finish(v) { if (done) return; done = true; resolve(v); }
+    const guard = setTimeout(function () { finish(false); }, 3000);
+    let script =
+      '(function(){try{var o={};for(var i=0;i<localStorage.length;i++){' +
+      'var k=localStorage.key(i);if(k)o[k]=localStorage.getItem(k);}' +
+      'return JSON.stringify(o);}catch(e){return "";}})()';
+    win.webContents.executeJavaScript(script, true).then(function (raw) {
+      if (!raw || raw.length < 3) { clearTimeout(guard); return finish(true); }
+      let req;
+      try {
+        req = http.request({
+          host: '127.0.0.1', port: info.port, path: '/local/kv-bulk', method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(raw)
+          },
+          timeout: 2500
+        }, function (res) {
+          res.resume();
+          res.on('end', function () { clearTimeout(guard); finish(true); });
+        });
+      } catch (e) { clearTimeout(guard); return finish(false); }
+      req.on('error', function () { clearTimeout(guard); finish(false); });
+      req.on('timeout', function () { try { req.destroy(); } catch (e) {} clearTimeout(guard); finish(false); });
+      try { req.write(raw); req.end(); } catch (e) { clearTimeout(guard); finish(false); }
+    }).catch(function () { clearTimeout(guard); finish(false); });
+  });
+}
+
+let shuttingDown = false;
+function shutdown() {
+  if (shuttingDown) return Promise.resolve();
+  shuttingDown = true;
+  stopLinkWatch();
+  return flushRendererData()
+    .catch(function () {})
+    .then(function () { return server.stop().catch(function () {}); });
+}
+
 function createWindow() {
   /* لو فيه نافذة شغالة بالفعل نكتفي بتركيزها */
   if (focusWindow()) return win;
@@ -221,6 +269,17 @@ function createWindow() {
   win.loadURL('http://127.0.0.1:' + info.port + '/');
 
   win.on('closed', function () { win = null; });
+
+  /* زر الإغلاق: نمنع القفل لحد ما البيانات تتكتب، وبعدين نقفل */
+  win.on('close', function (e) {
+    if (win.__nizamReadyToClose) return;
+    e.preventDefault();
+    shutdown().finally(function () {
+      try {
+        if (win && !win.isDestroyed()) { win.__nizamReadyToClose = true; win.destroy(); }
+      } catch (e2) { app.quit(); }
+    });
+  });
 
   /* أي رابط خارجي (زي صفحة موافقة Google) يفتح في المتصفح الافتراضي،
      ونافذة التطبيق تفضل مكانها. لازم نلتقط كمان الـredirects من الخادم
@@ -310,9 +369,14 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   stopLinkWatch();
-  server.stop().finally(() => app.quit());
+  shutdown().finally(() => app.quit());
 });
 
-app.on('before-quit', () => {
-  server.stop().catch(() => {});
+app.on('before-quit', (e) => {
+  if (app.__nizamReadyToQuit) return;
+  e.preventDefault();
+  shutdown().finally(() => {
+    app.__nizamReadyToQuit = true;
+    app.quit();
+  });
 });

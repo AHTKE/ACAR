@@ -6243,12 +6243,45 @@
     } catch (e) { return null; }
   }
 
+  /* الملفات اللي ممكن تيجي من الجهاز بأشكال مختلفة:
+     ① ملف مزامنة: { sections: {...} }
+     ② نسخة فولدر الجهاز: { snapshot:{ sections:{...} }, data:{ key: raw } }
+     ③ نسخة الرجوع: { backup:{ sections } } أو { sections } مع updatedAt
+     فبندوّر على أي كائن جواه مفاتيح أقسام معروفة، وده اللي كان ناقص
+     فملفات الباك أب بتاعة الفولدر ما كانتش تتعرف. */
+  function importPickSections(obj) {
+    var cands = [
+      obj && obj.sections,
+      obj && obj.snapshot && obj.snapshot.sections,
+      obj && obj.backup && obj.backup.sections,
+      obj && obj.data,
+      obj
+    ];
+    for (var i = 0; i < cands.length; i++) {
+      var c = cands[i];
+      if (!c || typeof c !== 'object' || Array.isArray(c)) continue;
+      for (var j = 0; j < SYNC_KEYS.length; j++) {
+        if (Object.prototype.hasOwnProperty.call(c, SYNC_KEYS[j])) return c;
+      }
+    }
+    return null;
+  }
+
+  function importMetaAt(obj) {
+    if (!obj) return '';
+    return String(
+      obj.updatedAt || obj.savedAt || obj.at ||
+      (obj.snapshot && (obj.snapshot.updatedAt || obj.snapshot.savedAt)) || ''
+    );
+  }
+
   /* يقرا نص JSON ويرجّع الأقسام المعروفة بس، أو null لو مفيش بيانات */
   function importParseText(text, fileName) {
     var obj;
     try { obj = JSON.parse(String(text || '')); } catch (e) { return null; }
     if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
-    var src = (obj.sections && typeof obj.sections === 'object' && !Array.isArray(obj.sections)) ? obj.sections : obj;
+    var src = importPickSections(obj);
+    if (!src) return null;
     var sections = {}, found = 0, total = 0;
     SYNC_KEYS.forEach(function (k) {
       if (!Object.prototype.hasOwnProperty.call(src, k)) return;
@@ -6268,8 +6301,9 @@
       found: found,
       total: total,
       fileName: String(fileName || ''),
-      at: String(obj.updatedAt || obj.at || ''),
-      note: String(obj.reason || obj.note || '')
+      at: importMetaAt(obj),
+      note: String(obj.reason || obj.note || ''),
+      source: String(fileName || '')
     };
   }
 
@@ -6284,6 +6318,146 @@
       }
     });
     return best;
+  }
+
+  /* ---------- نسخ Google Drive (بجانب الفولدر/الملف على الجهاز) ---------- */
+  var importDrive = { versions: [], latest: null, busy: false, error: '' };
+
+  /* نسخة الدرايف → نفس المعاينة والاستبدال والرجوع بالظبط */
+  function importFromSnapshot(snap, label, at) {
+    if (!snap || !snap.sections) return null;
+    var p = importParseText(JSON.stringify({
+      sections: snap.sections,
+      updatedAt: at || snap.updatedAt || '',
+      device: snap.device || ''
+    }), label || 'نسخة Google Drive');
+    if (!p) return null;
+    p.source = 'Google Drive';
+    return p;
+  }
+
+  function importUseDriveSnapshot(snap, label, at) {
+    var p = importFromSnapshot(snap, label, at);
+    if (!p) { toast('النسخة دي مفيهاش أقسام معروفة', true); return false; }
+    importPending = p;
+    importStatus = 'تم تحميل «' + label + '» من Google Drive — راجع الأقسام واضغط استبدال.';
+    renderImportPanel();
+    toast('النسخة جاهزة — راجع الأقسام واضغط استبدال');
+    return true;
+  }
+
+  function importDriveFmt(iso) {
+    if (!iso) return '';
+    try { return new Date(iso).toLocaleString('ar-EG'); } catch (e) { return String(iso); }
+  }
+
+  function importDriveRender() {
+    var box = $('#importDriveList');
+    if (!box) return;
+    box.hidden = false;
+    if (importDrive.busy) {
+      box.className = 'drive-diag';
+      box.innerHTML = '<b>جارٍ تحميل نسخ Google Drive…</b>';
+      return;
+    }
+    if (importDrive.error) {
+      box.className = 'drive-diag is-bad';
+      box.innerHTML = '<b>تعذّر تحميل نسخ Google Drive</b>' +
+        '<span class="diag-step">' + esc(importDrive.error) + '</span>';
+      return;
+    }
+    box.className = 'drive-diag';
+    var rows = [];
+    if (importDrive.latest) {
+      rows.push('<li style="display:flex;justify-content:space-between;align-items:center;gap:8px">' +
+        '<span><b>أحدث نسخة على الدرايف</b>' +
+        (importDrive.latest.modifiedTime ? ' — ' + esc(importDriveFmt(importDrive.latest.modifiedTime)) : '') +
+        '</span><button type="button" class="btn btn--ghost btn--sm" data-import-latest="1">تحميل ومعاينة</button></li>');
+    }
+    (importDrive.versions || []).forEach(function (v, i) {
+      rows.push('<li style="display:flex;justify-content:space-between;align-items:center;gap:8px">' +
+        '<span>' + esc(v.name || 'نسخة') +
+        (v.modifiedTime ? ' — ' + esc(importDriveFmt(v.modifiedTime)) : '') +
+        (v.size ? ' — ' + Math.max(1, Math.round(v.size / 1024)) + ' KB' : '') +
+        '</span><button type="button" class="btn btn--ghost btn--sm" data-import-drive="' + i + '">تحميل ومعاينة</button></li>');
+    });
+    if (!rows.length) {
+      box.innerHTML = '<b>مفيش نسخ محفوظة على Google Drive</b>' +
+        '<span class="diag-step">اربط الحساب من «ربط Google Drive» أو ارفع نسخة مزامنة الأول — أو استخدم الفولدر/الملف على جهازك من الأزرار فوق.</span>';
+      return;
+    }
+    box.innerHTML = '<b>نسخ Google Drive المتاحة (' + rows.length + ')</b>' +
+      '<ul style="list-style:none;padding:0;margin:8px 0 0;display:grid;gap:6px">' + rows.join('') + '</ul>';
+  }
+
+  function importDriveLoad() {
+    if (typeof fetch !== 'function') return Promise.resolve(null);
+    importDrive.busy = true;
+    importDrive.error = '';
+    importDriveRender();
+    return fetch('/api/sync/versions', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        importDrive.busy = false;
+        if (!j || !j.ok) {
+          importDrive.error = (j && j.error) || 'تعذّر قراءة نسخ الدرايف';
+          importDriveRender();
+          return null;
+        }
+        importDrive.versions = j.versions || [];
+        importDrive.latest = j.latest || null;
+        importDriveRender();
+        return j;
+      })
+      .catch(function () {
+        importDrive.busy = false;
+        importDrive.error = 'تعذّر الوصول لخدمة المزامنة — راجع ربط Google Drive أو الاتصال بالإنترنت.';
+        importDriveRender();
+        return null;
+      });
+  }
+
+  function importDriveLatest(btn) {
+    if (importDrive.busy) return;
+    importDrive.busy = true;
+    importDriveRender();
+    if (btn) { btn.disabled = true; btn.textContent = 'جارٍ التحميل…'; }
+    fetch('/api/sync/pull', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        importDrive.busy = false;
+        if (!j || !j.ok || !j.exists || !j.snapshot) throw new Error((j && j.error) || 'مفيش نسخة حالية على الدرايف');
+        importDriveRender();
+        importUseDriveSnapshot(j.snapshot, 'أحدث نسخة على Google Drive', j.updatedAt || j.modifiedTime);
+      })
+      .catch(function (e) {
+        importDrive.busy = false;
+        importDriveRender();
+        toast('تعذّر تحميل نسخة الدرايف: ' + (e && e.message ? e.message : e), true);
+      });
+  }
+
+  function importDriveVersion(i, btn) {
+    var v = (importDrive.versions || [])[Number(i)];
+    if (!v || !v.id) { toast('النسخة غير موجودة', true); return; }
+    if (importDrive.busy) return;
+    importDrive.busy = true;
+    if (btn) { btn.disabled = true; btn.textContent = 'جارٍ التحميل…'; }
+    fetch('/api/sync/version?id=' + encodeURIComponent(v.id), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        importDrive.busy = false;
+        if (btn) { btn.disabled = false; btn.textContent = 'تحميل ومعاينة'; }
+        if (!j || !j.ok || !j.snapshot) throw new Error((j && j.error) || 'تعذّر قراءة النسخة');
+        importDriveRender();
+        importUseDriveSnapshot(j.snapshot, v.name || 'نسخة Google Drive', v.modifiedTime);
+      })
+      .catch(function (e) {
+        importDrive.busy = false;
+        if (btn) { btn.disabled = false; btn.textContent = 'تحميل ومعاينة'; }
+        importDriveRender();
+        toast('تعذّر تحميل النسخة: ' + (e && e.message ? e.message : e), true);
+      });
   }
 
   function readFileText(file) {
@@ -6321,6 +6495,7 @@
           return;
         }
         importPending = best;
+        best.source = sourceLabel;
         importStatus = 'تم قراءة «' + best.fileName + '» من ' + sourceLabel +
           (cands.length > 1 ? ' (اختارنا أغنى ملف من ' + cands.length + ' ملف فيه بيانات)' : '') +
           ' — راجع الأقسام واضغط استبدال.';
@@ -6364,7 +6539,7 @@
     if (!keys.length) { toast('الملف مفيهوش بيانات', true); return false; }
 
     /* ١) نسخة الرجوع — لو مفيش مساحة نوقف قبل أي تغيير */
-    if (!saveImportBackup({ source: 'فولدر/ملف من الجهاز', fileName: p.fileName })) {
+    if (!saveImportBackup({ source: p.source || 'فولدر/ملف من الجهاز', fileName: p.fileName })) {
       toast('مساحة التخزين مش كفاية لحفظ نسخة الرجوع — البيانات ما اتغيرتش', true);
       importStatus = 'فشل: مساحة التخزين مش كفاية لحفظ نسخة الرجوع. البيانات ما اتغيرتش خالص.';
       renderImportPanel();
@@ -6492,7 +6667,8 @@
 
     if (importPending) {
       var p = importPending;
-      html += '<div class="panel__note" style="margin-top:10px"><b>الملف:</b> ' + esc(p.fileName) +
+      html += '<div class="panel__note" style="margin-top:10px"><b>المصدر:</b> ' +
+        esc(p.source || 'فولدر/ملف من الجهاز') + ' — <b>الملف:</b> ' + esc(p.fileName) +
         (p.at ? ' — تاريخ النسخة: ' + esc(p.at) : '') +
         '<br />هيتم استبدال <b>' + p.found + '</b> قسم فيها <b>' + p.total + '</b> سجل بالبيانات اللي في الملف ده.</div>' +
         importRowsHTML(p.sections) +
@@ -10114,6 +10290,17 @@
       renderImportPanel();
       return;
     }
+
+    var driveRow = t.closest('[data-import-drive]');
+    if (driveRow) { importDriveVersion(driveRow.getAttribute('data-import-drive'), driveRow); return; }
+
+    var driveLatest = t.closest('[data-import-latest]');
+    if (driveLatest) { importDriveLatest(driveLatest); return; }
+  });
+
+  var importDriveBtn = $('#importDriveBtn');
+  if (importDriveBtn) importDriveBtn.addEventListener('click', function () {
+    importDriveLoad();
   });
 
   var importUndoBtn = $('#importUndoBtn');
