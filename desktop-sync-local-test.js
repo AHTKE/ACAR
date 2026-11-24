@@ -185,12 +185,24 @@ const snap = (tag) => ({
   ok('مفيش ملف مزامنة مكرر', files.filter(function (f) { return f.name === 'sync-latest.json'; }).length === 1);
   ok('مفيش بريد لما sendEmail مش مطلوب', mailSent.length === 1, mailSent.length);
 
+  console.log('\n[3b] صفر فقدان: جهاز ناقصه قسم ما يمسحوش من السحابة');
+  r = await call('/api/sync/push', {
+    snapshot: { version: 1, device: 'PC-TEST', updatedAt: new Date().toISOString(),
+      sections: { invoices: [{ id: 'i1', total: 50 }] } }
+  });
+  ok('push ناجح', r.status === 200 && r.body.ok, r.body);
+  ok('بيقول إن فيه أقسام اتحفظت', r.body.merged >= 1 && (r.body.kept || []).indexOf('customers') > -1, r.body);
+
   console.log('\n[4] السحب');
   r = await call('/api/sync/pull');
   ok('pull ناجح', r.status === 200 && r.body.ok && r.body.exists === true, r.body && r.body.exists);
   ok('الجهاز رجع صح', r.body.device === 'PC-TEST', r.body.device);
   ok('أحدث نسخة', r.body.snapshot && r.body.snapshot.sections.customers[0].name === 'عميل تاني',
     r.body.snapshot && r.body.snapshot.sections.customers[0].name);
+  ok('القسم اللي كان ناقص على الجهاز فضل على الدرايف',
+    (r.body.snapshot.sections.customers || []).length === 1, r.body.snapshot.sections);
+  ok('القسم الجديد اتحفظ', (r.body.snapshot.sections.invoices || []).length === 1,
+    r.body.snapshot.sections.invoices);
 
   console.log('\n[5] النسخ المؤرشفة');
   r = await call('/api/sync/versions');

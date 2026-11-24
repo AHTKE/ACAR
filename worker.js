@@ -481,6 +481,42 @@ function snapshotRecords(snap) {
   return total;
 }
 
+/* عدد سجلات قسم واحد بنفس منطق العميل (مصفوفة = طولها، كائن = ١) */
+function sectionRecords(v) {
+  try {
+    const p = typeof v === 'string' ? JSON.parse(v) : v;
+    if (Array.isArray(p)) return p.length;
+    if (p && typeof p === 'object') return Object.keys(p).length;
+    return 0;
+  } catch (e) { return 0; }
+}
+
+/* ---- صفر فقدان: دمج دفاعي قبل الكتابة على السحابة ----
+   الرفع كان بيستبدل كل الأقسام باللي على الجهاز. جهاز ناقصة منه
+   قسم (تثبيت جديد قبل التحميل، أو localStorage اتفرّغ جزئيًا) كان
+   بيمسح القسم ده من النسخة السحابية — وهي نقطة الرجوع الوحيدة بعد
+   ضياع/إعادة تثبيت الجهاز. هنا بنحتفظ بأي قسم موجود على السحابة
+   وضاع أو بقى فاضي في النسخة الجديدة. */
+function mergeSectionsKeepExisting(existingSnap, incoming) {
+  const kept = [];
+  const out = {
+    sections: Object.assign({}, (incoming && incoming.sections) || {})
+  };
+  const ex = (existingSnap && existingSnap.sections && typeof existingSnap.sections === 'object')
+    ? existingSnap.sections : null;
+  if (!ex) return { sections: out.sections, kept: kept };
+  Object.keys(ex).forEach(function (k) {
+    const oldRaw = ex[k];
+    if (sectionRecords(oldRaw) <= 0) return;
+    const newRaw = out.sections[k];
+    if (newRaw === undefined || sectionRecords(newRaw) <= 0) {
+      out.sections[k] = oldRaw;
+      kept.push(k);
+    }
+  });
+  return { sections: out.sections, kept: kept };
+}
+
 /* التنظيف: كل يوم ماضٍ يبقى بنسخة نهائية واحدة، والحد الكلي ٥٠ ملف */
 async function pruneSyncFiles(at, folderId) {
   try {
@@ -1433,7 +1469,7 @@ async function handleApi(request, env, pathname) {
     try { at = await accessToken(env, conn, reqCreds); }
     catch (e) { return json(await authFailure(env, conn, e), 401); }
 
-    const jsonText = JSON.stringify(cleanSnapshot(snapshot));
+    let jsonText = JSON.stringify(cleanSnapshot(snapshot));
     const jsonBytes = new TextEncoder().encode(jsonText).length;
     if (jsonBytes > MAX_SYNC_BYTES) {
       return json({ ok: false, error: 'حجم النسخة أكبر من الحد المسموح (٨ ميجابايت)' }, 413);
@@ -1480,6 +1516,20 @@ async function handleApi(request, env, pathname) {
       return json({ ok: false, code: 'EMPTY_OVERWRITE',
         error: 'الرفع اتمنع: نسخة الجهاز فاضية (٠ سجل) والنسخة اللي على الدرايف فيها ' +
           existingRecords + ' سجل — ممنوع نمسح بياناتك بالغلط. حمّل نسخة الدرايف الأول أو ارفع من الجهاز اللي فيه البيانات.' }, 409);
+    }
+
+    /* ---- صفر فقدان (٢): ما نمسحش قسم من السحابة لأنه ناقص على الجهاز ---- */
+    let keptSections = [];
+    if (!(body && body.force) && existingSnap && existingSnap.sections) {
+      const merged = mergeSectionsKeepExisting(existingSnap, snapshot);
+      keptSections = merged.kept;
+      if (keptSections.length) {
+        snapshot.sections = merged.sections;
+        jsonText = JSON.stringify(cleanSnapshot(snapshot));
+        if (new TextEncoder().encode(jsonText).length > MAX_SYNC_BYTES) {
+          return json({ ok: false, error: 'حجم النسخة أكبر من الحد المسموح (٨ ميجابايت)' }, 413);
+        }
+      }
     }
 
     let archivedOld = false;
@@ -1556,6 +1606,7 @@ async function handleApi(request, env, pathname) {
     return json({
       ok: true, folderId: folderId, id: info.id || '',
       modifiedTime: info.modifiedTime || '', size: Number(info.size || 0),
+      merged: keptSections.length, kept: keptSections,
       archived: archived, emailed: emailed, emailedTo: emailedTo
     });
   }
@@ -1576,6 +1627,12 @@ async function handleApi(request, env, pathname) {
       catch (e) { return json({ ok: false, error: e.message }, e.status || 500); }
       let body;
       try { body = await request.json(); } catch (e) { body = null; }
+      /* فولدر فاضي صريح = رجوع للفولدر التلقائي (زر «حذف الفولدر المشترك») */
+      if (body && Object.prototype.hasOwnProperty.call(body, 'folderId') &&
+          String(body.folderId == null ? '' : body.folderId).trim() === '') {
+        await settingSet(env.DB, 'sync_custom_folder', '');
+        return json({ ok: true, folderId: '' });
+      }
       const folderId = extractFolderId(body && body.folderId);
       if (!folderId) return json({ ok: false, error: 'رابط الفولدر غير صالح — تأكد إنه رابط Google Drive صحيح' }, 400);
       await settingSet(env.DB, 'sync_custom_folder', folderId);

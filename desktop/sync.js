@@ -45,6 +45,36 @@ function snapshotRecords(snap) {
   return total;
 }
 
+/* عدد سجلات قسم واحد (مصفوفة = طولها، كائن = عدد مفاتيحه) */
+function sectionRecords(v) {
+  try {
+    const p = typeof v === 'string' ? JSON.parse(v) : v;
+    if (Array.isArray(p)) return p.length;
+    if (p && typeof p === 'object') return Object.keys(p).length;
+    return 0;
+  } catch (e) { return 0; }
+}
+
+/* ---- صفر فقدان: أي قسم موجود على الدرايف وضاع/بقى فاضي في نسخة
+   الجهاز بنحتفظ بالقديم — السحابة هي نقطة الرجوع بعد إعادة التثبيت. */
+function mergeSectionsKeepExisting(existingSnap, incoming) {
+  const kept = [];
+  const sections = Object.assign({}, (incoming && incoming.sections) || {});
+  const ex = (existingSnap && existingSnap.sections && typeof existingSnap.sections === 'object')
+    ? existingSnap.sections : null;
+  if (!ex) return { sections: sections, kept: kept };
+  Object.keys(ex).forEach(function (k) {
+    const oldRaw = ex[k];
+    if (sectionRecords(oldRaw) <= 0) return;
+    const newRaw = sections[k];
+    if (newRaw === undefined || sectionRecords(newRaw) <= 0) {
+      sections[k] = oldRaw;
+      kept.push(k);
+    }
+  });
+  return { sections: sections, kept: kept };
+}
+
 function versionName(d) {
   return 'نسخة ' + d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
     ' ' + pad2(d.getHours()) + '.' + pad2(d.getMinutes()) + '.' + pad2(d.getSeconds()) + '.json';
@@ -336,7 +366,7 @@ module.exports = function createSync(deps) {
           return true;
         }
 
-        const text = JSON.stringify(snapshot);
+        let text = JSON.stringify(snapshot);
         if (Buffer.byteLength(text, 'utf8') > MAX_SYNC_BYTES) {
           json(res, 413, { ok: false, error: 'حجم النسخة أكبر من الحد المسموح (٨ ميجابايت)' });
           return true;
@@ -367,6 +397,21 @@ module.exports = function createSync(deps) {
             error: 'الرفع اتمنع: نسخة الجهاز فاضية (٠ سجل) والنسخة اللي على الدرايف فيها ' +
               existingRecords + ' سجل — ممنوع نمسح بياناتك بالغلط.' });
           return true;
+        }
+
+        /* صفر فقدان (٢): ما نمسحش قسم من السحابة لأنه ناقص على الجهاز */
+        let kept = [];
+        if (!(body && body.force) && existingSnap && existingSnap.sections) {
+          const merged = mergeSectionsKeepExisting(existingSnap, snapshot);
+          kept = merged.kept;
+          if (kept.length) {
+            snapshot.sections = merged.sections;
+            text = JSON.stringify(snapshot);
+            if (Buffer.byteLength(text, 'utf8') > MAX_SYNC_BYTES) {
+              json(res, 413, { ok: false, error: 'حجم النسخة أكبر من الحد المسموح (٨ ميجابايت)' });
+              return true;
+            }
+          }
         }
 
         /* النسخة القديمة تتحفظ كأرشيف قبل الكتابة فوقها */
@@ -404,6 +449,7 @@ module.exports = function createSync(deps) {
         json(res, 200, {
           ok: true, folderId: folder.id, id: info.id || '', name: info.name || SYNC_FILE_NAME,
           modifiedTime: info.modifiedTime || '', size: Number(info.size || 0),
+          merged: kept.length, kept: kept,
           archived: archived, emailed: emailed, emailedTo: emailedTo
         });
         return true;

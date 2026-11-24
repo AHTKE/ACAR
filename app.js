@@ -6709,6 +6709,7 @@
   }
   var lastApplySkipped = 0;
   var lastApplyReduced = 0;
+  var lastApplyFailed = 0;
 
   /* ============================================================
      حارس البيانات — شبكة أمان ضد «البيانات اتمسحت لوحدها»
@@ -6989,6 +6990,7 @@
     var applied = 0;
     lastApplySkipped = 0;
     lastApplyReduced = 0;
+    lastApplyFailed = 0;
     SYNC_KEYS.forEach(function (k) {
       if (typeof secs[k] !== 'string') return;
       /* الحماية ١: ما نستبدلش بيانات موجودة على الجهاز ببيانات فارغة من بُعد */
@@ -6997,7 +6999,10 @@
          (ده اللي بيخلي إضافة عميل تختفي بعد شوية لما نسخة قديمة
          من الدرايف تتطبّق تلقائيًا) */
       if (!force && countOf(k) > 0 && countOfFromRaw(secs[k]) < countOf(k)) { lastApplyReduced++; return; }
-      localStorage.setItem(k, secs[k]); applied++;
+      /* كل قسم لوحده: فشل كتابة قسم (مساحة) ما يوقفش باقي الأقسام
+         وما يسيبش الحالة نص-مطبّقة من غير رجوع. */
+      try { localStorage.setItem(k, secs[k]); applied++; }
+      catch (e) { lastApplyFailed++; }
     });
     /* بعد التطبيق: أي قسم بقى فاضي/تالف يترجّع من الحارس فورًا */
     guardBoot();
@@ -7091,7 +7096,8 @@
       savePushedFingerprint();
       syncSetState('is-ok', 'آخر رفع: ' + new Date().toLocaleString('ar-EG') +
         (r.emailed ? ' — وصل التنبيه إلى ' + r.emailedTo : ''));
-      syncShowNote('اترفع ' + (changes.length ? changes.join(' · ') : 'بدون تغييرات مسجّلة') + '.', false);
+      syncShowNote('اترفع ' + (changes.length ? changes.join(' · ') : 'بدون تغييرات مسجّلة') +
+        (r && r.merged ? ' — السحابة كان فيها ' + r.merged + ' قسم ناقص على الجهاز، فاتحفظ زي ما هو' : '') + '.', false);
       if (!auto) toast('تم رفع نسخة المزامنة ✓');
       return r;
     }).catch(function (e) {
@@ -7211,7 +7217,8 @@
       ' — ' + applied + ' أقسام');
     syncShowNote('اتحفظت نسخة احتياطية من بياناتك القديمة. لو رجعت غلط، اضغط «تراجع عن آخر استبدال».' +
       (lastApplySkipped ? ' — تم تجاهل ' + lastApplySkipped + ' قسم فارغ في النسخة البعيدة عشان ما نمسحش بياناتك.' : '') +
-      (lastApplyReduced ? ' — وتم الاحتفاظ بـ ' + lastApplyReduced + ' قسم عندك فيه سجلات أكتر من النسخة البعيدة.' : ''), false);
+      (lastApplyReduced ? ' — وتم الاحتفاظ بـ ' + lastApplyReduced + ' قسم عندك فيه سجلات أكتر من النسخة البعيدة.' : '') +
+      (lastApplyFailed ? ' — تعذّر حفظ ' + lastApplyFailed + ' قسم (مساحة التخزين) والنسخة القديمة محفوظة بزر «تراجع».' : ''), false);
     toast((lastApplySkipped || lastApplyReduced)
       ? 'تم تحديث البيانات ✓ (وتم حماية ' + (lastApplySkipped + lastApplyReduced) + ' قسم من المسح)'
       : 'تم تحديث البيانات من الدرايف ✓');

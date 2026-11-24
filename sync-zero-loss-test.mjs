@@ -230,6 +230,21 @@ const snapWith = (names) => ({
   const now = JSON.parse(files.filter(function (f) { return f.name === 'sync-latest.json'; })[0].content);
   ok('الملف الحالي فيه الإضافة الجديدة', JSON.parse(now.sections.app_customers).length === 3);
 
+  console.log('\n[4b] جهاز ناقصه قسم ما يمسحوش من السحابة');
+  r = await push({
+    version: 1, device: 'WEB-PARTIAL', updatedAt: new Date().toISOString(),
+    sections: { app_suppliers: JSON.stringify([{ name: 'مورد' }]) }
+  });
+  const mj = json(r);
+  ok('push ناجح', r.status === 200 && mj.ok === true, { s: r.status, b: mj });
+  ok('قال إن قسم اتحفظ', mj.merged >= 1 && (mj.kept || []).indexOf('app_customers') > -1, mj);
+  r = await run(makeReq({ url: '/api/sync/pull' }));
+  const pc = json(r);
+  ok('العملاء لسه موجودين على الدرايف',
+    JSON.parse((pc.snapshot.sections || {}).app_customers || '[]').length === 3, pc.snapshot.sections);
+  ok('الموردون اتحفظوا',
+    JSON.parse((pc.snapshot.sections || {}).app_suppliers || '[]').length === 1, pc.snapshot.sections);
+
   console.log('\n[5] force للتفريغ المتعمد');
   r = await push(snapWith([]), { force: true });
   ok('force يسمح 200', r.status === 200 && json(r).ok, { s: r.status, b: json(r) });
