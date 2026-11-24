@@ -29,6 +29,17 @@
 
 const PASS_WINDOW_MS = 5 * 60 * 1000;    /* كلمة المرور التشغيلية: 5 دقائق */
 const CODE_WINDOW_MS = 3 * 60 * 1000;    /* كود التفعيل: 3 دقائق */
+/* سماحية ثوانٍ قليلة بعد بداية النافذة الجديدة: كود اتولد في آخر ثانية
+   من النافذة القديمة يفضل شغّال ثواني معدودة مش نافذة كاملة.
+   القيمة الافتراضية 5 ثوانٍ، وقابلة للتعديل بـACTIVATION_GRACE_MS (0 - 60000). */
+const DEFAULT_GRACE_MS = 5 * 1000;
+const MAX_GRACE_MS = 60 * 1000;
+
+function graceOf(env) {
+  const v = Number(env && env.ACTIVATION_GRACE_MS);
+  if (Number.isFinite(v) && v >= 0) return Math.min(v, MAX_GRACE_MS);
+  return DEFAULT_GRACE_MS;
+}
 const MAX_FAILS = 8;
 const FAIL_WINDOW_MS = 15 * 60 * 1000;
 const DEVICE_RE = /^\d{6}$/;             /* كود الجهاز */
@@ -264,9 +275,11 @@ export async function handleActivation(request, env, pathname, deps) {
     if (wait) return bad(json, 'TOO_MANY', 'محاولات كثيرة — حاول بعد ' + wait + ' دقيقة', 429);
 
     const win = Math.floor(now / PASS_WINDOW_MS);
-    let okPass = false;
-    for (let k = 0; k < 2 && !okPass; k++) {
-      okPass = safeEqual(pass, await passcodeFor(secret, win - k));
+    const elapsed = now - win * PASS_WINDOW_MS;
+    /* النافذة الحالية فقط + هامش ثوانٍ صغير لبداية النافذة الجديدة */
+    let okPass = safeEqual(pass, await passcodeFor(secret, win));
+    if (!okPass && elapsed <= graceOf(env)) {
+      okPass = safeEqual(pass, await passcodeFor(secret, win - 1));
     }
     if (!okPass) {
       noteFail(id);
@@ -331,9 +344,11 @@ export async function handleActivation(request, env, pathname, deps) {
     }
 
     const win = Math.floor(now / CODE_WINDOW_MS);
-    let codeOk = false;
-    for (let k = 0; k < 2 && !codeOk; k++) {
-      codeOk = safeEqual(code, await actCodeFor(secret, id, win - k));
+    const elapsed = now - win * CODE_WINDOW_MS;
+    /* النافذة الحالية فقط + هامش ثوانٍ صغير لبداية النافذة الجديدة */
+    let codeOk = safeEqual(code, await actCodeFor(secret, id, win));
+    if (!codeOk && elapsed <= graceOf(env)) {
+      codeOk = safeEqual(code, await actCodeFor(secret, id, win - 1));
     }
     if (!codeOk) {
       noteFail(id);

@@ -5,6 +5,7 @@
      • بدون ACTIVATION_SECRET الخدمة «غير متاحة» والتطبيق ما بيتقفلش.
      • كلمة مرور 6 أرقام بتتغيّر كل 5 دقائق، والتحقق على الخادم.
      • كود التفعيل 6 أرقام ومربوط بكود الجهاز نفسه وصالح 3 دقائق.
+     • النافذة الحالية بس + هامش ثوانٍ صغير (5 ثوانٍ) بعد بداية النافذة.
      • التوكن اللي بيرجع بيتحقق منه في /status.
      • كود جهاز تاني أو كود غلط ما بيفعّلش.
      • حد المحاولات، والأدمن محمي.
@@ -52,9 +53,14 @@ async function read(res) {
 
 const DEV = '482913';
 const OTHER = '119900';
-const now = Date.now();
+/* ساعة ثابتة في الاختبار عشان حدود النافذة والهامش تكون حتمية */
+const PASS_START = Math.floor(1764000000000 / PASS_WINDOW) * PASS_WINDOW;
+const CODE_START = Math.floor(1764000000000 / CODE_WINDOW) * CODE_WINDOW;
+const now = PASS_START + 60000;
 const pWin = Math.floor(now / PASS_WINDOW);
 const cWin = Math.floor(now / CODE_WINDOW);
+const setNow = (ms) => { Date.now = () => ms; };
+setNow(now);
 
 console.log('\n— بدون سر: مفيش خدمة ومفيش قفل —');
 {
@@ -96,10 +102,25 @@ console.log('\n— كلمة المرور التشغيلية —');
   ok('الرد فيه باقي الوقت', typeof gd.secondsLeft === 'number' && gd.secondsLeft > 0, String(gd.secondsLeft));
   ok('الرد ما بيرجّعش السر', JSON.stringify(gd).indexOf(SECRET) === -1);
 
+  /* بعد الهامش (20 ثانية في النافذة الجديدة) → القديم مرفوض */
+  setNow(PASS_START + 20000);
+  const late = await read(await call(env, '/api/activation/passcode',
+    jsonReq('POST', { device: DEV, passcode: await passcodeFor(SECRET, pWin - 1) })));
+  ok('باسورد النافذة السابقة مرفوض بعد انتهاء الهامش',
+    late.ok === false && late.code === 'BAD_PASSCODE', JSON.stringify(late));
+
+  /* خلال الهامش (3 ثوانٍ في النافذة الجديدة) → القديم مقبول */
+  setNow(PASS_START + 3000);
   const prev = await read(await call(env, '/api/activation/passcode',
     jsonReq('POST', { device: DEV, passcode: await passcodeFor(SECRET, pWin - 1) })));
-  ok('كلمة مرور النافذة السابقة مقبولة (سماحية)', prev.ok === true, JSON.stringify(prev));
+  ok('باسورد النافذة السابقة مقبول خلال الهامش (5 ثوانٍ)', prev.ok === true, JSON.stringify(prev));
 
+  setNow(PASS_START + 7000);
+  const afterGrace = await read(await call(env, '/api/activation/passcode',
+    jsonReq('POST', { device: DEV, passcode: await passcodeFor(SECRET, pWin - 1) })));
+  ok('الهامش بعد 7 ثوانٍ خلص', afterGrace.ok === false && afterGrace.code === 'BAD_PASSCODE', JSON.stringify(afterGrace));
+
+  setNow(now);
   const old = await read(await call(env, '/api/activation/passcode',
     jsonReq('POST', { device: DEV, passcode: await passcodeFor(SECRET, pWin - 2) })));
   ok('كلمة مرور منتهية مرفوضة', old.ok === false && old.code === 'BAD_PASSCODE', JSON.stringify(old));
@@ -119,6 +140,20 @@ console.log('\n— كود التفعيل المخصّص للجهاز —');
   const expired = await read(await call(env, '/api/activation/verify',
     jsonReq('POST', { device: DEV, code: await actCodeFor(SECRET, DEV, cWin - 2) })));
   ok('كود منتهي الصلاحية مرفوض', expired.ok === false, JSON.stringify(expired));
+
+  /* نافذة الكود السابقة: مرفوضة بعد الهامش، مقبولة خلاله */
+  setNow(CODE_START + 20000);
+  const lateCode = await read(await call(env, '/api/activation/verify',
+    jsonReq('POST', { device: DEV, code: await actCodeFor(SECRET, DEV, cWin - 1) })));
+  ok('كود النافذة السابقة مرفوض بعد انتهاء الهامش',
+    lateCode.ok === false && lateCode.code === 'BAD_CODE', JSON.stringify(lateCode));
+
+  setNow(CODE_START + 3000);
+  const graceCode = await read(await call(env, '/api/activation/verify',
+    jsonReq('POST', { device: DEV, code: await actCodeFor(SECRET, DEV, cWin - 1) })));
+  ok('كود النافذة السابقة مقبول خلال الهامش', graceCode.ok === true, JSON.stringify(graceCode));
+
+  setNow(now);
 
   const shortCode = await read(await call(env, '/api/activation/verify', jsonReq('POST', { device: DEV, code: '123' })));
   ok('كود أقل من 6 أرقام مرفوض', shortCode.ok === false && shortCode.code === 'BAD_CODE', JSON.stringify(shortCode));
