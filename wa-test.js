@@ -99,14 +99,23 @@ const unlock = (t) => {
   ok('القالب بيتضمن المطلوب: تاريخ/قبل/مدفوع/متبقي',
     ['{التاريخ}', '{قبل}', '{المدفوع}', '{المتبقي}'].every((k) => t.$('#waTemplate').value.indexOf(k) > -1));
 
-  const rows = t.$$('#waTbody tr');
-  ok('الصفوف = العملاء اللي عندهم تحصيل فقط (2 من 3)', rows.length === 2, 'rows=' + rows.length);
-  ok('العميل بدون تحصيل مش ظاهر',
-    t.$('#waTbody').textContent.indexOf('عميل بدون تحصيل') === -1);
+  ok('القائمة موحّدة — كل العملاء مرة واحدة في جدول التحصيل',
+    t.$$('#collectTbody tr.collection-row').length === 3,
+    'rows=' + t.$$('#collectTbody tr.collection-row').length);
+  ok('مفيش جدول عملاء مكرر لرسائل الواتساب', !t.$('#waTbody'));
   ok('العدّاد محدَّث', /2 عميل/.test(t.$('#waCount').textContent), t.$('#waCount').textContent);
   ok('المعاينة مليانة وفيها اسم العميل وبلا قيم متبقية',
     t.$('#waPreview').value.indexOf('عميل له تحصيل') > -1 && t.$('#waPreview').value.indexOf('{') === -1,
     t.$('#waPreview').value);
+
+  /* --- رسالة واتساب مدمجة جوه تفاصيل العميل --- */
+  t.click(t.$('.collection-row[data-idx="0"]'));
+  await t.wait(80);
+  const inlineText = t.$('.collection-detail .wa-inline__text');
+  ok('رسالة العميل ظاهرة جوه تفاصيله (مدمجة مع التحصيل)', !!inlineText);
+  ok('الرسالة الجاهزة فيها اسم العميل وما فيهاش أقواس',
+    !!inlineText && inlineText.value.indexOf('عميل له تحصيل') > -1 && inlineText.value.indexOf('{') === -1,
+    inlineText ? inlineText.value.slice(0, 80) : 'غير موجود');
 
   /* --- إرسال لعميل واحد --- */
   const send0 = t.$('[data-wa-send="0"]');
@@ -119,14 +128,20 @@ const unlock = (t) => {
   const text = decodeURIComponent((t.opened[0] || '').split('text=')[1] || '');
   ok('الرسالة فيها اسم العميل', text.indexOf('عميل له تحصيل') > -1, text.slice(0, 80));
   ok('الرسالة ما فيهاش قيمات استبدال متبقية', text.indexOf('{') === -1, text);
-  ok('الحالة بقت «تم الإرسال»', t.$('#waTbody').textContent.indexOf('تم الإرسال') > -1);
+  ok('الحالة بقت «تم الإرسال»', t.$('.collection-detail').textContent.indexOf('تم الإرسال') > -1);
   ok('الزر بقى معطّل بعد الإرسال', t.$('[data-wa-send="0"]').disabled === true);
 
   /* --- منع التكرار --- */
-  t.click(t.$('#waTbody button[data-wa-send="0"]'));
+  t.click(t.$('[data-wa-send="0"]'));
   await t.wait(60);
   ok('مفيش إرسال تاني لنفس التحصيل', t.opened.length === 1, 'opened=' + t.opened.length);
-  ok('الرسالة بتوضح إنه اتبعت', t.toast().indexOf('من قبل') > -1, t.toast());
+
+  /* --- عميل بدون تحصيل: مالوش رسالة جاهزة --- */
+  t.click(t.$('.collection-row[data-idx="1"]'));
+  await t.wait(80);
+  ok('العميل بدون تحصيل مش ليه رسالة واتساب', !!t.$('.collection-detail .wa-inline--empty'));
+  t.click(t.$('.collection-row[data-idx="1"]'));
+  await t.wait(60);
 
   /* --- الإرسال الجماعي مع ما فيش طلبات جديدة --- */
   t.click(t.$('#waSendAllBtn'));
@@ -139,10 +154,13 @@ const unlock = (t) => {
   sel.value = 'both';
   sel.dispatchEvent(new t.window.Event('change', { bubbles: true }));
   await t.wait(60);
+  t.click(t.$('.collection-row[data-idx="2"]'));
+  await t.wait(80);
   ok('العميل اللي مالوش رقم أساسي بقى عليه رقم احتياطي',
-    t.$('#waTbody').textContent.indexOf('01555666777') > -1);
-  const send2 = t.$('[data-wa-send="2"]');
-  ok('زر إرسال العميل التاني اتفعّل', !!send2 && !send2.disabled);
+    t.$('.collection-detail').textContent.indexOf('01555666777') > -1);
+  ok('زر إرسال العميل التاني اتفعّل', !!t.$('[data-wa-send="2"]') && !t.$('[data-wa-send="2"]').disabled);
+  t.click(t.$('.collection-row[data-idx="2"]'));
+  await t.wait(60);
 
   t.click(t.$('#waSendAllBtn'));
   await t.wait(900);
@@ -159,6 +177,8 @@ const unlock = (t) => {
   t.window.localStorage.setItem('app_customers', JSON.stringify(changed));
   t.click(t.$('[data-go="collection"]'));   /* إعادة رسم اللوحة */
   await t.wait(120);
+  t.click(t.$('.collection-row[data-idx="0"]'));
+  await t.wait(80);
   const send0b = t.$('[data-wa-send="0"]');
   ok('بعد تحصيل جديد الزر رجع متاح', !!send0b && !send0b.disabled);
   t.click(send0b);
@@ -210,8 +230,9 @@ const unlock = (t) => {
 
   ok('شاشة التحصيل اتفتحت والجدول اترسم', b2.$$('#collectTbody tr.collection-row').length === 1,
     'rows=' + b2.$$('#collectTbody tr.collection-row').length);
-  ok('لوحة واتساب اترسمت جنبه', b2.$('#waTbody') && b2.$('#waTbody').textContent.length > 0,
-    b2.$('#waTbody') ? 'ok' : 'غير موجود');
+  ok('لوحة واتساب اترسمت جنبه', !!b2.$('#waPanel') && !!b2.$('#waTemplate') &&
+    (b2.$('#waTemplate').value || '').indexOf('{الاسم}') > -1,
+    b2.$('#waTemplate') ? 'ok' : 'غير موجود');
   ok('مفيش فشل رسم ولا استثناء', b2.errs.length === 0, b2.errs.join(' | '));
   ok('مفيش تنبيه فشل (البيانات بقت سليمة بعد الإصلاح)', b2.toast().indexOf('تعذّر عرض') === -1, b2.toast());
 

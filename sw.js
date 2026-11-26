@@ -1,12 +1,13 @@
 /* ============================================================
    نظام الإدارة المتكامل — Service Worker (عمل بدون إنترنت)
    ============================================================ */
-var CACHE = 'nizam-idara-v39';
+var CACHE = 'nizam-idara-v40';
 
 var SHELL = [
   './',
   './styles.css',
   './export.js',
+  './importer.js',
   './app.js',
   './monthly.js',
   './employees.js',

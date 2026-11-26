@@ -3241,6 +3241,73 @@
   });
 
   /* ============================================================
+     الأقسام القابلة للطي — سهم لكل خاصية بدل صفحة مليانة بيانات
+     الضغط على رأس القسم يفتح/يقفل محتواه، والاختيار محفوظ على
+     الجهاز عشان ما يحتاجش المستخدم يعيد ضبطه كل مرة.
+     ============================================================ */
+  var KEY_ACC = 'app_accordion_state';
+  function accState() {
+    try { var v = JSON.parse(localStorage.getItem(KEY_ACC) || '{}'); return (v && typeof v === 'object') ? v : {}; }
+    catch (e) { return {}; }
+  }
+  function saveAccState(o) {
+    try { localStorage.setItem(KEY_ACC, JSON.stringify(o)); } catch (e) {}
+  }
+
+  function initCollapsibles(scope) {
+    var root = scope || document;
+    var nodes = root.querySelectorAll('[data-collapse]');
+    Array.prototype.forEach.call(nodes, function (panel) {
+      if (!panel || panel.getAttribute('data-acc-ready') === '1') return;
+      panel.setAttribute('data-acc-ready', '1');
+      var key = panel.getAttribute('data-collapse-key') || '';
+      var titleEl = null;
+      var kids = panel.children;
+      for (var i = 0; i < kids.length; i++) {
+        if (kids[i].classList && kids[i].classList.contains('panel__title')) { titleEl = kids[i]; break; }
+      }
+      var titleHTML;
+      if (titleEl) {
+        titleHTML = titleEl.innerHTML;
+        panel.removeChild(titleEl);
+      } else {
+        titleHTML = esc(panel.getAttribute('data-collapse-title') || 'التفاصيل');
+        var ic = panel.getAttribute('data-collapse-icon');
+        if (ic) titleHTML = '<svg viewBox="0 0 24 24" class="ico"><use href="#' + esc(ic) + '"/></svg> ' + titleHTML;
+      }
+      var body = document.createElement('div');
+      body.className = 'acc__body';
+      while (panel.firstChild) body.appendChild(panel.firstChild);
+      var head = document.createElement('button');
+      head.type = 'button';
+      head.className = 'acc__head';
+      head.innerHTML = '<span class="acc__title">' + titleHTML + '</span>' +
+        '<span class="acc__chev"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-arrow"/></svg></span>';
+      panel.appendChild(head);
+      panel.appendChild(body);
+      var st = accState();
+      var open = Object.prototype.hasOwnProperty.call(st, key) ? !!st[key]
+        : panel.getAttribute('data-collapse-open') === '1';
+      panel.classList.toggle('is-open', open);
+      head.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+  }
+
+  document.addEventListener('click', function (e) {
+    var head = e.target && e.target.closest ? e.target.closest('.acc__head') : null;
+    if (!head) return;
+    var panel = head.parentNode;
+    if (!panel || !panel.getAttribute || panel.getAttribute('data-collapse') === null) return;
+    var open = !panel.classList.contains('is-open');
+    panel.classList.toggle('is-open', open);
+    head.setAttribute('aria-expanded', open ? 'true' : 'false');
+    var key = panel.getAttribute('data-collapse-key');
+    if (key) { var st = accState(); st[key] = open; saveAccState(st); }
+  });
+
+  safeRun(function () { initCollapsibles(document); }, 'الأقسام القابلة للطي');
+
+  /* ============================================================
      التحصيل الرئيسي — قائمة عملاء قابلة للتوسيع (أكورديون)
      الضغط على اسم العميل يفتح تفاصيل تحصيله أسفل السطر مباشرة
      ============================================================ */
@@ -3370,6 +3437,8 @@
           '<button type="submit" class="btn btn--primary"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-plus"></use></svg> إضافة تحصيل</button>' +
         '</div>' +
       '</form>' +
+
+      waInlineHTML(c, idx) +
 
       '<div class="table-wrap">' +
         '<table class="table">' +
@@ -3565,6 +3634,21 @@
       });
     }
 
+    /* فلتر نطاق التاريخ على آخر تحصيل للعميل */
+    var fromEl = $('#collectionFrom'), toEl = $('#collectionTo');
+    var fromDate = fromEl ? String(fromEl.value || '') : '';
+    var toDate = toEl ? String(toEl.value || '') : '';
+    if (fromDate || toDate) {
+      list = list.filter(function (x) {
+        var last = waLastPayment(x.c);
+        var d = last ? String(last.date || '') : '';
+        if (!d) return false;
+        if (fromDate && d < fromDate) return false;
+        if (toDate && d > toDate) return false;
+        return true;
+      });
+    }
+
     /* لو العميل المفتوح اختفى من نتائج البحث نغلقه */
     if (collectionOpen != null && !list.some(function (x) { return x.i === collectionOpen; })) {
       collectionOpen = null;
@@ -3735,6 +3819,24 @@
 
   var collectionStatusFilter = $('#collectionStatusFilter');
   if (collectionStatusFilter) collectionStatusFilter.addEventListener('change', function () {
+    collectionOpen = null;
+    renderCollection(colFilter());
+  });
+
+  /* نطاق التاريخ: فلتر على تاريخ آخر تحصيل للعميل */
+  ['collectionFrom', 'collectionTo'].forEach(function (id) {
+    var el = $('#' + id);
+    if (!el) return;
+    el.addEventListener('change', function () {
+      collectionOpen = null;
+      renderCollection(colFilter());
+    });
+  });
+  var collectionClearDates = $('#collectionClearDates');
+  if (collectionClearDates) collectionClearDates.addEventListener('click', function () {
+    var f = $('#collectionFrom'), tl = $('#collectionTo');
+    if (f) f.value = '';
+    if (tl) tl.value = '';
     collectionOpen = null;
     renderCollection(colFilter());
   });
@@ -9637,7 +9739,7 @@
 
   function renderWaPanel() {
     var tplEl = $('#waTemplate'), prefEl = $('#waPhonePref'), tb = $('#waTbody');
-    if (!tplEl || !prefEl || !tb) return;
+    if (!tplEl || !prefEl) return;
     var s = waSettings();
     if (document.activeElement !== tplEl) tplEl.value = s.template;
     if (prefEl.value !== s.phonePref) prefEl.value = s.phonePref;
@@ -9665,7 +9767,7 @@
       html = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:22px">' +
         'مفيش عملاء مطابقين للفئة المختارة — جرّب «الكل» أو أضف يوم تحصيل/دفعة أولاً.</td></tr>';
     }
-    tb.innerHTML = html;
+    if (tb) tb.innerHTML = html;
 
     var cnt = $('#waCount');
     if (cnt) {
@@ -9708,7 +9810,36 @@
     log.push({ key: r.key, cid: r.i, name: r.c.name || '', phone: r.phone, at: new Date().toISOString(), text: r.text });
     saveWaLog(log);
     renderWaPanel();
+    safeRun(function () { renderCollection(colFilter()); }, 'التحصيل بعد إرسال واتساب');
     toast('تم فتح واتساب للعميل ' + (r.c.name || ''));
+  }
+
+  /* رسالة واتساب الجاهزة لعميل واحد — بتُعرض جوّه تفاصيله في التحصيل */
+  function waRowFor(i) {
+    var rows = waRows();
+    for (var k = 0; k < rows.length; k++) if (rows[k].i === i) return rows[k];
+    return null;
+  }
+
+  function waInlineHTML(c, idx) {
+    var r = null;
+    try { r = waRowFor(idx); } catch (e) { r = null; }
+    if (!r) {
+      return '<div class="wa-inline wa-inline--empty">رسالة واتساب جاهزة بتظهر هنا أول ما يكون للعميل يوم تحصيل أو دفعة مسجّلة.</div>';
+    }
+    var tag = r.sent ? '<span class="tag tag--in">تم الإرسال ✓</span>'
+      : (r.phone ? '<span class="tag tag--warn">جاهزة للإرسال</span>'
+        : '<span class="tag tag--out">لا يوجد رقم هاتف</span>');
+    return '<div class="wa-inline">' +
+      '<div class="wa-inline__head"><b>رسالة التحصيل عبر واتساب</b>' + tag +
+        (r.phone ? '<span class="cell-note">' + esc(r.phone) + '</span>' : '') + '</div>' +
+      '<textarea class="wa-inline__text" readonly tabindex="-1" rows="4">' + esc(r.text) + '</textarea>' +
+      '<div class="form__actions">' +
+        '<button type="button" class="btn btn--primary btn--sm" data-wa-send="' + idx + '"' +
+          ((!r.phone || r.sent) ? ' disabled' : '') + '>' + (r.sent ? 'تم الإرسال ✓' : 'إرسال واتساب') + '</button>' +
+        '<button type="button" class="btn btn--ghost btn--sm" data-wa-copy="' + idx + '">نسخ الرسالة</button>' +
+      '</div>' +
+    '</div>';
   }
 
   function waSendAll() {
@@ -9735,6 +9866,7 @@
       waBusy = false;
       if (btn) btn.disabled = false;
       renderWaPanel();
+      safeRun(function () { renderCollection(colFilter()); }, 'التحصيل بعد إرسال واتساب');
       if (okMsg) toast(okMsg);
     }
 
@@ -9770,6 +9902,18 @@
       toast('تم حفظ إعدادات رسائل التحصيل');
       return;
     }
+    var cp = t.closest('[data-wa-copy]');
+    if (cp) {
+      var row = waRowFor(Number(cp.getAttribute('data-wa-copy')));
+      if (!row) { toast('لا توجد رسالة لهذا العميل', true); return; }
+      var done = function () { toast('تم نسخ الرسالة ✓'); };
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(row.text).then(done, function () { toast('تعذّر النسخ — حدّد النص وانسخه يدوياً', true); });
+        } else { toast('النسخ غير متاح في هذا المتصفح — حدّد النص وانسخه يدوياً', true); }
+      } catch (eCp) { toast('تعذّر النسخ — حدّد النص وانسخه يدوياً', true); }
+      return;
+    }
     if (t.closest('#waSendAllBtn')) { waSendAll(); return; }
   });
 
@@ -9793,6 +9937,425 @@
     }
   });
 
+
+  /* ============================================================
+     استيراد بيانات العملاء — Excel / CSV / PDF
+     قراءة الملف في importer.js، والمراجعة والتحويل هنا: معاينة
+     قبل الحفظ + دمج العميل الموجود بدل تكراره + منع تكرار الدفعات.
+     ============================================================ */
+  var importState = null;
+
+  function importStatusHTML(msg, kind) {
+    var el = $('#importDataStatus');
+    if (!el) return;
+    if (!msg) { el.hidden = true; el.innerHTML = ''; return; }
+    el.hidden = false;
+    el.className = 'import-status' + (kind === 'error' ? ' is-error' : kind === 'busy' ? ' is-busy' : '');
+    el.innerHTML = msg;
+  }
+
+  function importDigits(v) { return String(v == null ? '' : v).replace(/\D/g, ''); }
+
+  function importIndex(list) {
+    var idx = { phones: {}, names: {} };
+    function add(c) {
+      if (!c) return;
+      var p = importDigits(c.phone);
+      if (p.length >= 7 && !idx.phones[p]) idx.phones[p] = c;
+      var p2 = importDigits(c.phone2);
+      if (p2.length >= 7 && !idx.phones[p2]) idx.phones[p2] = c;
+      var n = NizamImport.norm(c.name);
+      if (n && !idx.names[n]) idx.names[n] = c;
+    }
+    (list || []).forEach(add);
+    return { phones: idx.phones, names: idx.names, add: add };
+  }
+
+  function importFind(idx, rec) {
+    var p = importDigits(rec.phone);
+    if (p.length >= 7) return idx.phones[p] || null;
+    var n = NizamImport.norm(rec.name);
+    return n ? (idx.names[n] || null) : null;
+  }
+
+  function refreshImportedTotals(c) {
+    if (c.due == null) c.due = Math.max(Number(c.total || 0) - Number(c.down || 0), 0);
+    var d = derive(c);
+    c.rest = d.rest;
+    c.balance = d.rest;
+    if (!c.scheduleStart) {
+      c.scheduleStart = monthKeyFromISO(c.startDate) || monthKeyOf(new Date().getFullYear(), new Date().getMonth());
+    }
+  }
+
+  function buildImportedCustomer(r) {
+    var total = Number(r.total || 0);
+    var down = Number(r.down || 0);
+    var months = Number(r.duration || 0);
+    var monthly = Number(r.monthly || 0);
+    if (!(total > 0) && monthly > 0 && months > 0) total = down + monthly * months;
+    if (!(monthly > 0) && months > 0 && total > down) monthly = Math.ceil((total - down) / months);
+    var due = Math.max(total - down, 0);
+    var startDate = r.startDate || '';
+    var now = new Date();
+    var entry = {
+      name: r.name,
+      phone: r.phone || '',
+      phone2: r.phone2 || '',
+      nationalId: r.nationalId || '',
+      address: r.address || '',
+      notes: r.note ? [r.note] : [],
+      total: total,
+      down: down,
+      later: 0,
+      due: due,
+      rest: due,
+      duration: months > 0 ? months + ' شهر' : '',
+      dueDay: r.dueDay || 0,
+      scheduleStart: monthKeyFromISO(startDate) || monthKeyOf(now.getFullYear(), now.getMonth()),
+      status: r.status || 'جاري العمل',
+      startYear: startDate ? String(startDate).slice(0, 4) : '',
+      endYear: '',
+      startDate: startDate,
+      endDate: '',
+      paidByUs: 0,
+      balance: due,
+      custom: {},
+      payments: [],
+      sends: [],
+      importedAt: new Date().toISOString()
+    };
+    if (monthly > 0) entry.monthlyAmount = monthly;
+    if (r.paid > 0) {
+      entry.payments.push({ date: startDate || todayISO(), amount: r.paid, no: 1, note: 'مدفوع مستورد من الملف' });
+    }
+    refreshImportedTotals(entry);
+    return entry;
+  }
+
+  function mergeImportedCustomer(c, r) {
+    if (!c.phone && r.phone) c.phone = r.phone;
+    if (!c.phone2 && r.phone2) c.phone2 = r.phone2;
+    if (!c.nationalId && r.nationalId) c.nationalId = r.nationalId;
+    if (!c.address && r.address) c.address = r.address;
+    if (!(Number(c.total || 0) > 0) && Number(r.total || 0) > 0) {
+      c.total = Number(r.total);
+      c.due = Math.max(c.total - Number(c.down || 0), 0);
+    }
+    if (!(Number(c.down || 0) > 0) && Number(r.down || 0) > 0) {
+      c.down = Number(r.down);
+      c.due = Math.max(Number(c.total || 0) - c.down, 0);
+    }
+    if (!(Number(c.monthlyAmount || 0) > 0) && Number(r.monthly || 0) > 0) c.monthlyAmount = Number(r.monthly);
+    if (!c.dueDay && r.dueDay) c.dueDay = r.dueDay;
+    if (!c.startDate && r.startDate) { c.startDate = r.startDate; c.startYear = String(r.startDate).slice(0, 4); }
+    if (!c.status && r.status) c.status = r.status;
+    if (r.note) {
+      c.notes = Array.isArray(c.notes) ? c.notes : [];
+      if (c.notes.indexOf(r.note) === -1) c.notes.push(r.note);
+    }
+    if (Number(r.paid || 0) > 0) {
+      c.payments = Array.isArray(c.payments) ? c.payments : [];
+      var pDate = r.startDate || todayISO();
+      var dup = c.payments.some(function (p) {
+        return String(p.date || '') === String(pDate) && Math.abs(Number(p.amount || 0) - Number(r.paid)) < 0.005;
+      });
+      if (!dup) c.payments.push({ date: pDate, amount: Number(r.paid), no: c.payments.length + 1, note: 'مدفوع مستورد من الملف' });
+    }
+    refreshImportedTotals(c);
+  }
+
+  function importColsFromMapping(mapping) {
+    var cols = {};
+    Object.keys(mapping || {}).forEach(function (f) {
+      var c = mapping[f];
+      if (c != null && c >= 0) cols[c] = f;
+    });
+    return cols;
+  }
+
+  function importMappingFromCols(cols) {
+    var mapping = {};
+    Object.keys(cols || {}).forEach(function (c) {
+      var f = cols[c];
+      if (!f) return;
+      if (mapping[f] == null) mapping[f] = Number(c);
+    });
+    return mapping;
+  }
+
+  function importFieldOptions(selected) {
+    var html = '<option value="">— تجاهل —</option>';
+    NizamImport.FIELDS.forEach(function (f) {
+      html += '<option value="' + f + '"' + (f === selected ? ' selected' : '') + '>' + esc(NizamImport.FIELD_LABELS[f]) + '</option>';
+    });
+    return html;
+  }
+
+  function renderImportPreview() {
+    var box = $('#importDataPreview');
+    if (!box) return;
+    if (!importState) { box.innerHTML = ''; return; }
+    var st = importState;
+    var table = st.tables[st.tableIndex] || { name: '', rows: [] };
+    var mapping = importMappingFromCols(st.colFields);
+    var analysis = NizamImport.analyze(table.rows, { headerRow: st.headerRow, mapping: mapping });
+    if (st.modeOverride && st.modeOverride !== analysis.mode) {
+      analysis = NizamImport.analyze(table.rows, { headerRow: st.headerRow, mapping: mapping, mode: st.modeOverride });
+    }
+    st.result = analysis;
+
+    var list = getCustomers();
+    var idx = importIndex(list);
+    var created = 0, merged = 0, pays = 0, unmatched = 0;
+    analysis.records.forEach(function (r) {
+      if (analysis.mode === 'payments') {
+        if (importFind(idx, r)) pays++; else unmatched++;
+      } else if (importFind(idx, r)) merged++;
+      else created++;
+    });
+
+    var sheetSel = '';
+    if (st.tables.length > 1) {
+      sheetSel = '<label class="field"><span>الورقة داخل الملف</span><select id="importSheet">' +
+        st.tables.map(function (t, i) {
+          return '<option value="' + i + '"' + (i === st.tableIndex ? ' selected' : '') + '>' + esc(t.name || ('ورقة ' + (i + 1))) + '</option>';
+        }).join('') + '</select></label>';
+    }
+
+    var headerInput = '<label class="field"><span>رقم صف العناوين</span><input type="number" id="importHeaderRow" min="1" step="1" value="' + (analysis.headerRow + 1) + '" /></label>';
+
+    var modeSel = '<label class="field"><span>نوع البيانات في الملف</span><select id="importMode">' +
+      '<option value="">تلقائي — ' + (analysis.mode === 'payments' ? 'دفعات تحصيل' : 'بيانات عملاء') + '</option>' +
+      '<option value="customers"' + (st.modeOverride === 'customers' ? ' selected' : '') + '>بيانات عملاء (كل صف عميل كامل)</option>' +
+      '<option value="payments"' + (st.modeOverride === 'payments' ? ' selected' : '') + '>دفعات تحصيل (كل صف دفعة لعميل)</option>' +
+      '</select></label>';
+
+    var mapHtml = analysis.headers.map(function (h, i) {
+      return '<label class="field"><span>عمود ' + (i + 1) + (String(h || '').trim() ? ': ' + esc(h) : ' — بدون عنوان') + '</span>' +
+        '<select data-import-map="' + i + '">' + importFieldOptions(st.colFields[i] || '') + '</select></label>';
+    }).join('');
+
+    var showFields = ['name', 'phone', 'total', 'down', 'monthly', 'duration', 'dueDay', 'startDate', 'paid', 'date', 'amount', 'note', 'status', 'address']
+      .filter(function (f) { return mapping[f] != null && mapping[f] >= 0; });
+    var previewRows = analysis.records.slice(0, 10).map(function (r, i) {
+      return '<tr><td>' + (i + 1) + '</td>' + showFields.map(function (f) {
+        var v = r[f];
+        return '<td>' + esc(typeof v === 'number' ? money(v) : (v == null ? '' : String(v))) + '</td>';
+      }).join('') + '</tr>';
+    }).join('');
+
+    var previewTable = analysis.records.length
+      ? '<div class="table-wrap import-table-wrap"><table class="table"><thead><tr><th>#</th>' +
+        showFields.map(function (f) { return '<th>' + esc(NizamImport.FIELD_LABELS[f]) + '</th>'; }).join('') +
+        '</tr></thead><tbody>' + previewRows + '</tbody></table></div>' +
+        (analysis.records.length > 10 ? '<p class="import-note">معروض أول 10 صفوف من ' + analysis.records.length + ' صف — كلهم هيتضافوا عند التأكيد.</p>' : '')
+      : '<p class="import-note">لا توجد صفوف صالحة — راجع «عمود اسم العميل» ورقم صف العناوين.</p>';
+
+    var chips = '<div class="import-summary">' +
+      (analysis.mode === 'payments'
+        ? '<span class="import-chip import-chip--in"><b>' + pays + '</b> دفعة هتتضاف لعملاء موجودين</span>' +
+          '<span class="import-chip import-chip--out"><b>' + unmatched + '</b> دفعة لعملاء غير موجودين (هتتجاهل)</span>'
+        : '<span class="import-chip import-chip--in"><b>' + created + '</b> عميل جديد</span>' +
+          '<span class="import-chip import-chip--warn"><b>' + merged + '</b> عميل موجود هيتم دمج بياناته</span>') +
+      '<span class="import-chip"><b>' + analysis.skipped + '</b> صف متجاهل (بدون اسم أو مكرر)</span>' +
+      '<span class="import-chip"><b>' + analysis.records.length + '</b> صف صالح</span>' +
+      '</div>';
+
+    box.innerHTML =
+      '<div class="import-toolbar">' + sheetSel + headerInput + modeSel + '</div>' +
+      '<div class="import-map">' + mapHtml + '</div>' +
+      chips + previewTable +
+      '<p class="import-note">' +
+        (analysis.mode === 'payments'
+          ? 'وضع الدفعات: كل صف بيتضاف كدفعة بعميل موجود بنفس رقم الهاتف (أو الاسم لو مفيش رقم) — والعميل غير الموجود مش هيتعمل لوحده من دفعة. '
+          : 'وضع العملاء: العميل الموجود بنفس رقم الهاتف (أو الاسم لو مفيش رقم) هيتم استكمال بياناته الناقصة بدل تكراره. ') +
+        'الاستيراد بيسجل نسخة رجوع قبل الحفظ، ويقدر ترجع من «سجل العمليات».' +
+      '</p>' +
+      '<div class="form__actions">' +
+        '<button type="button" class="btn btn--primary" id="importApplyBtn"' + (analysis.records.length ? '' : ' disabled') + '>' +
+          '<svg viewBox="0 0 24 24" class="ico"><use href="#ic-check"/></svg> إضافة إلى قاعدة البيانات (' + analysis.records.length + ')' +
+        '</button>' +
+      '</div>';
+  }
+
+  function runImport() {
+    var st = importState;
+    var res = st && st.result;
+    if (!res || !res.records.length) { toast('لا توجد صفوف صالحة للاستيراد', true); return; }
+    var list = getCustomers();
+    var idx = importIndex(list);
+    var created = 0, merged = 0, pays = 0, unmatched = 0, dupPays = 0;
+    var unmatchedNames = [];
+
+    try { guardHistoryPush('قبل استيراد بيانات من ملف'); } catch (eH) {}
+
+    res.records.forEach(function (r) {
+      if (res.mode === 'payments') {
+        var target = importFind(idx, r);
+        if (!target) {
+          unmatched++;
+          if (unmatchedNames.length < 5) unmatchedNames.push(r.name);
+          return;
+        }
+        target.payments = Array.isArray(target.payments) ? target.payments : [];
+        var d = String(r.date || '');
+        var isDup = target.payments.some(function (p) {
+          return String(p.date || '') === d && Math.abs(Number(p.amount || 0) - Number(r.amount || 0)) < 0.005;
+        });
+        if (isDup) { dupPays++; return; }
+        target.payments.push({ date: d || todayISO(), amount: Number(r.amount || 0), no: target.payments.length + 1, note: r.note || 'استيراد من ملف' });
+        refreshImportedTotals(target);
+        pays++;
+        return;
+      }
+      var found = importFind(idx, r);
+      if (found) { mergeImportedCustomer(found, r); merged++; }
+      else {
+        var entry = buildImportedCustomer(r);
+        list.unshift(entry);
+        idx.add(entry);
+        created++;
+      }
+    });
+
+    if (!created && !merged && !pays) {
+      importStatusHTML('مفيش أي صف اتضاف — ' +
+        (unmatched ? '(' + unmatched + ' دفعة لعملاء غير موجودين: ' + esc(unmatchedNames.join('، ')) + ') ' : '') +
+        (dupPays ? '(' + dupPays + ' دفعة موجودة بالفعل) ' : '') +
+        'راجع اختيار الأعمدة أو استورد بيانات العملاء الأول.', 'error');
+      return;
+    }
+
+    saveCustomers(list);
+    renderHomeStats();
+    safeRun(function () { renderCustomers(); }, 'العملاء بعد الاستيراد');
+    safeRun(function () { renderCollection(colFilter()); renderCollectionSummary(); }, 'التحصيل بعد الاستيراد');
+
+    var msg = 'تم الاستيراد ✓ — ';
+    if (created) msg += created + ' عميل جديد، ';
+    if (merged) msg += merged + ' عميل تم دمج بياناته، ';
+    if (pays) msg += pays + ' دفعة تحصيل، ';
+    if (unmatched) msg += unmatched + ' دفعة لعملاء غير موجودين اتجاهلت، ';
+    if (dupPays) msg += dupPays + ' دفعة مكررة اتجاهلت، ';
+    msg = msg.replace(/،\s*$/, '') + '.';
+    if (unmatchedNames.length) msg += ' <br />عملاء غير موجودين: ' + esc(unmatchedNames.join('، ')) + (unmatched > unmatchedNames.length ? ' وآخرين' : '');
+    msg += '<br /><button type="button" class="btn btn--ghost btn--sm" data-go="collection" style="margin-top:8px">فتح شاشة التحصيل</button>';
+
+    importState = null;
+    var reset = $('#importDataReset');
+    if (reset) reset.hidden = true;
+    var prev = $('#importDataPreview');
+    if (prev) prev.innerHTML = '';
+    importStatusHTML(msg, 'ok');
+    toast('تم استيراد ' + (created + merged + pays) + ' سجل من الملف ✓');
+  }
+
+  function importSampleFile() {
+    if (typeof ExportKit === 'undefined' || !ExportKit.buildXlsx) { toast('محرك التصدير غير محمّل', true); return; }
+    var rows = [
+      ['اسم العميل', 'رقم التلفون', 'الرقم الاحتياطي', 'العنوان', 'المبلغ الإجمالي', 'المقدم', 'المبلغ الشهري', 'يوم التحصيل', 'تاريخ البدء', 'الحالة', 'ملاحظات'],
+      ['محمد أحمد', '01001234567', '01109876543', 'القاهرة - مدينة نصر', 120000, 20000, 5000, 19, '2025-01-15', 'جاري العمل', 'عميل قديم'],
+      ['سارة علي', '01211234567', '', 'الجيزة - الدقي', 60000, 0, 2500, 5, '2025-03-01', 'جاري العمل', ''],
+      ['خالد حسن', '01098765432', '', 'الإسكندرية', 90000, 10000, '', 1, '2024-11-20', 'مستلم', 'تم التعاقد']
+    ];
+    try {
+      var bytes = ExportKit.buildXlsx([{
+        name: 'نموذج العملاء',
+        title: 'نموذج استيراد بيانات العملاء',
+        subtitle: 'استبدل الصفوف ببياناتك ولا تغيّر أسماء الأعمدة',
+        rows: rows,
+        widths: [26, 16, 16, 30, 16, 14, 16, 12, 16, 16, 26],
+        moneyCols: [4, 5, 6],
+        totalRow: false
+      }]);
+      openExportModal('نموذج-استيراد-العملاء.xlsx', MIME_XLSX, bytes);
+    } catch (e) { toast('تعذّر تجهيز النموذج: ' + (e && e.message ? e.message : e), true); }
+  }
+
+  var importFileInput = $('#importDataFile');
+  if (importFileInput) importFileInput.addEventListener('change', function () {
+    var input = this;
+    var f = input.files && input.files[0];
+    if (!f) return;
+    if (typeof NizamImport === 'undefined') {
+      importStatusHTML('وحدة قراءة الملفات غير محمّلة — أعد تحميل الصفحة ثم حاول تاني', 'error');
+      return;
+    }
+    importStatusHTML('جارٍ قراءة الملف وتحليل الأعمدة… (' + esc(f.name) + ')', 'busy');
+    NizamImport.parseFile(f).then(function (res) {
+      var rows = (res.tables[0] && res.tables[0].rows) || [];
+      var auto = NizamImport.analyze(rows, {});
+      importState = {
+        name: res.name,
+        kind: res.kind,
+        tables: res.tables,
+        tableIndex: 0,
+        headerRow: auto.headerRow,
+        colFields: importColsFromMapping(auto.mapping),
+        modeOverride: '',
+        result: null
+      };
+      importStatusHTML('تم قراءة <b>' + esc(f.name) + '</b> — ' + res.tables.length + ' ورقة، ' + (rows.length || 0) + ' صف. راجع الأعمدة والمعاينة تحت قبل الإضافة.', 'ok');
+      var reset = $('#importDataReset');
+      if (reset) reset.hidden = false;
+      renderImportPreview();
+    }).catch(function (e) {
+      importState = null;
+      importStatusHTML('تعذّر قراءة الملف: ' + esc(e && e.message ? e.message : e), 'error');
+      renderImportPreview();
+    }).then(function () { try { input.value = ''; } catch (e2) {} });
+  });
+
+  document.addEventListener('change', function (e) {
+    var t = e.target;
+    if (!t || !importState) return;
+    if (t.id === 'importSheet') {
+      importState.tableIndex = Number(t.value) || 0;
+      var rows = (importState.tables[importState.tableIndex] || {}).rows || [];
+      var auto = NizamImport.analyze(rows, {});
+      importState.headerRow = auto.headerRow;
+      importState.colFields = importColsFromMapping(auto.mapping);
+      renderImportPreview();
+      return;
+    }
+    if (t.id === 'importHeaderRow') {
+      var n = parseInt(t.value, 10);
+      if (!(n >= 1)) return;
+      importState.headerRow = n - 1;
+      var tRows = (importState.tables[importState.tableIndex] || {}).rows || [];
+      var a2 = NizamImport.analyze(tRows, { headerRow: importState.headerRow });
+      importState.colFields = importColsFromMapping(a2.mapping);
+      renderImportPreview();
+      return;
+    }
+    if (t.id === 'importMode') {
+      importState.modeOverride = t.value === 'customers' || t.value === 'payments' ? t.value : '';
+      renderImportPreview();
+      return;
+    }
+    if (t.getAttribute && t.getAttribute('data-import-map') !== null) {
+      var col = Number(t.getAttribute('data-import-map'));
+      if (t.value) importState.colFields[col] = t.value;
+      else delete importState.colFields[col];
+      renderImportPreview();
+    }
+  });
+
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+    if (t.closest('#importApplyBtn')) { runImport(); return; }
+    if (t.closest('#importDataSample')) { importSampleFile(); return; }
+    if (t.closest('#importDataReset')) {
+      importState = null;
+      var reset = $('#importDataReset');
+      if (reset) reset.hidden = true;
+      var prev = $('#importDataPreview');
+      if (prev) prev.innerHTML = '';
+      importStatusHTML('', 'ok');
+    }
+  });
 
   /* ============================================================
      المخازن — دواخل (وارد) / خوارج (صادر) / مرتجع + رصيد كل بضاعة + إشعار نقص

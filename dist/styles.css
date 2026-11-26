@@ -1520,3 +1520,82 @@ label.btn{cursor:pointer;user-select:none}
 .dev-act__id{font-size:2rem!important;font-weight:800;letter-spacing:8px;text-align:center;color:#7dd3fc}
 .dev-act__code-input{font-size:1.6rem!important;font-weight:800;letter-spacing:8px}
 .activation-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+
+/* ===== أقسام قابلة للطي (سهم لكل خاصية) ===== */
+/* الحاوية Panel بتتحول لكارت برأس واحد فيه سهم؛ الضغط عليه يفتح/يقفل
+   المحتوى، والاختيار محفوظ على الجهاز عشان ما يتكررش كل مرة. */
+.panel[data-acc-ready="1"]{padding:0;overflow:hidden}
+.acc__head{
+  display:flex;align-items:center;gap:12px;width:100%;text-align:start;
+  background:transparent;border:0;color:var(--text);font:inherit;cursor:pointer;
+  padding:16px 20px;transition:background .18s;
+}
+.acc__head:hover{background:rgba(255,255,255,.035)}
+.acc__head:focus-visible{outline:2px solid var(--secondary-hover);outline-offset:-2px}
+.acc__title{display:flex;align-items:center;gap:10px;flex:1;min-width:0;font-size:16px;font-weight:700;line-height:1.5}
+.acc__title .ico{width:18px;height:18px;flex:none;color:var(--secondary-hover)}
+.acc__title .count-pill{margin-inline-start:auto}
+.acc__chev{
+  flex:none;display:inline-grid;place-items:center;width:32px;height:32px;border-radius:11px;
+  background:rgba(255,255,255,.07);border:1px solid var(--line);color:var(--muted);
+  transition:transform .2s,background .2s,color .2s;
+}
+.acc__chev .ico{width:16px;height:16px;transform:rotate(-90deg);transition:transform .2s}
+.panel.is-open > .acc__head .acc__chev{
+  color:#fff;border-color:transparent;background:linear-gradient(135deg,var(--primary),var(--secondary));
+}
+.panel.is-open > .acc__head .acc__chev .ico{transform:rotate(90deg)}
+.acc__body{padding:0 20px 20px;display:none}
+.panel.is-open > .acc__body{display:block}
+.acc__body > .panel__title{display:none}
+[data-theme="light"] .acc__chev{background:#eef2f9;border-color:var(--line);color:#3f4c63}
+[data-theme="light"] .acc__head:hover{background:rgba(15,23,42,.03)}
+@media (max-width:900px){
+  .acc__head{padding:14px 14px}
+  .acc__title{font-size:14.5px}
+  .acc__body{padding:0 14px 16px}
+}
+
+/* نطاق التاريخ في التحصيل */
+.date-range{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-top:14px}
+.date-range .field{flex:1;min-width:180px}
+.date-range .btn{margin-bottom:0}
+
+/* رسالة واتساب الجاهزة داخل تفاصيل العميل — مدمجة مع التحصيل */
+.wa-inline{
+  border:1px dashed var(--line);border-radius:14px;padding:14px;background:rgba(0,0,0,.18);
+  display:flex;flex-direction:column;gap:10px;
+}
+.wa-inline__head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13.5px}
+.wa-inline__head b{font-size:14px}
+.wa-inline__text{
+  width:100%;min-height:88px;resize:vertical;border-radius:12px;border:1px solid var(--line);
+  background:rgba(0,0,0,.28);color:var(--text);padding:10px 12px;font:inherit;font-size:13px;line-height:1.7;
+}
+.wa-inline .form__actions{margin:0}
+.wa-inline--empty{font-size:13px;color:var(--muted);text-align:center;padding:16px}
+
+/* استيراد العملاء من ملف */
+.import-status{
+  margin-top:14px;padding:12px 14px;border-radius:12px;font-size:13.5px;
+  border:1px solid rgba(16,185,129,.35);background:rgba(16,185,129,.1);color:#6ee7b7;line-height:1.8;
+}
+.import-status.is-error{border-color:rgba(248,113,113,.35);background:rgba(248,113,113,.1);color:#fca5a5}
+.import-status.is-busy{border-color:var(--line);background:rgba(255,255,255,.05);color:var(--muted)}
+.import-toolbar{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin:16px 0}
+.import-toolbar .field{min-width:190px;flex:1}
+.import-map{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;margin:14px 0}
+.import-map .field span{font-size:12px;color:var(--muted)}
+.import-summary{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
+.import-chip{
+  display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;font-size:13px;
+  border:1px solid var(--line);background:var(--panel-2);color:var(--text);
+}
+.import-chip b{font-size:15px}
+.import-chip--in{border-color:rgba(16,185,129,.4);color:#6ee7b7}
+.import-chip--warn{border-color:rgba(245,158,11,.4);color:#fcd34d}
+.import-chip--out{border-color:rgba(248,113,113,.4);color:#fca5a5}
+.import-table-wrap{max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:12px}
+.import-table-wrap table{font-size:12.5px}
+.import-table-wrap td,.import-table-wrap th{white-space:nowrap}
+.import-note{font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.8}

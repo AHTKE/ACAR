@@ -176,7 +176,7 @@
       </span>
       <span class="brand__text">
         <strong>WorkFlow</strong>
-        <small>الإصدار 1.0 · b20261126e</small>
+        <small>الإصدار 1.0 · b20261126f</small>
       </span>
     </button>
 
@@ -947,30 +947,32 @@
         <span class="protected-pill"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-lock"/></svg> محمي</span>
       </div>
 
-      <div class="search-bar">
-        <div class="field field--search"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-search"/></svg>
-        <input type="text" id="collectionSearch" placeholder="ابحث عن عميل بالاسم أو الهاتف أو العنوان…" />
+      <div class="panel" data-collapse data-collapse-open="1" data-collapse-key="collection-filters" data-collapse-title="البحث والتصفية والتاريخ" data-collapse-icon="ic-search">
+        <div class="search-bar">
+          <div class="field field--search"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-search"/></svg>
+          <input type="text" id="collectionSearch" placeholder="ابحث عن عميل بالاسم أو الهاتف أو العنوان…" />
+          </div>
+          <select id="collectionStatusFilter" title="عرض فئة معينة من العملاء حسب حالة التحصيل الشهري">
+            <option value="all">الكل</option>
+            <option value="late">المتأخرون / المتعسرون</option>
+            <option value="prev">لم يدفعوا شهوراً سابقة</option>
+            <option value="paid">دفعوا / غير متأخرين</option>
+          </select>
+          <span class="count-pill" id="collectionCount">0 عميل</span>
         </div>
-        <select id="collectionStatusFilter" title="عرض فئة معينة من العملاء حسب حالة التحصيل الشهري">
-          <option value="all">الكل</option>
-          <option value="late">المتأخرون / المتعسرون</option>
-          <option value="prev">لم يدفعوا شهوراً سابقة</option>
-          <option value="paid">دفعوا / غير متأخرين</option>
-        </select>
-        <span class="count-pill" id="collectionCount">0 عميل</span>
+        <div class="date-range">
+          <label class="field"><span>من تاريخ (آخر تحصيل)</span><input type="date" id="collectionFrom" /></label>
+          <label class="field"><span>إلى تاريخ (آخر تحصيل)</span><input type="date" id="collectionTo" /></label>
+          <button type="button" class="btn btn--ghost" id="collectionClearDates">مسح التاريخ</button>
+        </div>
       </div>
 
       <div class="summary" id="collectionSummary"></div>
       <div class="collection-glance" id="collectionGlance"></div>
 
-      <div class="panel" id="waPanel">
-        <div class="page-head" style="padding:0;border:0;background:none">
-          <div class="page-head__title">
-            <span class="card__icon card__icon--pink sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-link"></use></svg></span>
-            <div><h2>رسائل التحصيل عبر واتساب</h2><p>رسالة واحدة لكل عميل لكل عملية تحصيل — والمُرسَل له لا يُرسَل له مرة أخرى إلا بتحصيل جديد</p></div>
-          </div>
-          <span class="count-pill" id="waCount">0 عميل</span>
-        </div>
+      <div class="panel" id="waPanel" data-collapse data-collapse-key="collection-wa" data-collapse-title="رسائل التحصيل عبر واتساب" data-collapse-icon="ic-link">
+        <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-link"/></svg> رسائل التحصيل عبر واتساب <span class="count-pill" id="waCount">0 عميل</span></h3>
+        <p class="panel__hint">رسالة واحدة لكل عميل لكل عملية تحصيل — والمُرسَل له لا يُرسَل له مرة أخرى إلا بتحصيل جديد. الرسالة الجاهزة لكل عميل وأزرار الإرسال أصبحت جوه تفاصيله في القائمة تحت (سهم العميل).</p>
 
         <div class="form" style="margin-top:14px">
           <label class="field field--full"><span>قالب الرسالة (تقدر تعدّل النص زي ما تحب)</span>
@@ -1011,26 +1013,11 @@
             <button type="button" class="btn btn--primary" id="waSendAllBtn">إرسال للجميع</button>
           </div>
         </div>
-
-        <div class="table-wrap" style="margin-top:14px">
-          <table class="table">
-            <thead><tr>
-              <th style="width:52px">#</th>
-              <th>العميل</th>
-              <th>الهاتف</th>
-              <th>آخر تحصيل</th>
-              <th>حالة الشهر</th>
-              <th>الحالة</th>
-              <th style="width:120px"><span class="sr-only">إرسال</span></th>
-            </tr></thead>
-            <tbody id="waTbody"></tbody>
-          </table>
-        </div>
       </div>
 
 
       <div class="panel">
-        <p class="panel__hint" style="margin:0 0 14px">اضغط على اسم العميل لفتح تفاصيل تحصيله — تظهر أسفل السطر مباشرة، ويمكنك إضافة دفعة جديدة من داخلها.</p>
+        <p class="panel__hint" style="margin:0 0 14px">اضغط على سطر العميل (أو السهم) لفتح كل تفاصيله في مكان واحد: الملخص، حالة الشهور، إضافة دفعة، سجل التحصيل، ورسالة واتساب الجاهزة بزر إرسال — بدون أي تكرار للعميل في أكثر من جدول.</p>
         <div class="table-wrap">
           <table class="table" id="collectionList">
             <thead>
@@ -1367,7 +1354,7 @@
       <div id="profilePlan" class="profile-plan"></div>
 
       <div class="profile-grid">
-        <div class="panel">
+        <div class="panel" data-collapse data-collapse-key="profile-info">
           <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-users"/></svg> البيانات الشخصية</h3>
           <div class="info-list" id="profileInfo"></div>
           <div class="notes-block">
@@ -1377,13 +1364,13 @@
           </div>
         </div>
 
-        <div class="panel">
+        <div class="panel" data-collapse data-collapse-key="profile-money">
           <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-coins"/></svg> البيانات المالية</h3>
           <div class="info-list" id="profileMoney"></div>
         </div>
       </div>
 
-      <div class="panel" id="sendPanel">
+      <div class="panel" id="sendPanel" data-collapse data-collapse-key="profile-send">
         <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-truck"/></svg> المرسل من موارد</h3>
         <p class="panel__hint">كل عملية إرسال من مواردنا للعميل تُخصم من «المبلغ المدفوع منا نحن للعميل» حتى ينتهي الرصيد، ويُعرض المتبقي بعد الطرح.</p>
 
@@ -1436,13 +1423,13 @@
         </div>
       </div>
 
-      <div class="panel" id="linkPanel" hidden>
+      <div class="panel" id="linkPanel" data-collapse data-collapse-key="profile-link" hidden>
         <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-link"/></svg> المرتبط بهذا العميل</h3>
         <p class="panel__hint">توريدات الموردين وحركة الدواخل والخوارج المرتبطة بهذا العميل — تظهر هنا كمرجع ولا تُعاد كتابتها، فلا تُحسب مرتين.</p>
         <div id="linkBody"></div>
       </div>
 
-      <div class="panel" id="collectPanel">
+      <div class="panel" id="collectPanel" data-collapse data-collapse-key="profile-collect" data-collapse-open="1">
         <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-exchange"/></svg> التحصيل</h3>
         <p class="panel__hint">أدخل التاريخ والمبلغ المدفوع والمرة في الدفع ثم «إضافة تحصيل» — يُطرح المبلغ المدفوع من المبلغ الاجمالي المتبقي تلقائياً في كل مرة.</p>
 
@@ -1552,6 +1539,21 @@
             <button type="button" class="btn btn--ghost" id="resetSectionLocks">استعادة الافتراضي</button>
           </div>
           <p class="panel__note">الأقسام المفعّلة بدون كلمة مرور خاصة تستخدم كلمة المرور العامة. الإعدادات تُحفظ على هذا الجهاز، وتظهر للأدمن فقط.</p>
+        </div>
+
+        <div class="panel" id="importDataPanel">
+          <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-save"/></svg> استيراد بيانات العملاء من Excel أو PDF</h3>
+          <p class="panel__hint">عندك داتا قديمة في ملف؟ اختار ملف <b>Excel (.xlsx)</b> أو <b>CSV</b> أو <b>PDF</b> فيه بيانات العملاء (الأسماء والتحصيل والتواريخ)، والتطبيق يقرأ العناوين ويربط الأعمدة تلقائياً، يعرض لك معاينة قبل الحفظ، وبعد تأكيدك يضيفهم لقاعدة البيانات. العميل الموجود بالفعل (بنفس الرقم أو الاسم) يتم دمج بياناته بدل تكراره، والدفعات المتكررة لا تُحسب مرتين.</p>
+
+          <div class="form__actions" style="margin-top:4px">
+            <label class="btn btn--primary" for="importDataFile"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-save"/></svg> اختيار ملف للاستيراد</label>
+            <input type="file" id="importDataFile" accept=".xlsx,.xlsm,.csv,.tsv,.txt,.pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf,text/csv" hidden />
+            <button type="button" class="btn btn--ghost" id="importDataSample">تنزيل نموذج Excel</button>
+            <button type="button" class="btn btn--ghost" id="importDataReset" hidden>إلغاء الاستيراد</button>
+          </div>
+
+          <div id="importDataStatus" class="import-status" hidden></div>
+          <div id="importDataPreview"></div>
         </div>
 
         <div class="panel" style="grid-column:1/-1">
@@ -1957,6 +1959,7 @@ window.__retryAsset = function (el, name) {
 <script src="employees.js" onerror="__retryAsset(this,'employees.js')"></script>
 <script src="customer-extra.js" onerror="__retryAsset(this,'customer-extra.js')"></script>
 <script src="warehouse-catalog.js" onerror="__retryAsset(this,'warehouse-catalog.js')"></script>
+<script src="importer.js" onerror="__retryAsset(this,'importer.js')"></script>
 <script>
 /* حارس الشاشة: أي لحظة مفيش فيها شاشة مفعّلة، الرئيسية بترجع فورًا.
    الغرض: الشاشة الفاضية تحت الهيدر تبقى مستحيلة حتى لو app.js وقع في النص.

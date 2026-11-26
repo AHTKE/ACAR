@@ -23,12 +23,13 @@ const FILES = [
   'splash.js',
   'period.js',
   'export.js',
+  'importer.js',
   'auth-gate-addon.js',
   'manifest.webmanifest',
   'sw.js'
 ];
 
-const DIRS = ['icons'];
+const DIRS = ['icons', 'vendor'];
 
 /* ننسخ الـAPI كمان جوه dist — علشان لو Vercel مضبوط على
    Root Directory = dist تبقى مسارات /api/google شغالة بدل 404.
