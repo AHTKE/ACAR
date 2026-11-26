@@ -47,6 +47,25 @@ npm run desktop:dist:portable   # Portable 64 بت   → release/nizam-portable-
 
 كل الأوامر بتبدأ بـ `npm run build` (تجهيز `dist/`) تلقائياً.
 
+### لينكس وماك
+```bash
+npm run desktop:dist:linux          # AppImage + deb → release/nizam-linux-x86_64.AppImage
+npm --prefix desktop run dist:mac   # dmg (x64 + arm64) → لازم جهاز Mac
+```
+
+| النظام | أمر البناء | الملف الناتج في `release/` |
+|---|---|---|
+| ويندوز 64 | `npm run desktop:dist:win64` | `nizam-setup-x64.exe` |
+| ويندوز 32 | `npm run desktop:dist:win32` | `nizam-setup-ia32.exe` |
+| ويندوز Portable 64 | `npm run desktop:dist:portable` | `nizam-portable-x64.exe` |
+| ويندوز Portable 32 | `npm --prefix desktop run dist:win-portable32` | `nizam-portable-ia32.exe` |
+| كل نسخ ويندوز | `npm run desktop:dist` | الأربعة مع بعض |
+| لينكس | `npm run desktop:dist:linux` | `nizam-linux-x86_64.AppImage` + `.deb` |
+| ماك | `npm --prefix desktop run dist:mac` | `nizam-mac-x64.dmg` / `nizam-mac-arm64.dmg` |
+
+> نسخ ويندوز الأفضل تتبني **على ويندوز**. البناء من لينكس بيحتاج `wine` + `makensis`
+> (مش متوفرين افتراضياً)، ونسخ ماك بتتبني على جهاز Mac فقط.
+
 ### التشغيل أثناء التطوير
 ```bash
 npm run desktop:serve    # الخادم المحلي فقط، افتح المتصفح

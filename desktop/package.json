@@ -89,13 +89,17 @@
         "AppImage",
         "deb"
       ],
-      "category": "Office"
+      "category": "Office",
+      "icon": "../icons/icon-source-1024.png",
+      "artifactName": "nizam-linux-${arch}.${ext}"
     },
     "mac": {
       "target": [
         "dmg"
       ],
-      "category": "public.app-category.business"
+      "category": "public.app-category.business",
+      "icon": "../icons/icon-source-1024.png",
+      "artifactName": "nizam-mac-${arch}.${ext}"
     }
   }
 }
