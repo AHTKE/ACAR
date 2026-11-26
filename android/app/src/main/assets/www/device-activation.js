@@ -14,6 +14,10 @@
 (function () {
   'use strict';
 
+  /* علامة إن الموديول ده اتنفّذ — بيستخدمها ترحيب البداية عشان تستنى نتيجة
+     فحص التفعيل قبل ما تقرر تعرض الترحيب ولا تسيبه شاشة التفعيل. */
+  window.__deviceActivationLoaded = true;
+
   var CODE_KEY = 'device_activation_code';    /* كود الجهاز (6 أرقام) */
   var TOKEN_KEY = 'device_activation_token';  /* إثبات التفعيل من الخادم */
   var CACHE_KEY = 'device_activation_cache';
@@ -156,6 +160,15 @@
     try { if (typeof window.__bootCoverDone === 'function') window.__bootCoverDone(); } catch (e) {}
   }
 
+  /* التفعيل اتحسم (شاشة ظاهرة أو الجهاز مفعّل) — الغطاء يستنى باقي مراحل
+     الإقلاع (الترحيب + كلمة المرور) عشان ما تظهرش القايمة الرئيسية قبلهم. */
+  function activationSettled() {
+    try {
+      if (typeof window.__bootReady === 'function') window.__bootReady('activation');
+      else bootCoverDone();
+    } catch (e) {}
+  }
+
   function platformName() {
     var ua = String((navigator && navigator.userAgent) || '');
     if (/Android/i.test(ua)) return 'أندرويد';
@@ -270,12 +283,14 @@
       '<p class="dev-act__sub">' + sub + '</p>';
   }
 
-  function contactHTML() {
+  function contactHTML(waText) {
+    var href = CONTACT_URL + (waText ? '?text=' + encodeURIComponent(waText) : '');
     return '<div class="dev-act__company">' +
       '<img class="dev-act__company-img" src="' + WORD_SRC + '" alt="' + esc(COMPANY) + '" />' +
       '<div class="dev-act__company-name">' + esc(COMPANY) + ' — نظام الإدارة المتكامل</div>' +
-      '<a class="dev-act__wa" href="' + CONTACT_URL + '" target="_blank" rel="noopener">' +
-        'تواصل عبر واتساب: <b dir="ltr">' + esc(CONTACT_TEXT) + '</b>' +
+      '<a class="dev-act__wa" href="' + href + '" target="_blank" rel="noopener">' +
+        (waText ? 'اطلب من المطوّر عبر واتساب: ' : 'تواصل عبر واتساب: ') +
+        '<b dir="ltr">' + esc(CONTACT_TEXT) + '</b>' +
       '</a>' +
       '<div class="dev-act__company-tag">جهازك: ' + esc(platformName()) + '</div>' +
       '</div>';
@@ -289,7 +304,7 @@
         '<code id="daDeviceId" class="dev-act__id" dir="ltr">' + esc(code) + '</code>' +
         '<button type="button" class="dev-act__copy" id="daCopyId">نسخ</button>' +
       '</div>' +
-      '<p class="dev-act__note">ابعت الكود ده للمسؤول عشان يطلّع لك كود التفعيل المخصّص له. ' +
+      '<p class="dev-act__note"><b>أعطي الكود ده للمطوّر</b> عشان يطلّع لك كود التفعيل المخصّص للجهاز ده. ' +
       'حذف بيانات المتصفح أو إعادة التثبيت ممكن يغيّر الكود ويحتاج تفعيلاً جديداً.</p>' +
       '</div>';
   }
@@ -312,7 +327,7 @@
         '<p class="dev-act__err" id="daErr" ' + (state.err ? '' : 'hidden') + '>' + esc(state.err) + '</p>' +
         '<button type="button" class="btn btn--primary dev-act__btn" id="daNext">' + (state.busy ? 'جارٍ التحقق…' : 'متابعة') + '</button>' +
         '<button type="button" class="dev-act__link" id="daRetry">إعادة المحاولة</button>' +
-        contactHTML();
+        contactHTML('عايز باسورد تفعيل جديد لتطبيق نظام الإدارة — كود جهازي: ' + deviceCode());
     } else {
       body = headHTML('كود التفعيل',
           'تمام — كلمة المرور مقبولة. ابعت «كود الجهاز» ده للمسؤول، ' +
@@ -326,12 +341,12 @@
         '<p class="dev-act__err" id="daErr" ' + (state.err ? '' : 'hidden') + '>' + esc(state.err) + '</p>' +
         '<button type="button" class="btn btn--primary dev-act__btn" id="daGo">' + (state.busy ? 'جارٍ التفعيل…' : 'تفعيل الجهاز') + '</button>' +
         '<button type="button" class="dev-act__link" id="daBack">رجوع لكلمة المرور</button>' +
-        contactHTML();
+        contactHTML('كود جهازي: ' + deviceCode() + ' — عايز كود تفعيل لتطبيق نظام الإدارة');
     }
     o.innerHTML = body + '</div>';
     paintTimers();
     wire();
-    bootCoverDone();
+    activationSettled();
   }
 
   function setErr(msg) {
@@ -403,8 +418,11 @@
         state.step = 'passcode';
         render();
         /* الباسورد القديم (انتهت مدته) له رسالة واضحة ومختلفة عن الخطأ العادي */
+        if (d.expired || d.code === 'EXPIRED_PASSCODE') {
+          return setErr('انتهت مدة هذا الباسورد — اطلب باسورد جديد من المسؤول وأعد المحاولة.');
+        }
         if (d.code === 'BAD_PASSCODE') {
-          return setErr('انتهت مدة هذا الباسورد أو أنه غير صحيح — اطلب باسورد جديد من المسؤول وأعد المحاولة.');
+          return setErr('كلمة المرور غير صحيحة — راجع الأرقام أو اطلب باسوردًا جديدًا من المسؤول.');
         }
         return setErr(d.error || 'تعذّر التحقق');
       }
@@ -432,6 +450,9 @@
       state.busy = false;
       if (!d.ok) {
         render();
+        if (d.expired) {
+          return setErr('انتهت صلاحية كود التفعيل (3 دقائق) — اطلب كودًا جديدًا من المسؤول وأعد المحاولة.');
+        }
         return setErr(d.error || 'تعذّر التفعيل');
       }
       state.activated = true;
@@ -440,6 +461,7 @@
       if (d.token) lsSet(TOKEN_KEY, d.token);
       writeCache({ activated: true, available: true, enforced: true });
       closeOverlay();
+      activationSettled();
       toastSafe('تم تفعيل الجهاز ✓');
     }, function (e) {
       state.busy = false;
@@ -459,7 +481,7 @@
         state.activated = false;
         writeCache({ available: false, enforced: false });
         closeOverlay();
-        bootCoverDone();
+        activationSettled();
         return state;
       }
       if (typeof d.serverNow === 'number' && isFinite(d.serverNow)) {
@@ -474,7 +496,7 @@
         render();
       } else {
         closeOverlay();
-        bootCoverDone();
+        activationSettled();
       }
       return state;
     }, function () {
@@ -483,7 +505,7 @@
       if (token()) {          /* مفعّل قبل كده → ما نقفلوش */
         state.activated = true;
         closeOverlay();
-        bootCoverDone();
+        activationSettled();
         return state;
       }
       if (cached.enforced === true) {
@@ -493,7 +515,7 @@
         render();
       } else {
         closeOverlay();       /* جهاز جديد ومفيش اتصال → ما نقفلش التطبيق */
-        bootCoverDone();
+        activationSettled();
       }
       return state;
     });
@@ -502,7 +524,13 @@
   /* ---------- التشغيل ---------- */
   function start() {
     state.deviceCode = deviceCode();
-    refresh(false);
+    /* وعد واحد نشارك به شاشة الترحيب عشان ما تظهرش قبل حسم التفعيل */
+    try {
+      var p = refresh(false);
+      window.__activationReady = (p && typeof p.then === 'function') ? p : Promise.resolve(state);
+    } catch (e) {
+      window.__activationReady = Promise.resolve(state);
+    }
     try {
       document.addEventListener('visibilitychange', function () {
         if (!document.hidden) refresh(false);

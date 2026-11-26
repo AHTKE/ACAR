@@ -282,10 +282,18 @@ export async function handleActivation(request, env, pathname, deps) {
       okPass = safeEqual(pass, await passcodeFor(secret, win - 1));
     }
     if (!okPass) {
+      /* باسورد نافذة قديمة → رسالة «انتهت المدة» مختلفة عن «غلط» */
+      let expired = safeEqual(pass, await passcodeFor(secret, win - 1));
+      if (!expired) expired = safeEqual(pass, await passcodeFor(secret, win - 2));
       noteFail(id);
-      if (db) await eventLog(db, id, 'bad_passcode', 'كلمة مرور خاطئة');
-      return bad(json, 'BAD_PASSCODE',
-        'كلمة المرور غير صحيحة أو انتهت صلاحيتها — اطلب واحدة جديدة من المسؤول', 403);
+      if (db) await eventLog(db, id, expired ? 'expired_passcode' : 'bad_passcode',
+        expired ? 'باسورد منتهي' : 'كلمة مرور خاطئة');
+      return json({
+        ok: false, code: 'BAD_PASSCODE', expired: expired,
+        error: expired
+          ? 'انتهت مدة هذا الباسورد — اطلب باسورد جديد من المسؤول وأعد المحاولة'
+          : 'كلمة المرور غير صحيحة أو انتهت صلاحيتها — اطلب واحدة جديدة من المسؤول'
+      }, 403);
     }
     failMemo.delete(id);
 
@@ -351,10 +359,18 @@ export async function handleActivation(request, env, pathname, deps) {
       codeOk = safeEqual(code, await actCodeFor(secret, id, win - 1));
     }
     if (!codeOk) {
+      /* كود جاي من نافذة قديمة؟ رسالة انتهاء الصلاحية أوضح للمستخدم */
+      let expired = safeEqual(code, await actCodeFor(secret, id, win - 1));
+      if (!expired) expired = safeEqual(code, await actCodeFor(secret, id, win - 2));
       noteFail(id);
-      if (db) await eventLog(db, id, 'bad_code', 'كود تفعيل غير مطابق');
-      return bad(json, 'BAD_CODE',
-        'كود التفعيل غلط أو انتهت صلاحيته (3 دقائق) أو مش مخصّص للجهاز ده', 403);
+      if (db) await eventLog(db, id, expired ? 'expired_code' : 'bad_code',
+        expired ? 'كود منتهي' : 'كود تفعيل غير مطابق');
+      return json({
+        ok: false, code: 'BAD_CODE', expired: expired,
+        error: expired
+          ? 'انتهت صلاحية كود التفعيل (3 دقائق) — اطلب كودًا جديدًا من المسؤول'
+          : 'كود التفعيل غلط أو مش مخصّص للجهاز ده'
+      }, 403);
     }
     failMemo.delete(id);
 

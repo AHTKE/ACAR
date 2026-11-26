@@ -133,6 +133,15 @@
     });
   }
 
+  /* الإبلاغ للغطاء إن شاشة القفل ظهرت (الغطاء يتشال بعدها) */
+  function markLockReady() {
+    try {
+      if (window.__appLock) window.__appLock.booted = true;
+      if (typeof window.__bootReady === 'function') window.__bootReady('lock');
+      else if (typeof window.__bootCoverDone === 'function') window.__bootCoverDone();
+    } catch (e) {}
+  }
+
   function show(mode) {
     var rec = readRec();
     if (mode === 'login' && !rec) mode = 'create';
@@ -141,8 +150,8 @@
     var o = overlayEl();
     document.documentElement.setAttribute('data-app-locked', '1');
     o.innerHTML = bodyHTML(mode, rec ? rec.name : '');
-    /* شاشة القفل جاهزة → نشيل غطاء الإقلاع (منع ظهور القائمة الرئيسية قبلها) */
-    try { if (typeof window.__bootCoverDone === 'function') window.__bootCoverDone(); } catch (eCov) {}
+    /* شاشة القفل جاهزة → نعلّم الإقلاع إن القفل ظهر (منع ظهور القائمة قبلها) */
+    markLockReady();
     var box = $('#alErr', o);
 
     if (mode === 'create') wireCreate(o, box);
@@ -300,10 +309,11 @@
       try { unlocked = sessionStorage.getItem(SESSION) === '1'; } catch (e) {}
       if (unlocked) {
         closeOverlay();
-        try { if (typeof window.__bootCoverDone === 'function') window.__bootCoverDone(); } catch (eCov) {}
+        markLockReady();
         return;
       }
       show(readRec() ? 'login' : 'create');
+      markLockReady();
     } catch (e) {
       /* أي فشل هنا ما يقفلش التطبيق */
       try { closeOverlay(); } catch (e2) {}
@@ -319,7 +329,24 @@
 
   function start() {
     /* الترتيب المطلوب: شاشة الترحيب أولاً، وبعدها كلمة المرور، وبعدها القائمة.
-       فلو الترحيب شغّال نسيب boot له (بينده بعد ما يخلص)، وإلا نفتح القفل فوراً. */
+       نستنى إشارة انتهاء الترحيب بدل الاعتماد على وجود العنصر — الترحيب
+       ممكن يتأخر لحظة وهو بينتظر نتيجة فحص تفعيل الجهاز. */
+    function afterBootSettings() {
+      [800, 2000, 4000].forEach(function (ms) { setTimeout(function () { try { settingsPanel(); } catch (e) {} }, ms); });
+      document.addEventListener('click', function (e) {
+        var b = e.target && e.target.closest && e.target.closest('[data-go="settings"]');
+        if (b) setTimeout(function () { try { settingsPanel(); } catch (e2) {} }, 60);
+      }, true);
+    }
+    if (window.__splashWillShow) {
+      document.addEventListener('app:splash-done', function () { try { boot(); } catch (e) {} }, { once: true });
+      /* شبكة أمان: لو الإشارة ما وصلتش، نفتح القفل بعد 8 ثوانٍ */
+      setTimeout(function () {
+        try { if (!window.__appLock || !window.__appLock.booted) boot(); } catch (e) {}
+      }, 8000);
+      afterBootSettings();
+      return;
+    }
     if (!document.getElementById('awmSplash')) {
       boot();
     } else {
@@ -328,12 +355,7 @@
         if (!document.getElementById('awmSplash') && !document.getElementById('appLock')) boot();
       }, 6000);
     }
-    /* لو الإعدادات بتترسم بعدين، نحاول نضيف اللوحة كام مرة */
-    [800, 2000, 4000].forEach(function (ms) { setTimeout(function () { try { settingsPanel(); } catch (e) {} }, ms); });
-    document.addEventListener('click', function (e) {
-      var b = e.target && e.target.closest && e.target.closest('[data-go="settings"]');
-      if (b) setTimeout(function () { try { settingsPanel(); } catch (e2) {} }, 60);
-    }, true);
+    afterBootSettings();
   }
 
   if (document.readyState === 'loading') {

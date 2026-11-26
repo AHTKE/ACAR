@@ -49,12 +49,28 @@
     if (c && c.parentNode) c.parentNode.removeChild(c);
     try { document.documentElement.setAttribute('data-booted', '1'); } catch (e) {}
   };
+  /* منسّق الإقلاع: الغطاء ما يتشالش غير لما تتحسم التلات مراحل:
+     (1) حالة التفعيل، (2) شاشة الترحيب، (3) شاشة القفل (أو الدخول).
+     كده مفيش لحظة تظهر فيها القائمة الرئيسية قبل الترحيب أو كلمة المرور. */
+  window.__bootStage = { activation: false, splash: false, lock: false };
+  window.__bootReady = function (stage) {
+    try { if (stage && window.__bootStage) window.__bootStage[stage] = true; } catch (e) {}
+    var s = window.__bootStage || {};
+    if (s.activation && s.splash && s.lock) window.__bootCoverDone();
+  };
+  /* لو موديول التفعيل ما اتحمّلش (ملف ناقص/خطأ) نعتبر مرحلة التفعيل محسومة
+     بدل ما نمنع فتح التطبيق للأبد */
+  function bootActivationFallback() {
+    try { if (!window.__deviceActivationLoaded) window.__bootReady('activation'); } catch (e) {}
+  }
+  setTimeout(bootActivationFallback, 1500);
+  window.addEventListener('load', bootActivationFallback);
   /* شبكة أمان: لو أي سكربت وقع، الغطاء ما يعلّقش التطبيق للأبد */
   setTimeout(function () { try { window.__bootCoverDone(); } catch (e) {} }, 9000);
 </script>
 
 <!-- شاشة الربط الإلزامية -->
-<div id="forceAuthGate" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:#0a0e15;z-index:999999;display:flex;align-items:center;justify-content:center;">
+<div id="forceAuthGate" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:#0a0e15;z-index:99995;display:flex;align-items:center;justify-content:center;">
   <div style="background:linear-gradient(180deg,#151b26,#0a0e15);border:1px solid #4f8cff;border-radius:24px;padding:32px 40px 40px;max-width:500px;width:90%;text-align:center;">
     <img src="icons/icon-512.png" alt="غلاف تطبيق WorkFlow" width="132" height="132" style="display:block;margin:0 auto 12px;border-radius:30px;box-shadow:0 16px 36px rgba(0,0,0,.5);" />
     <img src="icons/logo-amw.png" alt="AW" width="120" height="120" style="display:block;margin:0 auto 6px;opacity:.95;border-radius:26px;" />
@@ -159,7 +175,7 @@
       </span>
       <span class="brand__text">
         <strong>WorkFlow</strong>
-        <small>الإصدار 1.0 · b20261126a</small>
+        <small>الإصدار 1.0 · b20261126b</small>
       </span>
     </button>
 

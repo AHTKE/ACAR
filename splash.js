@@ -16,8 +16,21 @@
   var START_MS = 450;
   var SESSION = 'app_splash_shown';
 
+  /* علامة إن الترحيب لسه هيظهر/ظاهر — شاشة كلمة المرور تستناها */
+  window.__splashWillShow = true;
+  function splashDone() {
+    window.__splashWillShow = false;
+    try { if (window.__bootReady) window.__bootReady('splash'); } catch (eB) {}
+    try { document.dispatchEvent(new CustomEvent('app:splash-done')); } catch (eD) {}
+  }
+
   /* مرة واحدة لكل جلسة تابات — إعادة التحميل لا تعيد العرض */
-  try { if (sessionStorage.getItem(SESSION) === '1') return; } catch (e) {}
+  try {
+    if (sessionStorage.getItem(SESSION) === '1') {
+      splashDone();
+      return;
+    }
+  } catch (e) {}
 
   var CSS =
     '.awm-splash{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;' +
@@ -88,6 +101,31 @@
 
   function unlockAudio() { if (pending) { pending = false; playAudio(); } }
 
+  /* بعد الترحيب لازم تظهر شاشة كلمة المرور فوراً. لو ملف القفل لسه ما اتنفّذش
+     (شبكة بطيئة) نستنى من غير ما نشيل الغطاء — عشان القائمة الرئيسية ما تبانش. */
+  function bootLock(retry) {
+    if (window.__appLock && window.__appLock.booted) {
+      try { if (window.__bootReady) window.__bootReady('lock'); } catch (eB) {}
+      return;
+    }
+    try {
+      if (window.__appLock && typeof window.__appLock.boot === 'function') window.__appLock.boot();
+    } catch (e) {}
+    if (window.__appLock && window.__appLock.booted) {
+      try { if (window.__bootReady) window.__bootReady('lock'); } catch (eB) {}
+      return;
+    }
+    if ((retry || 0) >= 12) {
+      /* مفيش شاشة دخول خالص (ملف ناقص/خطأ) — نكشف التطبيق بدل ما نعلّقه */
+      try {
+        if (window.__bootReady) window.__bootReady('lock');
+        else if (typeof window.__bootCoverDone === 'function') window.__bootCoverDone();
+      } catch (eC) {}
+      return;
+    }
+    setTimeout(function () { bootLock((retry || 0) + 1); }, 300);
+  }
+
   function finish() {
     if (done) return;
     done = true;
@@ -96,15 +134,8 @@
     try { sessionStorage.setItem(SESSION, '1'); } catch (e) {}
     var el = document.getElementById('awmSplash');
     if (el && el.parentNode) el.parentNode.removeChild(el);
-    try {
-      if (window.__appLock && typeof window.__appLock.boot === 'function') window.__appLock.boot();
-    } catch (e) {}
-    /* لو القفل ما ظهرش لأي سبب، نشيل غطاء الإقلاع بعد لحظة عشان ما نعلّقش التطبيق */
-    setTimeout(function () {
-      try {
-        if (!document.getElementById('appLock') && typeof window.__bootCoverDone === 'function') window.__bootCoverDone();
-      } catch (eCov) {}
-    }, 300);
+    splashDone();
+    bootLock(0);
   }
 
   function particles(canvas) {
@@ -202,10 +233,35 @@
     }, START_MS);
   }
 
+  /* شاشة تفعيل الجهاز هي الأولى على الجهاز غير المفعّل: نستنى نتيجة فحص
+     التفعيل، ولو ظهرت شاشة تفعيل نتخطى الترحيب ونسيبها هي الأولى. */
+  function startWhenActivationReady(waited) {
+    waited = waited || 0;
+    var ready = window.__activationReady;
+    if (ready && typeof ready.then === 'function') {
+      ready.then(renderOrSkip, renderOrSkip);
+      return;
+    }
+    if (!window.__deviceActivationLoaded) { renderOrSkip(); return; }
+    if (waited >= 900) { renderOrSkip(); return; }
+    setTimeout(function () { startWhenActivationReady(waited + 60); }, 60);
+  }
+
+  function renderOrSkip() {
+    if (done) return;
+    if (document.getElementById('deviceActivation')) {
+      try { sessionStorage.setItem(SESSION, '1'); } catch (e) {}
+      done = true;
+      splashDone();
+      return;
+    }
+    render();
+  }
+
   function start() {
     try {
       if (!document.body) return;
-      render();
+      startWhenActivationReady(0);
     } catch (e) {
       finish();
     }

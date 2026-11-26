@@ -39,7 +39,7 @@ const MAX_SYNC_FILES = 50;
 const MAX_MAIL_BYTES = 24 * 1024 * 1024;
 
 /* حسابات الإدارة المسموح لها ببث تنبيهات البريد */
-const ADMIN_EMAILS = ['gstsyusudg@gmail.com', 'mahmoed181186@gmail.com'];
+const ADMIN_EMAILS = ['gstsyusudg@gmail.com', 'mahmoed181186@gmail.com', 'shrkhalnhdhllmqawlat@gmail.com'];
 const NOTIFY_EXTRA_KEY = 'notify_extra_emails';
 /* حد أقصى لكل طلب — Cloudflare بيسمح بعدد محدود من النداءات الخارجية */
 const NOTIFY_MAX_RECIPIENTS = 40;

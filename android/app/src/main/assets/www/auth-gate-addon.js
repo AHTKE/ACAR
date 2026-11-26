@@ -1,7 +1,7 @@
 /* ============================================================
    auth-gate-addon.js — وضع المشاهد (حساب غير مصرح له)
    ------------------------------------------------------------
-   غير حسابات المسؤول (gstsyusudg@gmail.com / mahmoed181186@gmail.com) → مشاهد فقط:
+   غير حسابات المسؤول (gstsyusudg@gmail.com / mahmoed181186@gmail.com / shrkhalnhdhllmqawlat@gmail.com) → مشاهد فقط:
      • تُخفى أزرار الإضافة/التعديل/الحذف/الحفظ/الرفع/التصدير
      • يُمنع النقر عليها حتى لو ظهرت (منع من طبقة الأعلى)
      • تُمنع إرسال أي نموذج (Enter أو زر حفظ)
@@ -12,7 +12,7 @@
   'use strict';
 
   /* حسابات المسؤول — كلهم صلاحيات كاملة، وأي حساب تاني متصل يبقى مشاهد */
-  var ADMIN_EMAILS = ['gstsyusudg@gmail.com', 'mahmoed181186@gmail.com'];
+  var ADMIN_EMAILS = ['gstsyusudg@gmail.com', 'mahmoed181186@gmail.com', 'shrkhalnhdhllmqawlat@gmail.com'];
   var ADMIN_EMAIL = ADMIN_EMAILS[0];
   function isAdminEmail(e) {
     return ADMIN_EMAILS.indexOf(String(e || '').trim().toLowerCase()) > -1;

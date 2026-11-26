@@ -120,7 +120,7 @@ function boot(opts) {
     zOf('.dev-act') + ' / ' + splashZ + ' / ' + zOf('.app-lock'));
 
   console.log('\n[3] باسورد قديم → رسالة انتهاء المدة');
-  server.passcode = { ok: false, code: 'BAD_PASSCODE', error: 'كلمة المرور غير صحيحة' };
+  server.passcode = { ok: false, code: 'BAD_PASSCODE', expired: true, error: 'انتهت مدة هذا الباسورد' };
   const na2 = boot(Object.assign({ splashShown: true }, server));
   await wait(200);
   const pInput = na2.doc.getElementById('daPass');
@@ -131,6 +131,22 @@ function boot(opts) {
   ok('ظهرت رسالة انتهاء مدة الباسورد',
     !!errBox && !errBox.hidden && /انتهت مدة هذا الباسورد/.test(errBox.textContent), errBox ? errBox.textContent : '');
   ok('الشاشة لسه بتطلب باسورد', !!na2.doc.getElementById('daPass'));
+
+  /* باسورد غلط (مش منتهي): رسالة مختلفة وواضحة */
+  const na2b = boot(Object.assign({ splashShown: true }, server, {
+    passcode: { ok: false, code: 'BAD_PASSCODE', expired: false, error: 'كلمة المرور غير صحيحة' }
+  }));
+  await wait(200);
+  na2b.doc.getElementById('daPass').value = '222222';
+  na2b.doc.getElementById('daNext').click();
+  await wait(180);
+  const errBox2 = na2b.doc.getElementById('daErr');
+  ok('الباسورد الغلط رسالته «غير صحيحة» مش «انتهت المدة»',
+    !!errBox2 && /غير صحيحة/.test(errBox2.textContent) && !/انتهت مدة هذا الباسورد/.test(errBox2.textContent),
+    errBox2 ? errBox2.textContent : '');
+  ok('في لينك واتساب لطلب باسورد جديد',
+    !!na2b.doc.querySelector('.dev-act__company .dev-act__wa') &&
+    decodeURIComponent(na2b.doc.querySelector('.dev-act__company .dev-act__wa').getAttribute('href')).indexOf('باسورد') > -1);
 
   console.log('\n[4] باسورد صح → كود الجهاز + عداد + بيانات الشركة');
   const na3 = boot(Object.assign({ splashShown: true }, server, { passcode: { ok: true, secondsLeft: 280 } }));

@@ -5818,7 +5818,7 @@
       setDriveStatus('is-warn', 'المفاتيح موجودة لكن ' + googleVerdictText(verdict) +
         (tail ? ' — القيمة الحالية تنتهي بـ ' + tail + ')' : '') + ' — اضغط «فحص المفاتيح»');
     } else if (conn) {
-      var admin = /^(gstsyusudg@gmail\.com|mahmoed181186@gmail\.com)$/i.test(String(email || '').trim());
+      var admin = /^(gstsyusudg@gmail\.com|mahmoed181186@gmail\.com|shrkhalnhdhllmqawlat@gmail\.com)$/i.test(String(email || '').trim());
       setDriveStatus('is-ok', 'متصل بحساب Google Drive' + (email ? ' — ' + email : '') +
         ' — الدور: ' + (admin ? 'أدمن (صلاحيات كاملة)' : 'مشاهد (تصفح فقط)') +
         (viaSite ? ' (الربط عبر الموقع)' : ''));
