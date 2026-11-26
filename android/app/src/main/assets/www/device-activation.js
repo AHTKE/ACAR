@@ -225,8 +225,8 @@
   function callApi(action, body, method) {
     var url = API + action;
     if (method === 'GET') {
-      url += '?device=' + encodeURIComponent(deviceCode()) +
-        '&token=' + encodeURIComponent(token());
+      /* التوكن في هيدر مش في الـURL: ما يتسجلش في اللوجات ولا الـReferer */
+      url += '?device=' + encodeURIComponent(deviceCode());
     }
     var ctrl = null, timer = null;
     try { ctrl = new AbortController(); timer = setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, TIMEOUT_MS); } catch (e) {}
@@ -235,6 +235,9 @@
     if (init.method !== 'GET') {
       init.headers = { 'Content-Type': 'application/json' };
       init.body = JSON.stringify(body || {});
+    } else {
+      var tk = token();
+      init.headers = tk ? { 'x-activation-token': tk } : {};
     }
     return fetch(url, init).then(function (res) {
       return res.text().then(function (txt) {

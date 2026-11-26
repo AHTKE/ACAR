@@ -40,13 +40,16 @@ token      = base64url(HMAC-SHA256(secret, "ok:" + device))
   «انتهت المدة» بتبقّى حقيقية.
 - `device` = كود الجهاز (6 أرقام) المخزَّن محليًا على التثبيت.
 - `token` بيُخزَّن على الجهاز كإثبات تفعيل، و`/status` بيعيد التحقق منه
+  (بيتبعت في هيدر `x-activation-token` — والـquery `?token=` لسه مقبول للتوافق).
+- حد المحاولات مزدوج: 8 محاولات لكل جهاز و30 لكل IP في 15 دقيقة، عشان تبديل
+  كود الجهاز ما يسمحش بتجربة بلا نهاية على نفس كلمة المرور.
   على الخادم؛ توكن جهاز تاني أو توكن مزوّر مرفوض.
 
 ## المسارات
 
 | المسار | الطريقة | الوصف |
 |---|---|---|
-| `/api/activation/status?device=&token=` | GET | `{ok, available, enforced, activated, serverNow}` |
+| `/api/activation/status?device=` + هيدر `x-activation-token` | GET | `{ok, available, enforced, activated, serverNow}` |
 | `/api/activation/passcode` | POST | `{device, name, passcode}` → `{ok, deviceCode, secondsLeft}` |
 | `/api/activation/verify` | POST | `{device, code}` → `{ok, activated, token}` |
 | `/api/activation/devices` | GET (أدمن) | قائمة الأجهزة (لو D1 موجود) |

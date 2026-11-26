@@ -118,6 +118,10 @@ function boot(opts) {
   ok('الترتيب البصري: تفعيل > ترحيب > كلمة مرور',
     zOf('.dev-act') > splashZ && splashZ > zOf('.app-lock'),
     zOf('.dev-act') + ' / ' + splashZ + ' / ' + zOf('.app-lock'));
+  const gateZ = Number((html.match(/id="forceAuthGate"[^>]*z-index:(\d+)/) || [])[1] || 0);
+  const coverZ = Number((html.match(/id="appBootCover"[^>]*z-index:(\d+)/) || [])[1] || 0);
+  ok('غطاء الإقلاع فوق شاشة ربط Google (مفيش ظهور ليها قبل الترحيب)',
+    coverZ > gateZ && splashZ > coverZ, 'cover=' + coverZ + ' gate=' + gateZ + ' splash=' + splashZ);
 
   console.log('\n[3] باسورد قديم → رسالة انتهاء المدة');
   server.passcode = { ok: false, code: 'BAD_PASSCODE', expired: true, error: 'انتهت مدة هذا الباسورد' };

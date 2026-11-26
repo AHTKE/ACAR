@@ -41,6 +41,9 @@ function graceOf(env) {
   return DEFAULT_GRACE_MS;
 }
 const MAX_FAILS = 8;
+/* نفس الحد لكن على مستوى الـIP: كود الجهاز جاي من العميل، فمن غير الحد ده
+   أي حد يقدر يبدّل كود الجهاز كل محاولة ويجرّب بلا نهاية على نفس الباسورد. */
+const MAX_FAILS_IP = 30;
 const FAIL_WINDOW_MS = 15 * 60 * 1000;
 const DEVICE_RE = /^\d{6}$/;             /* كود الجهاز */
 const PASS_RE = /^\d{6}$/;
@@ -132,20 +135,65 @@ function bad(json, code, message, status) {
 
 /* ---------- حد المحاولات ---------- */
 
-function tooMany(device) {
-  const rec = failMemo.get(device);
+function tooMany(key, max) {
+  const limit = (Number(max) > 0) ? Number(max) : MAX_FAILS;
+  const rec = failMemo.get(key);
   if (!rec) return 0;
-  if (Date.now() - rec.first > FAIL_WINDOW_MS) { failMemo.delete(device); return 0; }
-  if (rec.fails < MAX_FAILS) return 0;
+  if (Date.now() - rec.first > FAIL_WINDOW_MS) { failMemo.delete(key); return 0; }
+  if (rec.fails < limit) return 0;
   return Math.max(1, Math.ceil((FAIL_WINDOW_MS - (Date.now() - rec.first)) / 60000));
 }
 
-function noteFail(device) {
+/* عنوان العميل كما يحدده المنصّة (Cloudflare / Vercel) — الهيدرز دي بيحطها
+   السيرفر نفسه، ومش بنقرا أي قيمة جاية من المتصفح مباشرة. */
+function clientIp(request) {
+  try {
+    const h = request && request.headers;
+    if (!h || typeof h.get !== 'function') return '';
+    const cf = str(h.get('cf-connecting-ip')).trim();
+    if (cf) return cf;
+    const real = str(h.get('x-real-ip')).trim();
+    if (real) return real;
+    const xff = str(h.get('x-forwarded-for')).split(',');
+    return str(xff[xff.length - 1]).trim();
+  } catch (e) { return ''; }
+}
+
+/* نشيل السجلات المنتهية بدل مسح الجدول كله — مسح الجدول كان بيصفّر
+   الحد لأي حد يقدر يملأه بمفاتيح وهمية. */
+function pruneFails(now) {
+  for (const [k, r] of failMemo) {
+    if (now - r.first > FAIL_WINDOW_MS) failMemo.delete(k);
+    else break;
+  }
+  if (failMemo.size > 5000) {
+    let extra = failMemo.size - 5000;
+    for (const k of failMemo.keys()) {
+      if (extra-- <= 0) break;
+      failMemo.delete(k);
+    }
+  }
+}
+
+function noteFailKey(key) {
   const now = Date.now();
-  const rec = failMemo.get(device);
-  if (!rec || now - rec.first > FAIL_WINDOW_MS) failMemo.set(device, { fails: 1, first: now });
+  const rec = failMemo.get(key);
+  if (!rec || now - rec.first > FAIL_WINDOW_MS) failMemo.set(key, { fails: 1, first: now });
   else rec.fails++;
-  if (failMemo.size > 5000) failMemo.clear();
+  pruneFails(now);
+}
+
+function noteFail(device, ip) {
+  noteFailKey(device);
+  if (ip) noteFailKey('ip:' + ip);
+}
+
+/* أول حد بيتمسك: الجهاز نفسه، أو الـIP لو المحاولات موزّعة على أجهزة */
+function limitWait(device, ip) {
+  const byDevice = tooMany(device, MAX_FAILS);
+  if (byDevice) return byDevice;
+  if (ip) return tooMany('ip:' + ip, MAX_FAILS_IP);
+  return 0;
 }
 
 /* ---------- D1 (اختياري) ---------- */
@@ -232,7 +280,11 @@ export async function handleActivation(request, env, pathname, deps) {
     if (method !== 'GET') return bad(json, 'METHOD', 'الطريقة غير مسموحة', 405);
     const q = new URL(request.url).searchParams;
     const id = str(q.get('device')).trim();
-    const token = str(q.get('token')).trim();
+    /* التوكن في هيدر (مش في الـURL) عشان ما يتسجلش في لوجات السيرفر
+       ولا يتسرّب في الـReferer. بنقبل الـquery للتوافق مع النسخ القديمة. */
+    const headerToken = (request.headers && typeof request.headers.get === 'function')
+      ? str(request.headers.get('x-activation-token')).trim() : '';
+    const token = headerToken || str(q.get('token')).trim();
     let activated = false;
     let dev = null;
 
@@ -271,7 +323,8 @@ export async function handleActivation(request, env, pathname, deps) {
     if (!DEVICE_RE.test(id)) return bad(json, 'BAD_DEVICE', 'كود الجهاز لازم يكون 6 أرقام');
     if (!PASS_RE.test(pass)) return bad(json, 'BAD_PASSCODE', 'كلمة المرور التشغيلية 6 أرقام');
 
-    const wait = tooMany(id);
+    const ip = clientIp(request);
+    const wait = limitWait(id, ip);
     if (wait) return bad(json, 'TOO_MANY', 'محاولات كثيرة — حاول بعد ' + wait + ' دقيقة', 429);
 
     const win = Math.floor(now / PASS_WINDOW_MS);
@@ -285,7 +338,7 @@ export async function handleActivation(request, env, pathname, deps) {
       /* باسورد نافذة قديمة → رسالة «انتهت المدة» مختلفة عن «غلط» */
       let expired = safeEqual(pass, await passcodeFor(secret, win - 1));
       if (!expired) expired = safeEqual(pass, await passcodeFor(secret, win - 2));
-      noteFail(id);
+      noteFail(id, ip);
       if (db) await eventLog(db, id, expired ? 'expired_passcode' : 'bad_passcode',
         expired ? 'باسورد منتهي' : 'كلمة مرور خاطئة');
       return json({
@@ -336,7 +389,8 @@ export async function handleActivation(request, env, pathname, deps) {
     if (!DEVICE_RE.test(id)) return bad(json, 'BAD_DEVICE', 'كود الجهاز لازم يكون 6 أرقام');
     if (!CODE_RE.test(code)) return bad(json, 'BAD_CODE', 'كود التفعيل 6 أرقام');
 
-    const wait = tooMany(id);
+    const ip = clientIp(request);
+    const wait = limitWait(id, ip);
     if (wait) return bad(json, 'TOO_MANY', 'محاولات كثيرة — حاول بعد ' + wait + ' دقيقة', 429);
 
     if (db) {
@@ -362,7 +416,7 @@ export async function handleActivation(request, env, pathname, deps) {
       /* كود جاي من نافذة قديمة؟ رسالة انتهاء الصلاحية أوضح للمستخدم */
       let expired = safeEqual(code, await actCodeFor(secret, id, win - 1));
       if (!expired) expired = safeEqual(code, await actCodeFor(secret, id, win - 2));
-      noteFail(id);
+      noteFail(id, ip);
       if (db) await eventLog(db, id, expired ? 'expired_code' : 'bad_code',
         expired ? 'كود منتهي' : 'كود تفعيل غير مطابق');
       return json({

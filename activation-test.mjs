@@ -171,6 +171,12 @@ console.log('\n— كود التفعيل المخصّص للجهاز —');
 
   const st3 = await read(await call(env, '/api/activation/status?device=' + DEV + '&token=forged-token'));
   ok('توكن مزوّر مرفوض', st3.activated === false);
+
+  /* التوكن في الهيدر بدل الـURL (ما يتسجلش في اللوجات) */
+  const stHeader = await read(await call(env, '/api/activation/status?device=' + DEV, {
+    headers: { 'x-activation-token': gd.token }
+  }));
+  ok('التوكن بيتقبل في الهيدر من غير ما يتحط في الـURL', stHeader.activated === true, JSON.stringify(stHeader));
 }
 
 console.log('\n— حد المحاولات —');
@@ -181,6 +187,22 @@ console.log('\n— حد المحاولات —');
     last = await read(await call(env2, '/api/activation/verify', jsonReq('POST', { device: '777777', code: '000000' })));
   }
   ok('بعد محاولات كثيرة → TOO_MANY', last && last.code === 'TOO_MANY', JSON.stringify(last));
+}
+
+console.log('\n— حد المحاولات عبر أكواد أجهزة متغيرة (نفس الـIP) —');
+{
+  const env3 = { ACTIVATION_SECRET: SECRET };
+  let last = null;
+  for (let i = 0; i < 35; i++) {
+    const dev = String(100000 + i);
+    last = await read(await call(env3, '/api/activation/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'cf-connecting-ip': '203.0.113.9' },
+      body: JSON.stringify({ device: dev, code: '000000' })
+    }));
+  }
+  ok('تبديل كود الجهاز ما بيلفّش على حد المحاولات (نفس الـIP)',
+    last && last.code === 'TOO_MANY', JSON.stringify(last));
 }
 
 console.log('\n— مسارات الأدمن محمية —');
