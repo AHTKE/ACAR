@@ -153,6 +153,29 @@ const list = (win, k) => {
       list(d.window, 'app_customers').length);
   }
 
+  console.log('\n[7] مسح آخر سجل: نسخة قابلة للرجوع قبل المسح');
+  const f = boot({ app_customers: JSON.stringify(CUSTOMERS) });
+  await wait(500);
+  ok('الحارس سجّل العملاء قبل المسح', list(f.window, 'app_customers').length === 3,
+    list(f.window, 'app_customers').length);
+  /* نفس المسار الحقيقي لأي حفظ (putRaw) بقيمة فاضية */
+  f.window.__nizamPutRaw('app_customers', '[]');
+  await wait(150);
+  ok('المسح المتعمد خلّى القسم فاضي', list(f.window, 'app_customers').length === 0,
+    list(f.window, 'app_customers').length);
+  let hist7 = [];
+  try { hist7 = JSON.parse(f.window.localStorage.getItem('app_data_history') || '[]'); } catch (e) { hist7 = []; }
+  let keptRaw = '';
+  try { keptRaw = String(((hist7[0] || {}).sections || {}).app_customers || ''); } catch (e) { keptRaw = ''; }
+  let kept = [];
+  try { kept = JSON.parse(keptRaw || '[]'); } catch (e) { kept = []; }
+  ok('اتحفظت نسخة تاريخية بالعملاء التلاتة قبل المسح', kept.length === 3, kept.length);
+
+  const after = boot(dump(f.window));
+  await wait(500);
+  ok('المسح المتعمد ما بيرجعش السجلات لوحده', list(after.window, 'app_customers').length === 0,
+    list(after.window, 'app_customers').length);
+
   console.log('\n========================================');
   console.log('  PASS: ' + pass + '   FAIL: ' + fail);
   console.log('========================================');

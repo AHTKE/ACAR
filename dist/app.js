@@ -183,6 +183,15 @@
   var storageWarned = false;
   function putRaw(key, raw) {
     try {
+      /* حماية من فقدان آخر نسخة: لو القسم بقى فاضي (مسح آخر سجل)، بناخد
+         نسخة منه في تاريخ النسخ **قبل** الكتابة، لأن الحارس بيشيل القسم
+         بعد كده (مسح متعمّد). من غير كده كان آخر سجل بيتحفظ في مكان واحد
+         بس ويضيع لو المسح كان بالغلط أو بفعل عطل. */
+      if (isEmptyPayload(raw)) {
+        try {
+          if (sectionState(readRawKey(key)) === 'ok') guardHistoryPush('قبل مسح قسم ' + String(key));
+        } catch (eH) {}
+      }
       localStorage.setItem(key, raw);
       /* المسح المتعمّد من المستخدم معناه إن القسم ده خلص فعلاً —
          نشيله من الحارس عشان ما يرجعش لوحده في التشغيل الجاي. */
@@ -6999,12 +7008,17 @@
       setInterval(function () { try { guardHistoryPush('نسخة دورية'); } catch (e) {} }, 10 * 60 * 1000);
     }
     if (typeof document !== 'undefined' && document.addEventListener) {
+      function beforeExit() {
+        try { guardHistoryPush('قبل الإغلاق'); } catch (e) {}
+        try { mirrorSaveNow('قبل الإغلاق'); } catch (eM) {}
+        try { lbSaveNow(false); } catch (eL) {}
+      }
       document.addEventListener('visibilitychange', function () {
-        if (document.visibilityState === 'hidden') {
-          try { guardHistoryPush('قبل الإغلاق'); } catch (e) {}
-          try { mirrorSaveNow('قبل الإغلاق'); } catch (eM) {}
-        }
+        if (document.visibilityState === 'hidden') beforeExit();
       });
+      /* الإغلاق المباشر (تبويب/نافذة/تطبيق أندرويد) ممكن ما يطلقش
+         visibilitychange — pagehide بيغطي الحالة دي. */
+      window.addEventListener('pagehide', beforeExit);
     }
   } catch (eGuardTimer) {}
 
