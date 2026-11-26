@@ -159,7 +159,7 @@
       </span>
       <span class="brand__text">
         <strong>WorkFlow</strong>
-        <small>الإصدار 1.0 · b20261124f</small>
+        <small>الإصدار 1.0 · b20261126a</small>
       </span>
     </button>
 
@@ -425,10 +425,25 @@
           <div class="calc-grid">
             <div class="calc-box"><span>المطلوب سداده بعد خصم المقدم</span><input type="text" name="due" readonly tabindex="-1" value="0" /></div>
             <div class="calc-box"><span>الباقي المتبقي</span><input type="text" name="rest" readonly tabindex="-1" value="0" /></div>
-            <div class="calc-box calc-box--accent"><span>قيمة القسط</span><input type="text" name="installment" readonly tabindex="-1" value="—" /></div>
+            <div class="calc-box calc-box--accent"><span id="installmentLabel">قيمة القسط</span><input type="text" name="installment" readonly tabindex="-1" value="—" /></div>
           </div>
 
-          <div class="form__row">
+          <!-- النظام الجديد (الافتراضي): تكتب المبلغ الشهري والنظام يحسب عدد الأشهر -->
+          <div class="form__row" id="monthlyEntryRow">
+            <label class="field field--full" data-field="monthly"><span>المبلغ الشهري الذي سيدفعه العميل *</span>
+              <input type="number" name="monthlyAmount" min="0" step="any" placeholder="مثال: 5000" />
+              <small class="field__hint">اكتب المبلغ الذي سيدفعه كل شهر، والنظام يحسب عدد الأشهر تلقائياً = الباقي ÷ المبلغ الشهري، وآخر شهر يكون فيه الباقي فقط (أقل من المبلغ الشهري أو مساوٍ له).</small>
+            </label>
+          </div>
+          <div class="calc-grid" id="monthlyEntryCalc">
+            <div class="calc-box calc-box--accent"><span>المبلغ الشهري</span><input type="text" name="monthlyShow" readonly tabindex="-1" value="—" /></div>
+            <div class="calc-box"><span>عدد الأشهر</span><input type="text" name="monthsCount" readonly tabindex="-1" value="—" /></div>
+            <div class="calc-box"><span>قيمة آخر شهر</span><input type="text" name="lastMonthAmount" readonly tabindex="-1" value="—" /></div>
+          </div>
+          <p class="panel__hint" id="monthlyEntryHint" hidden></p>
+
+          <!-- النظام القديم (من الإعدادات بكلمة مرور): تكتب المدة ويُحسب القسط -->
+          <div class="form__row" id="durationEntryRow">
             <div class="field field--full" data-field="duration">
               <span>مدة السداد *</span>
               <div class="duration-row">
@@ -1456,6 +1471,27 @@
           <span class="card__icon card__icon--slate sm"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-gear"/></svg></span>
           <div><h2>الإعدادات</h2><p>كلمة المرور والأقسام المحمية</p></div>
         </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:20px" id="entryModePanel">
+        <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-user-plus"/></svg> طريقة إضافة العميل والتحصيل</h3>
+        <p class="panel__hint">النظام الجديد (الافتراضي): تكتب <b>المبلغ الشهري</b> الذي سيدفعه العميل، والنظام يحسب <b>عدد الأشهر</b> تلقائياً (الباقي ÷ المبلغ الشهري) وقيمة <b>آخر شهر</b>. والنظام القديم: تكتب <b>المدة وعدد الشهور</b> والنظام يحسب قيمة القسط. الرجوع للنظام القديم يحتاج كلمة مرور التطبيق.</p>
+        <div class="form__row">
+          <label class="field"><span>النظام المستخدم في إضافة العميل</span>
+            <select id="customerEntryMode">
+              <option value="monthly">الجديد — المبلغ الشهري ثم حساب عدد الأشهر (الافتراضي)</option>
+              <option value="duration">القديم — المدة وعدد الشهور ثم حساب القسط</option>
+            </select>
+          </label>
+          <label class="field" id="entryModePassField" hidden><span>كلمة مرور التطبيق *</span>
+            <input type="password" id="customerEntryModePass" inputmode="numeric" autocomplete="off" placeholder="••••" />
+            <small class="field__hint">مطلوبة فقط عند تفعيل النظام القديم.</small>
+          </label>
+          <div class="form__actions" style="margin:0;align-self:flex-end">
+            <button type="button" class="btn btn--primary" id="saveCustomerEntryMode"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-check"/></svg> حفظ طريقة الإضافة</button>
+          </div>
+        </div>
+        <p class="panel__note" id="entryModeState"></p>
       </div>
 
       <div class="panel" style="margin-bottom:20px">

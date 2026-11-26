@@ -66,6 +66,20 @@
     try { localStorage.setItem(KEY_PASSWORD, p); } catch (e) {}
   }
 
+  /* طريقة إضافة العميل والتحصيل:
+     monthly  = الجديد (الافتراضي) — تكتب المبلغ الشهري والنظام يحسب عدد الأشهر.
+     duration = القديم — تكتب المدة/عدد الشهور والنظام يحسب قيمة القسط.
+     الرجوع للقديم من الإعدادات يحتاج كلمة مرور التطبيق. */
+  var KEY_CUSTOMER_ENTRY_MODE = 'app_customer_entry_mode';
+  function getCustomerEntryMode() {
+    try { return localStorage.getItem(KEY_CUSTOMER_ENTRY_MODE) === 'duration' ? 'duration' : 'monthly'; }
+    catch (e) { return 'monthly'; }
+  }
+  function saveCustomerEntryMode(mode) {
+    try { localStorage.setItem(KEY_CUSTOMER_ENTRY_MODE, mode === 'duration' ? 'duration' : 'monthly'); }
+    catch (e) {}
+  }
+
   /* أقفال الأقسام: كل قسم إما مفتوح، أو true (كلمة المرور العامة)،
      أو نص (كلمة مرور خاصة). تُحفظ محليًا، ولا تُعرض إلا للأدمن. */
   function getSectionLocks() {
@@ -887,6 +901,25 @@
     return v.toLocaleString('en-US', { maximumFractionDigits: 2 });
   }
 
+  /* تقسيم الباقي على مبلغ شهري ثابت: عدد الأشهر = الباقي ÷ المبلغ الشهري (تقريب
+     لأعلى)، وآخر شهر يحمل الباقي فقط (أقل من المبلغ الشهري أو مساوٍ له). */
+  function monthlySplit(rest, monthlyAmount) {
+    var value = Math.max(Number(rest) || 0, 0);
+    var amount = Math.max(Number(monthlyAmount) || 0, 0);
+    if (!(value > 0) || !(amount > 0)) return { count: 0, monthly: 0, last: 0 };
+    var count = Math.max(1, Math.ceil((value - 0.005) / amount));
+    var last = Math.max(value - (count - 1) * amount, 0);
+    return { count: count, monthly: amount, last: last };
+  }
+
+  /* نص «قيمة القسط»: المبلغ الشهري لو العميل محدد له مبلغ، وإلا القسط القديم. */
+  function customerInstallmentText(c, d) {
+    d = d || derive(c);
+    var m = Number((c && c.monthlyAmount) || 0);
+    if (m > 0) return money(m) + ' / شهر';
+    return (d && d.n > 0 && d.unit) ? money(d.rest / d.n) + ' / ' + d.unit : '';
+  }
+
   /* --- الملاحظات المتعددة --- */
   function renderNotes() {
     var ul = $('#notesList');
@@ -950,11 +983,57 @@
     var rest = Math.max(due - later, 0);
     f.due.value = money(due);
     f.rest.value = money(rest);
+
+    /* النظام الجديد (الافتراضي): من المبلغ الشهري → عدد الأشهر وآخر شهر */
+    if (getCustomerEntryMode() === 'monthly') {
+      var split = monthlySplit(rest, f.monthlyAmount ? f.monthlyAmount.value : 0);
+      if (f.monthlyShow) f.monthlyShow.value = split.count ? money(split.monthly) : '—';
+      if (f.monthsCount) f.monthsCount.value = split.count ? String(split.count) : '—';
+      if (f.lastMonthAmount) f.lastMonthAmount.value = split.count ? money(split.last) : '—';
+      var hint = $('#monthlyEntryHint');
+      if (hint) {
+        hint.hidden = !(rest > 0);
+        hint.textContent = !(rest > 0)
+          ? ''
+          : split.count
+            ? ('التقسيم: ' + money(rest) + ' ÷ ' + money(split.monthly) + ' = ' + split.count +
+              ' شهر — آخر شهر ' + money(split.last) +
+              (split.last < split.monthly ? ' (أقل من المبلغ الشهري)' : '') + '.')
+            : 'اكتب المبلغ الشهري، والنظام يحسب عدد الأشهر وقيمة آخر شهر تلقائياً.';
+      }
+      if (split.count && f.durationValue && f.durationUnit) {
+        f.durationValue.value = String(split.count);
+        f.durationUnit.value = 'شهر';
+        f.installment.value = money(split.monthly) + ' / شهر';
+      } else if (rest <= 0) {
+        f.installment.value = '—';
+      } else {
+        f.installment.value = 'اكتب المبلغ الشهري';
+      }
+      return;
+    }
+
     var n = parseFloat(f.durationValue.value) || 0;
     var unit = f.durationUnit.value;
     if (rest <= 0) f.installment.value = '—';
     else if (n > 0 && unit !== 'دفعة واحدة') f.installment.value = money(rest / n) + ' / ' + unit;
     else f.installment.value = 'دفعة واحدة';
+  }
+
+  /* إظهار/إخفاء أجزاء النموذج حسب النظام المختار في الإعدادات */
+  function applyCustomerEntryModeUI() {
+    var mode = getCustomerEntryMode();
+    var monthlyRow = $('#monthlyEntryRow');
+    var monthlyCalc = $('#monthlyEntryCalc');
+    var durRow = $('#durationEntryRow');
+    if (monthlyRow) monthlyRow.hidden = mode !== 'monthly';
+    if (monthlyCalc) monthlyCalc.hidden = mode !== 'monthly';
+    if (durRow) durRow.hidden = mode === 'monthly';
+    var label = $('#installmentLabel');
+    if (label) label.textContent = mode === 'monthly' ? 'المبلغ الشهري' : 'قيمة القسط';
+    var hint = $('#monthlyEntryHint');
+    if (hint && mode !== 'monthly') hint.hidden = true;
+    recalc();
   }
 
   function clearMarks() {
@@ -977,8 +1056,16 @@
     var required = editingCustomerIdx >= 0
       ? REQUIRED_FIELDS.filter(function (fld) { return fld.key === 'name'; })
       : REQUIRED_FIELDS;
+    if (getCustomerEntryMode() === 'monthly') {
+      /* في النظام الجديد الإلزامي هو المبلغ الشهري بدل مدة السداد */
+      required = required.map(function (fld) {
+        return fld.key === 'durationValue'
+          ? { key: 'monthly', el: 'monthlyAmount', label: 'المبلغ الشهري الذي سيدفعه العميل', num: true }
+          : fld;
+      });
+    }
     required.forEach(function (fld) {
-      var el = f[fld.key];
+      var el = f[fld.el || fld.key];
       var val = el ? String(el.value == null ? '' : el.value).trim() : '';
       var bad = fld.num ? !(parseFloat(val) > 0) : !val;
       if (bad) out.push({ key: fld.wrap || fld.key, label: fld.label });
@@ -1016,6 +1103,10 @@
     var later = parseFloat(f.later.value) || 0;
     var due = Math.max(total - down, 0);
     var rest = Math.max(due - later, 0);
+    var entryMode = getCustomerEntryMode();
+    var splitEntry = entryMode === 'monthly'
+      ? monthlySplit(rest, f.monthlyAmount ? f.monthlyAmount.value : 0)
+      : { count: 0, monthly: 0, last: 0 };
     var list = getCustomers();
     var dueDayNum = f.dueDay ? parseInt(f.dueDay.value, 10) : 0;
     var dueDay = (dueDayNum >= 1 && dueDayNum <= 31) ? dueDayNum : 0;
@@ -1049,6 +1140,13 @@
       balance: rest,
       custom: collectCustomValues('customers', form)
     };
+
+    /* النظام الجديد: نحفظ المبلغ الشهري وعدد الأشهر اللي اتحسب منه.
+       لو مفيش مبلغ شهري (تعديل عميل قديم) منكتبش الحقل عشان يفضل زي ما هو. */
+    if (entryMode === 'monthly' && splitEntry.count) {
+      entry.monthlyAmount = splitEntry.monthly;
+      entry.duration = splitEntry.count + ' شهر';
+    }
 
     /* وضع التعديل: نستبدل السجل في مكانه ونحافظ على الدفعات والمرسل */
     if (editingCustomerIdx >= 0 && list[editingCustomerIdx]) {
@@ -1119,7 +1217,7 @@
     notes = [];
     renderNotes();
     fillCustomValues('customers', {}, form);
-    recalc();
+    applyCustomerEntryModeUI();
     hideAlert();
     setCustomerFormMode(false);
   }
@@ -1149,6 +1247,10 @@
       if (f.durationUnit.options[i].value === unit) { unitOk = true; break; }
     }
     f.durationUnit.value = unitOk ? unit : 'شهر';
+    if (f.monthlyAmount) {
+      var mAmt = Number(c.monthlyAmount || 0);
+      f.monthlyAmount.value = mAmt > 0 ? String(mAmt) : '';
+    }
     var dueDayVal = parseInt(c.dueDay, 10);
     if (f.dueDay) f.dueDay.value = (dueDayVal >= 1 && dueDayVal <= 31) ? dueDayVal : '';
     if (c.status) f.status.value = c.status;
@@ -1172,7 +1274,7 @@
   if (form) {
     fillYears();
     renderNotes();
-    recalc();
+    applyCustomerEntryModeUI();
     if (form.elements.dueDay && getDefaultDueDay()) {
       form.elements.dueDay.placeholder = 'الافتراضي: ' + getDefaultDueDay();
     }
@@ -1420,6 +1522,7 @@
       ['الرقم القومي', c.nationalId || ''],
       ['العنوان', c.address || ''],
       ['مدة السداد', c.duration || ''],
+      ['المبلغ الشهري', Number(c.monthlyAmount || 0) > 0 ? Number(c.monthlyAmount) : ''],
       ['سنة البدء', c.startYear || ''],
       ['سنة الانتهاء', c.endYear || '']
     ];
@@ -1659,7 +1762,7 @@
       infoItem('دفعات مسجّلة عند الإضافة', money(d.later)) +
       infoItem('إجمالي التحصيل من الملف', money(d.paidPays)) +
       infoItem('إجمالي المدفوعات', money(d.paid)) +
-      infoItem('قيمة القسط', (d.n > 0 && d.unit) ? money(d.rest / d.n) + ' / ' + d.unit : '') +
+      infoItem('قيمة القسط', customerInstallmentText(c, d)) +
       infoItem('المبلغ الاجمالي المتبقي', money(d.rest), 'info-item--wide info-item--warn');
 
     /* جدول التحصيل */
@@ -3228,7 +3331,7 @@
       '</div>' +
       '<div class="progress"><i style="width:' + pct + '%"></i></div>' +
       '<div class="progress-label"><span>نسبة السداد: ' + pct + '%</span>' +
-        '<span>قيمة القسط: ' + ((d.n > 0 && d.unit) ? money(d.rest / d.n) + ' / ' + d.unit : '—') + '</span></div>' +
+        '<span>قيمة القسط: ' + (customerInstallmentText(c, d) || '—') + '</span></div>' +
 
       planDetailHTML(c) +
 
@@ -3658,6 +3761,41 @@
     toast((v >= 1 && v <= 31) ? ('تم حفظ يوم التحصيل الافتراضي: ' + v) : 'تم إلغاء اليوم الافتراضي');
     safeRun(function () { renderCollection(colFilter()); }, 'التحصيل بعد حفظ اليوم');
     safeRun(function () { renderWaPanel(); }, 'رسائل واتساب');
+  });
+
+  /* طريقة إضافة العميل والتحصيل — النظام الجديد (المبلغ الشهري) أو القديم (المدة) */
+  var entryModeEl = $('#customerEntryMode');
+  var entryModePassWrap = $('#entryModePassField');
+  var entryModePassEl = $('#customerEntryModePass');
+  function fillEntryModeForm() {
+    var saved = getCustomerEntryMode();
+    if (entryModeEl) entryModeEl.value = saved;
+    if (entryModePassWrap) entryModePassWrap.hidden = saved !== 'duration';
+    var state = $('#entryModeState');
+    if (state) state.textContent = saved === 'monthly'
+      ? 'المفعّل الآن: النظام الجديد — تكتب المبلغ الشهري والنظام يحسب عدد الأشهر وآخر شهر تلقائياً (وهو الافتراضي).'
+      : 'المفعّل الآن: النظام القديم — تكتب المدة/عدد الشهور والنظام يحسب قيمة القسط.';
+  }
+  fillEntryModeForm();
+  if (entryModeEl) entryModeEl.addEventListener('change', function () {
+    if (entryModePassWrap) entryModePassWrap.hidden = entryModeEl.value !== 'duration';
+  });
+  var saveEntryModeBtn = $('#saveCustomerEntryMode');
+  if (saveEntryModeBtn) saveEntryModeBtn.addEventListener('click', function () {
+    if (!entryModeEl) return;
+    var target = entryModeEl.value === 'duration' ? 'duration' : 'monthly';
+    if (target === 'duration') {
+      var typed = entryModePassEl ? String(entryModePassEl.value || '') : '';
+      if (!typed) { toast('اكتب كلمة مرور التطبيق لتفعيل النظام القديم', true); return; }
+      if (typed !== getPassword()) { toast('كلمة المرور غير صحيحة — النظام القديم لم يُفعّل', true); return; }
+    }
+    saveCustomerEntryMode(target);
+    if (entryModePassEl) entryModePassEl.value = '';
+    fillEntryModeForm();
+    safeRun(function () { applyCustomerEntryModeUI(); }, 'واجهة إضافة العميل بعد تغيير النظام');
+    toast(target === 'duration'
+      ? 'تم تفعيل النظام القديم (المدة وعدد الشهور) ✓'
+      : 'تم تفعيل النظام الجديد (المبلغ الشهري) ✓ — وهو الافتراضي');
   });
 
   safeRun(function () { renderCollection(''); renderCollectionSummary(); }, 'التحصيل');

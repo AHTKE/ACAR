@@ -138,6 +138,28 @@ assert.strictEqual(MC.getDefaultDueDay(), 25);
 MC.saveDefaultDueDay(0);
 assert.strictEqual(MC.getDefaultDueDay(), 0);
 
+/* 10ب) النظام الجديد: مبلغ شهري ثابت → عدد أشهر محسوب وآخر شهر أقل */
+c = base({ total: 27000, duration: '', monthlyAmount: 5000, scheduleStart: '2026-09' });
+p = MC.monthlyPlan(c, new Date(2026, 10, 8, 12, 0, 0));
+assert.strictEqual(p.months.length, 6, '27000 ÷ 5000 = 6 شهور');
+assert.strictEqual(p.monthly, 5000);
+assert.deepStrictEqual(p.months.map((m) => m.amount), [5000, 5000, 5000, 5000, 5000, 2000],
+  'آخر شهر يحمل الباقي فقط');
+assert.strictEqual(p.months[5].key, '2027-02');
+
+/* 10ج) مبلغ شهري أكبر من الباقي → شهر واحد بكامل الباقي */
+c = base({ total: 3000, duration: '', monthlyAmount: 5000, scheduleStart: '2026-11' });
+p = MC.monthlyPlan(c, new Date(2026, 10, 8, 12, 0, 0));
+assert.strictEqual(p.months.length, 1);
+assert.strictEqual(p.months[0].amount, 3000);
+assert.strictEqual(p.monthly, 3000);
+
+/* 10د) مبلغ شهري يقسم الباقي بالضبط → كل الشهور متساوية */
+c = base({ total: 30000, duration: '', monthlyAmount: 5000, scheduleStart: '2026-09' });
+p = MC.monthlyPlan(c, new Date(2026, 10, 8, 12, 0, 0));
+assert.strictEqual(p.months.length, 6);
+assert.deepStrictEqual(p.months.map((m) => m.amount), [5000, 5000, 5000, 5000, 5000, 5000]);
+
 /* 10) تفاصيل البروفايل تعرض التحول من غير مدفوع إلى مدفوع بتاريخ الدفع */
 c = base({ scheduleStart: '2020-01', payments: [{ date: '2021-01-15', amount: 60000 }] });
 const detail = MC.planDetailHTML(c);
@@ -145,4 +167,4 @@ assert.ok(detail.indexOf('تغيّر حالة السداد') > -1, 'سجل تغ�
 assert.ok(detail.indexOf('غير مدفوع ← مدفوع') > -1, 'التحول ظاهر في تفاصيل البروفايل');
 assert.ok(detail.indexOf('2021-01-15') > -1, 'تاريخ الدفع ظاهر في تفاصيل البروفايل');
 
-console.log('✓ كل اختبارات التحصيل الشهري نجحت (10 سيناريوهات)');
+console.log('✓ كل اختبارات التحصيل الشهري نجحت (13 سيناريو)');

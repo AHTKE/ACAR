@@ -144,6 +144,67 @@ async function editAndSave(changes) {
       mForm.elements.month.value === (vals.includes(nowK) ? nowK : ''), mForm.elements.month.value + ' / ' + nowK);
   }
 
+  /* ---- 5) النظام الجديد: المبلغ الشهري → عدد الأشهر وآخر شهر تلقائياً ---- */
+  click($('[data-go="add-customer"]'));
+  await wait(150);
+  ok('نموذج المبلغ الشهري ظاهر افتراضياً', $('#monthlyEntryRow').hidden === false);
+  ok('حقل المدة القديم مخفي افتراضياً', $('#durationEntryRow').hidden === true);
+  const af = $('#customerForm').elements;
+  af.name.value = 'عميل شهري';
+  af.phone.value = '0771234567';
+  af.phone2.value = '0777654321';
+  af.nationalId.value = '12345678901234';
+  af.address.value = 'بغداد';
+  af.paidByUs.value = '1000';
+  af.total.value = '20000';
+  af.down.value = '2000';
+  af.monthlyAmount.value = '5000';
+  af.monthlyAmount.dispatchEvent(new window.Event('input', { bubbles: true }));
+  await wait(40);
+  ok('عدد الأشهر اتحسب تلقائياً (18000 ÷ 5000 = 4)', af.monthsCount.value === '4', af.monthsCount.value);
+  ok('قيمة آخر شهر = 3000', af.lastMonthAmount.value === '3,000', af.lastMonthAmount.value);
+  $$('#customerForm input[name="status"]').forEach((r) => { r.checked = (r.value === 'مستلم'); });
+  af.startYear.value = String(new Date().getFullYear());
+  $('#customerForm').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  await wait(200);
+  saved = readCustomers();
+  const monthlyCustomer = saved.find((c) => c.name === 'عميل شهري');
+  ok('العميل الجديد اتحفظ', !!monthlyCustomer);
+  ok('المبلغ الشهري محفوظ', !!monthlyCustomer && Number(monthlyCustomer.monthlyAmount) === 5000,
+    JSON.stringify(monthlyCustomer && monthlyCustomer.monthlyAmount));
+  ok('مدة السداد بقت 4 شهور', !!monthlyCustomer && monthlyCustomer.duration === '4 شهر',
+    monthlyCustomer && monthlyCustomer.duration);
+  ok('الباقي 18000', !!monthlyCustomer && Number(monthlyCustomer.rest) === 18000);
+
+  /* ---- 6) الإعدادات: الرجوع للنظام القديم بالباسورد ثم الرجوع للجديد ---- */
+  click($('[data-go="settings"]'));
+  await wait(150);
+  const modeSel = $('#customerEntryMode');
+  ok('خيار طريقة الإضافة موجود في الإعدادات', !!modeSel);
+  const modeSaved = () => window.localStorage.getItem('app_customer_entry_mode');
+  modeSel.value = 'duration';
+  modeSel.dispatchEvent(new window.Event('change', { bubbles: true }));
+  ok('حقل كلمة المرور ظهر لتفعيل القديم', $('#entryModePassField').hidden === false);
+  click($('#saveCustomerEntryMode'));
+  await wait(50);
+  ok('من غير كلمة مرور القديم مش بيتفعّل', modeSaved() === null || modeSaved() === 'monthly', String(modeSaved()));
+  $('#customerEntryModePass').value = '0000';
+  click($('#saveCustomerEntryMode'));
+  await wait(50);
+  ok('كلمة مرور غلط مش بتفعّل القديم', modeSaved() === null || modeSaved() === 'monthly', String(modeSaved()));
+  $('#customerEntryModePass').value = '2468';
+  click($('#saveCustomerEntryMode'));
+  await wait(80);
+  ok('بكلمة المرور القديم اتفعّل', modeSaved() === 'duration', String(modeSaved()));
+  ok('حقل المدة ظهر تاني', $('#durationEntryRow').hidden === false);
+  ok('حقل المبلغ الشهري اتخفى', $('#monthlyEntryRow').hidden === true);
+  modeSel.value = 'monthly';
+  modeSel.dispatchEvent(new window.Event('change', { bubbles: true }));
+  click($('#saveCustomerEntryMode'));
+  await wait(80);
+  ok('الرجوع للنظام الجديد بدون كلمة مرور', modeSaved() === 'monthly', String(modeSaved()));
+  ok('واجهة الإضافة رجعت للنظام الجديد', $('#monthlyEntryRow').hidden === false && $('#durationEntryRow').hidden === true);
+
   console.log('\n' + (fail ? '✗ فشل ' + fail + ' / ' + (pass + fail) : '✓ نجح ' + pass + ' تحقق'));
   ok('مفيش أخطاء JS أثناء الاختبار', errors.length === 0, errors.join(' | '));
   try { window.close(); } catch (e) {}

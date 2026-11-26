@@ -2,7 +2,8 @@
    monthly.js — محرك التحصيل الشهري
    ------------------------------------------------------------
    • يوم تحصيل لكل عميل (1-31) مع يوم افتراضي من الإعدادات.
-   • قسط شهري = المطلوب سداده ÷ عدد شهور مدة السداد.
+   • قسط شهري = المبلغ الشهري المتفق عليه (النظام الجديد) أو المطلوب سداده ÷
+     عدد شهور مدة السداد (النظام القديم).
    • توزيع الدفعات على الشهور من الأقدم للأحدث.
    • تحديد الشهور المتأخرة والمطلوب الآن.
    يعتمد على دوال التطبيق الأساسية (derive / getCustomers / money...)
@@ -117,8 +118,19 @@
         return plan;
       }
 
-      var count = durationMonthCount(c);
-      var monthly = due / count;
+      /* المبلغ الشهري المتفق عليه (النظام الجديد): عدد الأشهر = الباقي ÷ المبلغ
+         الشهري (تقريب لأعلى)، وآخر شهر يحمل الباقي فقط فيكون أقل من المبلغ
+         الشهري أو مساوياً له. لو مفيش مبلغ شهري نرجع للنظام القديم (المدة). */
+      var monthlyAmount = Number((c && c.monthlyAmount) || 0);
+      var count, monthly;
+      if (monthlyAmount > 0 && due > 0) {
+        count = Math.max(1, Math.ceil((due - 0.005) / monthlyAmount));
+        if (count > 240) count = 240;
+        monthly = Math.min(monthlyAmount, due);
+      } else {
+        count = durationMonthCount(c);
+        monthly = due / count;
+      }
       var startKey = String(c.scheduleStart || '') || monthKeyFromISO(c.startDate) ||
         monthKeyOf(now.getFullYear(), now.getMonth());
       var sp = keyParts(startKey);
