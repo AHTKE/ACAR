@@ -3354,7 +3354,7 @@
         '<div class="form__row">' +
           '<label class="field field--full"><span>الشهر اللي بتسدد عنه</span><select name="month">' +
             collectMonthOptionsHTML(c, '') +
-          '</select><small class="field__hint">الافتراضي هو الشهر الحالي — اختار شهر تاني لو العميل بيدفع عن شهر مختلف، أو «تلقائي» عشان يخصم من أقدم شهر ناقص.</small></label>' +
+          '</select><small class="field__hint">الافتراضي هو الشهر الحالي — الدفعة بتتخصم من أقدم شهر ناقص أولاً لحد الشهر اللي تختاره، وأي زيادة تكمّل على الشهور اللي بعده.</small></label>' +
         '</div>' +
         '<div class="form__row">' +
           '<label class="field field--full"><span>ملاحظة (اختياري)</span><input type="text" name="note" placeholder="ملاحظة حول هذه الدفعة…" /></label>' +
@@ -3394,13 +3394,21 @@
     form.elements.restBefore.value = money(d.rest);
     var target = null;
     var mKey = paymentMonthKey({ month: form.elements.month ? form.elements.month.value : '' });
+    var plan = monthlyPlan(c);
     if (mKey) {
-      var plan = monthlyPlan(c);
       (plan.months || []).forEach(function (m) { if (m.key === mKey) target = m; });
     }
-    form.elements.restAfter.value = target
-      ? money(Math.max(target.remaining - amt + oldAmt, 0)) + ' في ' + monthLabel(target.key)
-      : money(Math.max(d.rest + oldAmt - amt, 0));
+    if (target) {
+      /* نفس ترتيب المحرك: أقدم شهر ناقص لحد الشهر المختار، والباقي بعده.
+         عشان المعاينة تطابق اللي هيتحفظ فعلاً. */
+      var older = 0;
+      (plan.months || []).forEach(function (m) { if (m.key < target.key) older += m.remaining; });
+      var extra = Math.max(amt - oldAmt, 0);
+      var applied = Math.max(extra - older, 0);
+      form.elements.restAfter.value = money(Math.max(target.remaining - applied, 0)) + ' في ' + monthLabel(target.key);
+    } else {
+      form.elements.restAfter.value = money(Math.max(d.rest + oldAmt - amt, 0));
+    }
   }
 
   function resetMainCollectForm(form) {
@@ -3481,7 +3489,7 @@
     if (!months.length) return '<span class="month-strip__none">لا توجد شهور</span>';
     var paid = 0, late = 0;
     var cells = months.map(function (m) {
-      var cls = m.state === 'paid' ? (m.latePaid ? 'is-late-paid' : 'is-paid')
+      var cls = m.state === 'paid' ? (m.latePaid ? 'is-paid is-late-paid' : 'is-paid')
         : m.state === 'overdue' ? 'is-overdue'
           : m.state === 'due' ? 'is-due' : 'is-upcoming';
       if (m.partial) cls += ' is-partial';
@@ -5432,11 +5440,18 @@
   /* كل أوراق الملف في PDF واحد — تفصيل كامل زي الشاشة، مش اختصار */
   function sheetsToPdf(sheets) {
     if (typeof ExportKit === 'undefined' || !ExportKit.hasCanvas || !ExportKit.hasCanvas()) return null;
+    var reports = (sheets || []).map(sheetToReport);
     var canvases = [];
-    (sheets || []).forEach(function (sh) {
-      var pages = ExportKit.drawReportPages(sheetToReport(sh));
-      if (pages && pages.length) canvases = canvases.concat(pages);
-    });
+    if (typeof ExportKit.drawReportsPages === 'function') {
+      /* كل الأوراق في تدفّق واحد: الأقسام الصغيرة تتشارك الصفحة بدل
+         صفحة شبه فاضية لكل قسم. */
+      canvases = ExportKit.drawReportsPages(reports) || [];
+    } else {
+      reports.forEach(function (r) {
+        var pages = ExportKit.drawReportPages(r);
+        if (pages && pages.length) canvases = canvases.concat(pages);
+      });
+    }
     if (!canvases.length) return null;
     return ExportKit.canvasesToPdf(canvases);
   }
@@ -5610,10 +5625,15 @@
         if (stItemsRep && stItemsRep.rows && stItemsRep.rows.length) reports.push(stItemsRep);
       } catch (eSt) {}
       var canvases = [];
-      reports.forEach(function (r) {
-        var ps = (ExportKit.drawReportPages ? ExportKit.drawReportPages(r) : null);
-        if (ps && ps.length) canvases = canvases.concat(ps);
-      });
+      if (typeof ExportKit.drawReportsPages === 'function') {
+        /* تدفّق مضغوط: كل الأقسام ورا بعضها بدون صفحة لكل قسم */
+        canvases = ExportKit.drawReportsPages(reports) || [];
+      } else {
+        reports.forEach(function (r) {
+          var ps = (ExportKit.drawReportPages ? ExportKit.drawReportPages(r) : null);
+          if (ps && ps.length) canvases = canvases.concat(ps);
+        });
+      }
       if (!canvases.length) { toast('تعذّر إنشاء ملف PDF', true); return; }
       var pdf = ExportKit.canvasesToPdf(canvases);
       if (!pdf) { toast('تعذّر إنشاء ملف PDF', true); return; }
@@ -5640,10 +5660,14 @@
         }
         var reports = [buildReport(key)].concat(detailSheets(key).map(sheetToReport));
         var canvases = [];
-        reports.forEach(function (r) {
-          var ps = ExportKit.drawReportPages(r);
-          if (ps && ps.length) canvases = canvases.concat(ps);
-        });
+        if (typeof ExportKit.drawReportsPages === 'function') {
+          canvases = ExportKit.drawReportsPages(reports) || [];
+        } else {
+          reports.forEach(function (r) {
+            var ps = ExportKit.drawReportPages(r);
+            if (ps && ps.length) canvases = canvases.concat(ps);
+          });
+        }
         var pdf = canvases.length ? ExportKit.canvasesToPdf(canvases) : null;
         if (!pdf) { toast('تعذّر إنشاء ملف PDF', true); return; }
         var pf = 'nizam-' + (key === 'all' ? 'summary' : key) + '-' + exportStamp() + '.pdf';

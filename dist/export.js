@@ -240,7 +240,7 @@
     if (sheet.title) mergedRow(sheet.title, 1, 42);
     if (sheet.subtitle) mergedRow(sheet.subtitle, 2, 24);
     mergedRow('نظام الإدارة المتكامل — تاريخ الإصدار: ' + new Date().toLocaleString('ar-EG'), 2, 22);
-    blankRow(8);
+    blankRow(4);
 
     /* ---------- رأس الجدول ---------- */
     var headerRow = 0, firstDataRow = 0, lastDataRow = 0;
@@ -312,12 +312,14 @@
     }
 
     /* ---------- تجميع ورقة العمل ---------- */
-    var sheetPr = '<sheetPr><tabColor rgb="FF4F46E5"/></sheetPr>';
+    /* fitToPage: الطباعة تتظبط على عرض الصفحة بدل ما الجدول يتقسم
+       على صفحات كتير فيها مساحات فاضية. */
+    var sheetPr = '<sheetPr><tabColor rgb="FF4F46E5"/><pageSetUpPr fitToPage="1"/></sheetPr>';
     var sheetViews = '<sheetViews><sheetView rightToLeft="1" workbookViewId="0" showGridLines="0">' +
       (headerRow ? '<pane ySplit="' + headerRow + '" topLeftCell="A' + (headerRow + 1) +
         '" activePane="bottomLeft" state="frozen"/>' : '') +
       '</sheetView></sheetViews>';
-    var formatPr = '<sheetFormatPr defaultRowHeight="22" baseColWidth="12"/>';
+    var formatPr = '<sheetFormatPr defaultRowHeight="20" baseColWidth="12"/>';
     var colsXml = '';
     if (sheet.widths && sheet.widths.length) {
       colsXml = '<cols>' + sheet.widths.map(function (w, i) {
@@ -338,6 +340,9 @@
       sheetPr + sheetViews + formatPr + colsXml +
       '<sheetData>' + out.join('') + '</sheetData>' +
       autoFilter + mergesXml +
+      '<printOptions horizontalCentered="1"/>' +
+      '<pageMargins left="0.3" right="0.3" top="0.4" bottom="0.4" header="0.2" footer="0.2"/>' +
+      '<pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/>' +
       '</worksheet>';
   }
 
@@ -538,89 +543,117 @@
   var BODY_FONT = '400 20px ' + FONT;
 
   /**
-   * report: {
-   *   title, subtitle,
-   *   columns: [label, ...],
-   *   rows: [[cell, ...], ...],
-   *   summary?: [{label, value}]
-   * }
-   * يرجع مصفوفة canvases (صفحة لكل جزء) أو null لو مفيش canvas
+   * تقارير → صفحات PDF بتدفّق واحد مضغوط.
+   *
+   * قبل كده كل قسم كان بيبدأ صفحة لوحده، فالتقارير الصغيرة (فهرس، ملخص،
+   * قسم فيه ٣ صفوف) كانت بتاخد كل واحدة صفحة فيها بياض كبير. دلوقتي
+   * الأقسام بتكمّل ورا بعضها على نفس الصفحة، والصفوف بتتوزّع لحد آخر
+   * مساحة متاحة، من غير أي قص: النص الطويل بيلتف على أكتر من سطر، والصفوف
+   * بتكمّل على صفحة جديدة (بعنوان القسم + رأس الجدول) لو خلص المكان.
+   *
+   * report: { title, subtitle, columns, rows, moneyCols?, totalCols?,
+   *           totalRow?, summary? }
+   * يرجع مصفوفة canvases أو null لو مفيش canvas.
    */
-  function drawReportPages(report) {
-    if (!report || !hasCanvas()) return null;
+  function drawReportsPages(reports) {
+    var list = [];
+    (reports || []).forEach(function (r) { if (r) list.push(r); });
+    if (!list.length || !hasCanvas()) return null;
 
-    var W = CANVAS_W, H = 1755, M = 56;
-    var pages = [];
-    var canvas = null, ctx = null, y = 0;
-    var cols = report.columns || [];
-    var grid = buildGrid(report);
-    var moneyIdx = report.moneyCols || [];
-    var totalIdx = report.totalCols || moneyIdx;
-    var showTotals = report.totalRow !== false;
-    var headerH = 58, rowH = 44;
-
+    var M = 56;
+    var HEADER_H = 58, ROW_H = 44, LINE_H = 24;
+    var MAX_W = 2480;
     var C = {
       ink: '#0f172a', body: '#1f2937', soft: '#475569', muted: '#94a3b8',
       line: '#e2e8f0', brand: '#4f46e5', brand2: '#312e81', brandSoft: '#eef2ff',
       zebra: '#f8fafc', white: '#ffffff', green: '#047857', red: '#b91c1c',
       cardBg: '#f8faff', cardLine: '#dfe5ff'
     };
+    var stamp = new Date().toLocaleString('ar-EG');
 
-    /* ---------- قياس الأعمدة ---------- */
+    /* ---------- قياس أعمدة كل تقرير مرة واحدة ---------- */
     var probe = document.createElement('canvas');
     probe.width = 4; probe.height = 4;
     var pctx = probe.getContext('2d');
 
-    function measureWidths(fHead, fBody) {
-      pctx.font = fHead;
-      return cols.map(function (label, i) {
-        var max = pctx.measureText(String(label == null ? '' : label)).width;
-        pctx.font = fBody;
-        for (var r = 0; r < grid.length; r++) {
-          var w = pctx.measureText(String(grid[r][i] == null ? '' : grid[r][i])).width;
-          if (w > max) max = w;
-        }
+    var layouts = list.map(function (report) {
+      var cols = report.columns || [];
+      var grid = buildGrid(report);
+      var moneyIdx = report.moneyCols || [];
+      var totalIdx = report.totalCols || moneyIdx;
+      var fHeader = HEADER_FONT, fBody = BODY_FONT;
+
+      function measure(fHead, fBody) {
         pctx.font = fHead;
-        return max + 26;
-      });
-    }
-
-    var MAX_W = 4600;
-    var fHeader = HEADER_FONT, fBody = BODY_FONT;
-    var widths = measureWidths(fHeader, fBody);
-    var sum = 0;
-    widths.forEach(function (w) { sum += w; });
-
-    if (sum + 2 * M > MAX_W) {
-      var sc = Math.max(0.5, (MAX_W - 2 * M) / sum);
-      fHeader = '700 ' + Math.max(12, Math.round(21 * sc)) + 'px ' + FONT;
-      fBody = '400 ' + Math.max(12, Math.round(20 * sc)) + 'px ' + FONT;
-      widths = measureWidths(fHeader, fBody);
-      sum = 0;
-      widths.forEach(function (w) { sum += w; });
-    }
-    if (sum + 2 * M > W) W = Math.ceil(sum + 2 * M);
-
-    var rightEdges = [];
-    (function () {
-      var acc = W - M;
-      for (var i = 0; i < widths.length; i++) { rightEdges.push(acc); acc -= widths[i]; }
-    })();
-    var tableW = W - 2 * M;
-
-    var stamp = new Date().toLocaleString('ar-EG');
-    var totals = (function () {
-      var sums = {}, has = false;
-      totalIdx.forEach(function (ci) {
-        var s = 0, any = false;
-        (report.rows || []).forEach(function (row) {
-          var v = row ? row[ci] : null;
-          if (typeof v === 'number' && isFinite(v)) { s += v; any = true; }
+        return cols.map(function (label, i) {
+          var max = pctx.measureText(String(label == null ? '' : label)).width;
+          pctx.font = fBody;
+          for (var r = 0; r < grid.length; r++) {
+            var w = pctx.measureText(String(grid[r][i] == null ? '' : grid[r][i])).width;
+            if (w > max) max = w;
+          }
+          pctx.font = fHead;
+          /* سقف لعرض العمود: الخلية الطويلة تلتف على أسطر بدل ما تمدّ
+             الجدول لصفحة عريضة فاضية — والمساحة الزايدة تتوزّع. */
+          return Math.min(max + 26, 420);
         });
-        if (any) { sums[ci] = s; has = true; }
-      });
-      return has ? sums : null;
-    })();
+      }
+
+      var widths = measure(fHeader, fBody);
+      var sum = 0;
+      widths.forEach(function (w) { sum += w; });
+
+      if (sum + 2 * M > MAX_W) {
+        var sc = Math.max(0.5, (MAX_W - 2 * M) / sum);
+        fHeader = '700 ' + Math.max(12, Math.round(21 * sc)) + 'px ' + FONT;
+        fBody = '400 ' + Math.max(12, Math.round(20 * sc)) + 'px ' + FONT;
+        widths = measure(fHeader, fBody);
+        sum = 0;
+        widths.forEach(function (w) { sum += w; });
+      }
+
+      var totals = (function () {
+        var sums = {}, has = false;
+        totalIdx.forEach(function (ci) {
+          var s = 0, any = false;
+          (report.rows || []).forEach(function (row) {
+            var v = row ? row[ci] : null;
+            if (typeof v === 'number' && isFinite(v)) { s += v; any = true; }
+          });
+          if (any) { sums[ci] = s; has = true; }
+        });
+        return has ? sums : null;
+      })();
+
+      return {
+        report: report, cols: cols, grid: grid, moneyIdx: moneyIdx,
+        fHeader: fHeader, fBody: fBody, widths: widths, sum: sum, totals: totals
+      };
+    });
+
+    /* عرض واحد لكل الصفحات، بنسبة A4، عشان الملف يطلع مرتب للطباعة */
+    var W = CANVAS_W;
+    layouts.forEach(function (L) { W = Math.max(W, Math.ceil(L.sum + 2 * M)); });
+    if (W > MAX_W) W = MAX_W;
+    var H = Math.round(W * 1755 / CANVAS_W);
+
+    layouts.forEach(function (L) {
+      var avail = W - 2 * M;
+      /* نوزّع عرض الصفحة كامل على الأعمدة (زيادة أو نقصان) عشان مفيش
+         فراغ على الجنب والجدول يطبع بعرض الورقة. */
+      if (Math.abs(L.sum - avail) > 0.5 && L.sum > 0) {
+        var k = avail / L.sum;
+        L.widths = L.widths.map(function (w) { return w * k; });
+        L.sum = avail;
+      }
+      var edges = [], acc = W - M;
+      for (var i = 0; i < L.widths.length; i++) { edges.push(acc); acc -= L.widths[i]; }
+      L.rightEdges = edges;
+      L.tableW = W - 2 * M;
+    });
+
+    /* ---------- حالة الرسم ---------- */
+    var pages = [], canvas = null, ctx = null, y = 0;
 
     function roundRect(c, x0, y0, w0, h0, rr) {
       c.beginPath();
@@ -637,59 +670,68 @@
     }
 
     /* ---------- رأس الصفحة (هوية التطبيق) ---------- */
-    function drawBand(isFirst) {
-      var bh = isFirst ? 134 : 88;
+    function drawBandFull(L) {
+      var bh = 134;
       var g = ctx.createLinearGradient(0, 0, W, bh);
       g.addColorStop(0, C.brand2);
       g.addColorStop(1, C.brand);
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, W, bh);
-
-      /* شريط تمييز سفلي */
       ctx.fillStyle = '#a5b4fc';
       ctx.fillRect(0, bh - 5, W, 5);
 
       ctx.textAlign = 'right';
       ctx.direction = 'rtl';
-      if (isFirst) {
-        ctx.fillStyle = 'rgba(255,255,255,.78)';
-        ctx.font = '600 20px ' + FONT;
-        ctx.fillText('نظام الإدارة المتكامل', W - M, 38);
+      ctx.fillStyle = 'rgba(255,255,255,.78)';
+      ctx.font = '600 20px ' + FONT;
+      ctx.fillText('نظام الإدارة المتكامل', W - M, 38);
 
-        ctx.fillStyle = C.white;
-        ctx.font = '800 40px ' + FONT;
-        ctx.fillText(report.title || '', W - M, 88);
+      ctx.fillStyle = C.white;
+      ctx.font = '800 40px ' + FONT;
+      ctx.fillText(fitText(ctx, L.report.title || '', W - 2 * M - 220), W - M, 88);
 
-        ctx.textAlign = 'left';
-        ctx.fillStyle = 'rgba(255,255,255,.82)';
-        ctx.font = '400 18px ' + FONT;
-        ctx.fillText(stamp, M, 40);
-        if (report.subtitle) {
-          ctx.fillStyle = 'rgba(255,255,255,.92)';
-          ctx.font = '400 19px ' + FONT;
-          ctx.fillText(report.subtitle, M, 76);
-        }
-      } else {
-        ctx.fillStyle = C.white;
-        ctx.font = '800 28px ' + FONT;
-        ctx.fillText((report.title || '') + ' — تكملة', W - M, 56);
-
-        ctx.textAlign = 'left';
-        ctx.fillStyle = 'rgba(255,255,255,.8)';
-        ctx.font = '400 16px ' + FONT;
-        ctx.fillText(stamp, M, 56);
+      ctx.textAlign = 'left';
+      ctx.fillStyle = 'rgba(255,255,255,.82)';
+      ctx.font = '400 18px ' + FONT;
+      ctx.fillText(stamp, M, 40);
+      if (L.report.subtitle) {
+        ctx.fillStyle = 'rgba(255,255,255,.92)';
+        ctx.font = '400 19px ' + FONT;
+        ctx.fillText(fitText(ctx, L.report.subtitle, Math.max(120, W / 2 - M)), M, 76);
       }
       ctx.textAlign = 'right';
       y = bh + 30;
     }
 
+    function drawBandCont(L) {
+      var bh = 88;
+      var g = ctx.createLinearGradient(0, 0, W, bh);
+      g.addColorStop(0, C.brand2);
+      g.addColorStop(1, C.brand);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, bh);
+      ctx.fillStyle = '#a5b4fc';
+      ctx.fillRect(0, bh - 5, W, 5);
+
+      ctx.textAlign = 'right';
+      ctx.fillStyle = C.white;
+      ctx.font = '800 28px ' + FONT;
+      ctx.fillText(fitText(ctx, (L.report.title || '') + ' — تكملة', W - 2 * M - 220), W - M, 56);
+
+      ctx.textAlign = 'left';
+      ctx.fillStyle = 'rgba(255,255,255,.8)';
+      ctx.font = '400 16px ' + FONT;
+      ctx.fillText(stamp, M, 56);
+      ctx.textAlign = 'right';
+      y = bh + 30;
+    }
+
     /* ---------- بطاقات الملخص ---------- */
-    function drawCards() {
-      var list = report.summary || [];
+    function drawCards(L) {
+      var list = L.report.summary || [];
       if (!list.length) return;
       var gap = 14;
-      var gapW = tableW - gap * (list.length - 1);
-      var cw = Math.floor(gapW / list.length);
+      var cw = Math.floor((L.tableW - gap * (list.length - 1)) / list.length);
       var ch = 96;
       var xRight = W - M;
       var accents = [C.brand, C.green, C.red, C.brand2, C.soft, C.green];
@@ -702,7 +744,6 @@
         ctx.lineWidth = 1.4;
         ctx.stroke();
 
-        /* شريط لوني أعلى البطاقة */
         ctx.fillStyle = accents[i % accents.length];
         roundRect(ctx, x0 + 1.5, y + 1.5, cw - 3, 5, 3);
         ctx.fill();
@@ -710,61 +751,200 @@
         ctx.textAlign = 'right';
         ctx.fillStyle = C.soft;
         ctx.font = '400 17px ' + FONT;
-        ctx.fillText(String(s.label || ''), x0 + cw - 14, y + 34);
+        ctx.fillText(fitText(ctx, String(s.label || ''), cw - 28), x0 + cw - 14, y + 34);
 
         ctx.fillStyle = (i === 1 ? C.green : i === 2 ? C.red : C.ink);
         ctx.font = '800 25px ' + FONT;
-        ctx.fillText(String(s.value == null ? '' : s.value), x0 + cw - 14, y + 72);
+        ctx.fillText(fitText(ctx, String(s.value == null ? '' : s.value), cw - 28), x0 + cw - 14, y + 72);
 
         xRight = x0 - gap;
       });
       y += ch + 26;
     }
 
+    /* ---------- عنوان قسم داخل الصفحة (مضغوط — مفيش صفحة لكل قسم) ---------- */
+    function sectionHeadHeight(L) {
+      return L.report.subtitle ? 66 : 50;
+    }
+
+    function drawSectionHead(L) {
+      var h = sectionHeadHeight(L);
+      roundRect(ctx, M, y, L.tableW, h, 12);
+      ctx.fillStyle = C.brandSoft;
+      ctx.fill();
+      ctx.strokeStyle = C.cardLine;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+
+      ctx.fillStyle = C.brand;
+      roundRect(ctx, W - M - 8, y + 9, 5, h - 18, 2.5);
+      ctx.fill();
+
+      ctx.textAlign = 'right';
+      ctx.fillStyle = C.brand2;
+      ctx.font = '800 26px ' + FONT;
+      ctx.fillText(fitText(ctx, L.report.title || '', L.tableW - 56), W - M - 20, y + (L.report.subtitle ? 30 : 34));
+      if (L.report.subtitle) {
+        ctx.fillStyle = C.soft;
+        ctx.font = '400 18px ' + FONT;
+        ctx.fillText(fitText(ctx, L.report.subtitle, L.tableW - 56), W - M - 20, y + 54);
+      }
+      y += h + 12;
+    }
+
+    /* ملخّص سطر واحد بيتلف لو طويل — كل الأرقام تظهر من غير قص */
+    function drawSummaryLine(L) {
+      var list = L.report.summary || [];
+      if (!list.length) return;
+      ctx.font = '700 17px ' + FONT;
+      var maxW = L.tableW - 28;
+      var lines = [], line = [], used = 0;
+      list.forEach(function (s) {
+        var txt = (s.label ? s.label + ': ' : '') + (s.value == null ? '' : String(s.value));
+        var w = ctx.measureText(txt).width + 24;
+        if (used + w > maxW && line.length) { lines.push(line); line = []; used = 0; }
+        line.push({ txt: txt, w: w - 24 });
+        used += w;
+      });
+      if (line.length) lines.push(line);
+      var h = lines.length * 26 + 16;
+
+      roundRect(ctx, M, y, L.tableW, h, 10);
+      ctx.fillStyle = C.brandSoft;
+      ctx.fill();
+
+      ctx.textAlign = 'right';
+      lines.forEach(function (ln, ri) {
+        var x = W - M - 14;
+        ln.forEach(function (it) {
+          ctx.fillStyle = C.brand2;
+          ctx.fillText(it.txt, x, y + 24 + ri * 26);
+          x -= it.w + 24;
+        });
+      });
+      y += h + 12;
+    }
+
     /* ---------- رأس جدول البيانات ---------- */
-    function drawTableHead() {
-      roundRect(ctx, M, y, tableW, headerH, 12);
+    function drawTableHead(L) {
+      if (!L.cols.length) return;
+      roundRect(ctx, M, y, L.tableW, HEADER_H, 12);
       ctx.fillStyle = C.brand;
       ctx.fill();
 
       ctx.fillStyle = 'rgba(255,255,255,.16)';
-      ctx.fillRect(M + 12, y + headerH - 6, tableW - 24, 3);
+      ctx.fillRect(M + 12, y + HEADER_H - 6, L.tableW - 24, 3);
 
       ctx.fillStyle = C.white;
-      ctx.font = fHeader;
+      ctx.font = L.fHeader;
       ctx.textAlign = 'right';
-      cols.forEach(function (label, i) {
-        ctx.fillText(String(label == null ? '' : label), rightEdges[i] - 12, y + headerH / 2 + 7);
+      L.cols.forEach(function (label, i) {
+        ctx.fillText(fitText(ctx, String(label == null ? '' : label), L.widths[i] - 16),
+          L.rightEdges[i] - 12, y + HEADER_H / 2 + 7);
       });
-      y += headerH;
+      y += HEADER_H;
     }
 
     /* ---------- صف الإجمالي ---------- */
-    function drawTotals() {
-      if (!totals || !showTotals) return;
-      if (y + 52 > H - 84) newPage(false);
+    function drawTotals(L) {
+      if (!L.totals || L.report.totalRow === false) return;
       ctx.fillStyle = C.brandSoft;
-      ctx.fillRect(M, y, tableW, 46);
+      ctx.fillRect(M, y, L.tableW, 46);
       ctx.fillStyle = C.brand;
-      ctx.fillRect(M, y, tableW, 3);
+      ctx.fillRect(M, y, L.tableW, 3);
 
       ctx.font = '700 19px ' + FONT;
       ctx.textAlign = 'right';
       ctx.fillStyle = C.brand2;
-      ctx.fillText('الإجمالي', rightEdges[0] - 12, y + 31);
+      ctx.fillText('الإجمالي', L.rightEdges[0] - 12, y + 31);
 
-      cols.forEach(function (label, i) {
-        if (!totals.hasOwnProperty(i)) return;
+      L.cols.forEach(function (label, i) {
+        if (!L.totals.hasOwnProperty(i)) return;
         ctx.fillStyle = C.brand2;
         ctx.font = '700 19px ' + FONT;
-        ctx.fillText(totals[i].toLocaleString('en-US', { maximumFractionDigits: 2 }),
-          rightEdges[i] - 12, y + 31);
+        ctx.fillText(L.totals[i].toLocaleString('en-US', { maximumFractionDigits: 2 }),
+          L.rightEdges[i] - 12, y + 31);
       });
       y += 46;
     }
 
+    /* ---------- التفاف النص: مفيش عمود بيتقص ---------- */
+    function wrapText(text, maxW) {
+      var s = String(text == null ? '' : text);
+      if (!s) return [''];
+      if (ctx.measureText(s).width <= maxW) return [s];
+      var words = s.split(/\s+/);
+      var lines = [], line = '';
+      for (var i = 0; i < words.length; i++) {
+        var test = line ? (line + ' ' + words[i]) : words[i];
+        if (ctx.measureText(test).width <= maxW) { line = test; continue; }
+        if (line) { lines.push(line); line = words[i]; }
+        else {
+          /* كلمة واحدة أطول من العمود: نقسمها بالحرف بدل القص */
+          var chunk = '';
+          for (var ch = 0; ch < words[i].length; ch++) {
+            if (chunk && ctx.measureText(chunk + words[i][ch]).width > maxW) {
+              lines.push(chunk);
+              chunk = '';
+            }
+            chunk += words[i][ch];
+          }
+          line = chunk;
+        }
+      }
+      if (line) lines.push(line);
+      return lines.length ? lines : [''];
+    }
+
+    function layoutRow(L, row) {
+      ctx.font = L.fBody;
+      var lines = [], maxLines = 1;
+      for (var i = 0; i < L.cols.length; i++) {
+        var ls = wrapText(row[i], Math.max(26, L.widths[i] - 16));
+        lines.push(ls);
+        if (ls.length > maxLines) maxLines = ls.length;
+      }
+      return { lines: lines, h: Math.max(ROW_H, maxLines * LINE_H + 18) };
+    }
+
+    function drawRow(L, row, ri) {
+      if (y + ROW_H > H - 96) {
+        newPage('cont', L, false);
+        drawTableHead(L);
+      }
+      var lay = layoutRow(L, row);
+      if (y + lay.h > H - 96 && y > 118 + HEADER_H) {
+        newPage('cont', L, false);
+        drawTableHead(L);
+      }
+      var h = lay.h;
+      if (ri % 2 === 1) {
+        ctx.fillStyle = C.zebra;
+        ctx.fillRect(M, y, L.tableW, h);
+      }
+      ctx.font = L.fBody;
+      ctx.fillStyle = C.body;
+      ctx.textAlign = 'right';
+      for (var i = 0; i < L.cols.length; i++) {
+        var ls = lay.lines[i];
+        var startY = y + (h - ls.length * LINE_H) / 2 + 17;
+        for (var k = 0; k < ls.length; k++) {
+          ctx.fillText(ls[k], L.rightEdges[i] - 12, startY + k * LINE_H);
+        }
+      }
+
+      ctx.strokeStyle = C.line;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(M, y + h + 0.5);
+      ctx.lineTo(W - M, y + h + 0.5);
+      ctx.stroke();
+
+      y += h;
+    }
+
     /* ---------- صفحة جديدة ---------- */
-    function newPage(isFirst) {
+    function newPage(kind, L, cards) {
       canvas = document.createElement('canvas');
       canvas.width = W; canvas.height = H;
       ctx = canvas.getContext('2d');
@@ -774,46 +954,50 @@
 
       ctx.textAlign = 'right';
       ctx.direction = 'rtl';
-      drawBand(isFirst);
-      if (isFirst) drawCards();
-      drawTableHead();
+      if (kind === 'full') drawBandFull(L);
+      else if (kind === 'cont') drawBandCont(L);
+      else y = 40;
+      if (cards && L) drawCards(L);
     }
 
-    newPage(true);
-
-    /* ---------- الصفوف ---------- */
-    grid.forEach(function (row, ri) {
-      if (y + rowH > H - 96) newPage(false);
-      if (ri % 2 === 1) {
-        ctx.fillStyle = C.zebra;
-        ctx.fillRect(M, y, tableW, rowH);
+    /* ---------- التدفّق: كل الأقسام ورا بعضها ---------- */
+    layouts.forEach(function (L, li) {
+      var report = L.report;
+      var fresh = (li === 0) || !pages.length;
+      if (!fresh) {
+        var blockNeed = sectionHeadHeight(L) + 12 +
+          ((report.summary && report.summary.length) ? 42 : 0) + 12 +
+          HEADER_H + ROW_H * 2 + 8;
+        if (y + blockNeed > H - 96) fresh = true;
       }
-      ctx.font = fBody;
-      ctx.fillStyle = C.body;
-      ctx.textAlign = 'right';
-      cols.forEach(function (label, i) {
-        ctx.fillText(row[i], rightEdges[i] - 12, y + rowH / 2 + 7);
-      });
+      if (fresh) {
+        newPage('full', L, true);
+      } else {
+        y += 18;
+        drawSectionHead(L);
+        drawSummaryLine(L);
+      }
 
-      ctx.strokeStyle = C.line;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(M, y + rowH + 0.5);
-      ctx.lineTo(W - M, y + rowH + 0.5);
-      ctx.stroke();
+      drawTableHead(L);
 
-      y += rowH;
+      if (!L.grid.length) {
+        ctx.fillStyle = C.muted;
+        ctx.font = '400 22px ' + FONT;
+        ctx.textAlign = 'center';
+        ctx.fillText('لا توجد بيانات مسجّلة في هذا القسم', W / 2, y + 40);
+        y += 62;
+      } else {
+        for (var ri = 0; ri < L.grid.length; ri++) drawRow(L, L.grid[ri], ri);
+        if (report.totalRow !== false && L.totals) {
+          if (y + 52 > H - 96) {
+            newPage('cont', L, false);
+            drawTableHead(L);
+          }
+          drawTotals(L);
+        }
+      }
+      y += 14;
     });
-
-    if (!grid.length) {
-      ctx.fillStyle = C.muted;
-      ctx.font = '400 22px ' + FONT;
-      ctx.textAlign = 'center';
-      ctx.fillText('لا توجد بيانات مسجّلة في هذا القسم', W / 2, y + 46);
-      y += 70;
-    } else {
-      drawTotals();
-    }
 
     /* ---------- تذييل كل صفحة ---------- */
     pages.forEach(function (cv, i) {
@@ -829,13 +1013,12 @@
       c2.fillStyle = C.muted;
       c2.font = '400 16px ' + FONT;
       c2.textAlign = 'right';
-      c2.fillText('نظام الإدارة المتكامل — ' + (report.title || ''), cv.width - M, fy);
+      c2.fillText('نظام الإدارة المتكامل — ' + (list[0].title || ''), cv.width - M, fy);
 
       c2.textAlign = 'center';
       c2.fillStyle = C.soft;
       c2.fillText(stamp, cv.width / 2, fy);
 
-      /* شارة رقم الصفحة */
       var lbl = 'صفحة ' + (i + 1) + ' من ' + pages.length;
       c2.font = '700 15px ' + FONT;
       var lw = c2.measureText(lbl).width + 24;
@@ -848,6 +1031,11 @@
     });
 
     return pages;
+  }
+
+  /* تقرير واحد → صفحاته (نفس محرّك التدفّق) */
+  function drawReportPages(report) {
+    return drawReportsPages([report]);
   }
 
   /* canvas → bytes JPEG */
@@ -931,6 +1119,7 @@
     buildPdf: buildPdf,
     colName: colName,
     hasCanvas: hasCanvas,
+    drawReportsPages: drawReportsPages,
     drawReportPages: drawReportPages,
     canvasesToPdf: canvasesToPdf,
     reportToPdf: reportToPdf,

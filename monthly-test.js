@@ -167,4 +167,50 @@ assert.ok(detail.indexOf('تغيّر حالة السداد') > -1, 'سجل تغ�
 assert.ok(detail.indexOf('غير مدفوع ← مدفوع') > -1, 'التحول ظاهر في تفاصيل البروفايل');
 assert.ok(detail.indexOf('2021-01-15') > -1, 'تاريخ الدفع ظاهر في تفاصيل البروفايل');
 
-console.log('✓ كل اختبارات التحصيل الشهري نجحت (13 سيناريو)');
+/* 11) الدفعة على شهر محدد بتسدد أقدم شهر ناقص الأول:
+   «دفع المطلوب الآن» بـ20000 على نوفمبر لازم يسدد سبتمبر وأكتوبر
+   (كان قبل كده بيتحسب على نوفمبر وديسمبر فيفضلوا متأخرين وأحمر). */
+c = base({ payments: [{ date: '2026-11-26', amount: 20000, month: '2026-11' }] });
+p = MC.monthlyPlan(c, new Date(2026, 10, 26, 12, 0, 0));
+assert.deepStrictEqual(p.overdueMonths.map((m) => m.key), ['2026-11'], 'فضل نوفمبر بس (استحقاقه 19 عدّى)');
+assert.strictEqual(p.months.find((m) => m.key === '2026-09').paid, true);
+assert.strictEqual(p.months.find((m) => m.key === '2026-10').paid, true);
+assert.strictEqual(p.months.find((m) => m.key === '2026-11').paid, false, 'نوفمبر لسه مستحق');
+assert.strictEqual(p.requiredNow, 10000, 'المتبقي الآن شهر نوفمبر فقط');
+
+/* 12) جزء + المتبقي على نفس الشهر → الشهر أخضر «مدفوع» مش جزئي */
+c = base({
+  total: 20000, scheduleStart: '2026-11',
+  payments: [
+    { date: '2026-11-10', amount: 3000, month: '2026-11' },
+    { date: '2026-11-12', amount: 7000, month: '2026-11' }
+  ]
+});
+p = MC.monthlyPlan(c, new Date(2026, 10, 26, 12, 0, 0));
+const nov = p.months.find((m) => m.key === '2026-11');
+assert.strictEqual(nov.paid, true, 'نوفمبر اتسدد بالكامل');
+assert.strictEqual(nov.partial, false);
+assert.strictEqual(p.partialMonths.length, 0, 'مفيش دفع جزئي عالق');
+assert.ok(MC.monthCardHTML(nov).indexOf('is-paid') > -1, 'الكارت أخضر');
+assert.ok(MC.monthCardHTML(nov).indexOf('is-partial') === -1, 'مش أصفر جزئي');
+
+/* 13) الشهر المدفوع بعد الاستحقاق يفضل أخضر مع علامة تأخير */
+c = base({ payments: [{ date: '2026-11-26', amount: 10000, month: '2026-09' }] });
+p = MC.monthlyPlan(c, new Date(2026, 10, 26, 12, 0, 0));
+const sepLate = p.months.find((m) => m.key === '2026-09');
+assert.strictEqual(sepLate.paid, true);
+assert.strictEqual(sepLate.latePaid, true);
+assert.ok(MC.monthCardHTML(sepLate).indexOf('is-paid') > -1, 'أخضر رغم التأخير');
+assert.ok(MC.monthCardHTML(sepLate).indexOf('مدفوع بعد التأخير') > -1, 'علامة التأخير ظاهرة');
+
+/* 14) سداد المدة كاملة بدفعة مرتبطة بالشهر الحالي → كل الشهور خضراء */
+c = base({ payments: [
+  { date: '2026-11-10', amount: 20000 },
+  { date: '2026-11-26', amount: 40000, month: '2026-11' }
+] });
+p = MC.monthlyPlan(c, new Date(2026, 10, 26, 12, 0, 0));
+assert.strictEqual(p.settled, true);
+assert.ok(p.months.every((m) => m.paid), 'كل الشهور مدفوعة');
+assert.strictEqual(p.overdueMonths.length, 0);
+
+console.log('✓ كل اختبارات التحصيل الشهري نجحت (17 سيناريو)');

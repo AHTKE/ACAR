@@ -166,10 +166,13 @@
       var allocs = [];
       for (ii = 0; ii < count; ii++) { coveredAmounts.push(0); allocs.push([]); }
 
-      function addMoney(startIdx, value, date) {
+      /* توزيع مبلغ على الشهور من الأقدم للأحدث. stopIdx (اختياري) بيحدّ
+         آخر شهر مسموح بالتحصيل فيه (شامل) — الفلوس الزيادة ترجع للمتصل. */
+      function addMoney(startIdx, value, date, stopIdx) {
         var left = Math.max(Number(value || 0), 0);
-        var k = startIdx;
-        while (left > 0.004 && k < count) {
+        var end = (stopIdx == null || stopIdx >= count) ? count : Math.max(0, stopIdx + 1);
+        var k = Math.max(0, Number(startIdx) || 0);
+        while (left > 0.004 && k < end) {
           var room = amounts[k] - coveredAmounts[k];
           if (room <= 0.004) { k++; continue; }
           var take = Math.min(room, left);
@@ -193,7 +196,17 @@
         available += v;
         var target = paymentMonthKey(x.p);
         var ti = target ? keys.indexOf(target) : -1;
-        addMoney(ti >= 0 ? ti : firstOpenMonth(), v, x.p.date);
+        if (ti >= 0) {
+          /* الشهر المختار حد أقصى للتحصيل مش بداية: بنسدّد أقدم شهر ناقص
+             الأول لحد الشهر المختار، والباقي يكمّل على الشهور اللي بعده.
+             كده دفعة «المطلوب الآن» بتسدد المتأخرات فعلاً (كانت بتتحسب
+             على الشهر الحالي فالشهور القديمة تفضل حمراء رغم السداد)،
+             وكمان الجزء + المتبقي على نفس الشهر يخلّصه أخضر. */
+          var rest1 = addMoney(0, v, x.p.date, ti);
+          if (rest1 > 0.004) addMoney(ti + 1, rest1, x.p.date);
+        } else {
+          addMoney(firstOpenMonth(), v, x.p.date);
+        }
       });
 
       var currentKey = monthKeyOf(now.getFullYear(), now.getMonth());

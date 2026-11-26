@@ -100,6 +100,27 @@ const empty = Kit.drawReportPages({ title: 'فارغ', columns: ['أ', 'ب'], ro
 ok('صفحة واحدة للفارغ', Array.isArray(empty) && empty.length === 1);
 ok('PDF للفارغ', !!Kit.reportToPdf({ title: 'فارغ', columns: ['أ'], rows: [] }));
 
+console.log('\n[6] تدفّق تقارير متعددة (بدون صفحة لكل قسم)');
+const small = (title, n) => ({
+  title, subtitle: 'قسم صغير', columns: ['#', 'البيان', 'المبلغ'], moneyCols: [2],
+  rows: Array.from({ length: n }, (_, i) => [i + 1, 'بند رقم ' + (i + 1), (i + 1) * 100]),
+  summary: [{ label: 'عدد البنود', value: String(n) }, { label: 'الإجمالي', value: String(n * 150) }]
+});
+const many = [small('قسم أ', 2), small('قسم ب', 3), small('قسم ج', 2), small('قسم د', 1), small('قسم هـ', 4)];
+const flow = Kit.drawReportsPages(many);
+const separate = many.reduce((n, r) => n + Kit.drawReportPages(r).length, 0);
+ok('التدفّق يقلل عدد الصفحات', flow.length < separate, flow.length + ' < ' + separate);
+ok('كل الأقسام ات رسمت في صفحات', flow.length >= 1 && flow.every((c) => c.width === 1240 && c.height === 1755));
+ok('PDF للتدفّق سليم', Buffer.from(Kit.canvasesToPdf(flow)).toString('latin1').slice(0, 5) === '%PDF-');
+
+const longText = {
+  title: 'نص طويل بدون قص', columns: ['#', 'البيان'], totalRow: false,
+  rows: [[1, 'كلمة طويلة جداً بتتكرر كتير '.repeat(30)]]
+};
+const wrapped = Kit.drawReportsPages([longText]);
+ok('النص الطويل ياخد سطور إضافية بدون صفحة زيادة', wrapped.length === 1, 'pages=' + wrapped.length);
+ok('تقارير فاضية آمنة', Kit.drawReportsPages([]) === null);
+
 console.log('\n========================================');
 console.log('  PASS: ' + pass + '   FAIL: ' + fail);
 console.log('========================================');

@@ -1136,9 +1136,11 @@ label.btn{cursor:pointer;user-select:none}
 .month-card.is-paid{border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.08)}
 .month-card.is-paid .month-card__dot{background:#34d399;box-shadow:0 0 0 3px rgba(52,211,153,.18)}
 .month-card.is-paid .month-card__state{color:#6ee7b7}
-.month-card.is-paid.is-late-paid{border-color:rgba(245,158,11,.5);background:rgba(245,158,11,.08)}
+/* الشهر المدفوع يفضل أخضر حتى لو اتدفع بعد الاستحقاق — التأخير يظهر
+   بنقطة كهرمانية ونص «مدفوع بعد التأخير» بدل ما يتحول الكارت كله أصفر. */
+.month-card.is-paid.is-late-paid{border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.08)}
 .month-card.is-paid.is-late-paid .month-card__dot{background:#fbbf24;box-shadow:0 0 0 3px rgba(245,158,11,.18)}
-.month-card.is-paid.is-late-paid .month-card__state{color:#fcd34d}
+.month-card.is-paid.is-late-paid .month-card__state{color:#6ee7b7}
 .month-card.is-overdue{border-color:rgba(248,113,113,.45);background:rgba(248,113,113,.08)}
 .month-card.is-overdue .month-card__dot{background:#f87171;box-shadow:0 0 0 3px rgba(248,113,113,.18)}
 .month-card.is-overdue .month-card__state{color:#fca5a5}
@@ -1312,7 +1314,9 @@ label.btn{cursor:pointer;user-select:none}
   font-size:10.5px;font-weight:700;font-variant-numeric:tabular-nums;cursor:help;
 }
 .mcell.is-paid{background:rgba(52,211,153,.16);border-color:rgba(52,211,153,.45);color:#6ee7b7}
-.mcell.is-late-paid{background:rgba(245,158,11,.16);border-color:rgba(245,158,11,.5);color:#fcd34d}
+/* المدفوع يفضل أخضر، وخيط كهرماني سفلي بس يوضح أنه اتدفع بعد الاستحقاق */
+.mcell.is-late-paid{background:rgba(52,211,153,.16);border-color:rgba(52,211,153,.45);color:#6ee7b7;box-shadow:inset 0 -2px 0 #fbbf24}
+.mcell.is-paid.is-late-paid{background:rgba(52,211,153,.16);border-color:rgba(52,211,153,.45);color:#6ee7b7;box-shadow:inset 0 -2px 0 #fbbf24}
 .mcell.is-overdue{background:rgba(248,113,113,.18);border-color:rgba(248,113,113,.6);color:#fecaca;box-shadow:0 0 0 2px rgba(248,113,113,.08)}
 .mcell.is-due{background:rgba(245,158,11,.14);border-color:rgba(245,158,11,.55);color:#fde68a}
 .mcell.is-upcoming{opacity:.55}
@@ -1441,7 +1445,6 @@ label.btn{cursor:pointer;user-select:none}
 [data-theme="light"] .count-pill--warn,
 [data-theme="light"] .drive-status.is-warn,
 [data-theme="light"] .month-card.is-due .month-card__state,
-[data-theme="light"] .month-card.is-paid.is-late-paid .month-card__state,
 [data-theme="light"] .glance-chip.is-due b,
 [data-theme="light"] .plan-history>b,
 [data-theme="light"] .plan-history li,

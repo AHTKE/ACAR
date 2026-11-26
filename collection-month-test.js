@@ -58,23 +58,25 @@ function ok(name, cond, extra) {
   console.log('  PASS  ' + name);
 }
 
-/* 1) دفع جزئي على شهر محدد (نوفمبر) بدون ما يلمس المتأخر (سبتمبر/أكتوبر) */
+/* 1) دفع جزئي على شهر محدد مع وجود متأخرات: الفلوس بتسدد أقدم شهر ناقص
+   الأول (قاعدة أقدم-أولاً المكتوبة في الشاشة)، عشان العميل مايفضلش متأخر
+   رغم إنه دفع. الشهر المختار بيحدّ آخر شهر مسموح، مش بداية التوزيع. */
 let c = base({ payments: [{ date: '2026-11-23', amount: 3000, month: '2026-11' }] });
 let p = MC.monthlyPlan(c, now);
 let nov = p.months.find((m) => m.key === '2026-11');
-ok('نوفمبر بقى دفع جزئي', nov.partial === true && nov.paid === false);
-ok('متبقي نوفمبر 7000', nov.remaining === 7000, nov.remaining);
-ok('نوفمبر لسه متأخر (استحقاقه 19)', nov.state === 'overdue');
-ok('دفعة نوفمبر اتحسبت على نوفمبر', nov.payments.length === 1 && nov.payments[0].amount === 3000);
 let sep = p.months.find((m) => m.key === '2026-09');
-ok('سبتمبر لسه غير مدفوع خالص', sep.paid === false && sep.partial === false && sep.paidAmount === 0);
-ok('كارت نوفمبر بيوضح الدفع الجزئي', MC.monthCardHTML(nov).includes('دفع جزئي'));
-ok('كارت نوفمبر فيه المتبقي', MC.monthCardHTML(nov).includes('7000'));
-ok('كارت نوفمبر فيه تاريخ الدفعة', MC.monthCardHTML(nov).includes('2026-11-23'));
-ok('الفئة is-partial اتضافت', MC.monthCardHTML(nov).includes('is-partial'));
+ok('الدفعة اتخصمت من أقدم شهر ناقص (سبتمبر)', sep.partial === true && sep.paidAmount === 3000);
+ok('نوفمبر لسه ما استفادش لأن عليه متأخرات', nov.paid === false && nov.paidAmount === 0);
+ok('كارت سبتمبر بيوضح الدفع الجزئي', MC.monthCardHTML(sep).includes('دفع جزئي'));
+ok('كارت سبتمبر فيه المتبقي', MC.monthCardHTML(sep).includes('7000'));
+ok('كارت سبتمبر فيه تاريخ الدفعة', MC.monthCardHTML(sep).includes('2026-11-23'));
+ok('الفئة is-partial اتضافت', MC.monthCardHTML(sep).includes('is-partial'));
 
-/* 2) دفعة تانية على نفس الشهر تكمّله → أخضر */
+/* 2) جزء + المتبقي على نفس الشهر (بعد ما الأقدم اتسدد) → أخضر */
 c = base({
+  scheduleStart: '2026-11',
+  total: 20000,
+  duration: '2 شهر',
   payments: [
     { date: '2026-11-23', amount: 3000, month: '2026-11' },
     { date: '2026-11-25', amount: 7000, month: '2026-11' }
@@ -85,7 +87,7 @@ nov = p.months.find((m) => m.key === '2026-11');
 ok('نوفمبر اتغطى بالكامل بأكتر من دفعة', nov.paid === true && nov.remaining === 0);
 ok('دفعتين مسجلين على نوفمبر', nov.payments.length === 2);
 ok('الفئة بقت is-paid', MC.monthCardHTML(nov).includes('month-card is-paid'));
-ok('سبتمبر لسه متأخر', p.overdueMonths.some((m) => m.key === '2026-09'));
+ok('مفيش دفع جزئي عالق', p.partialMonths.length === 0);
 
 /* 3) دفع شهر أقدم (سبتمبر) بينما أكتوبر/نوفمبر لسه — يتحسب على سبتمبر */
 c = base({ payments: [{ date: '2026-11-23', amount: 10000, month: '2026-09' }] });
