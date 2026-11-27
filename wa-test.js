@@ -163,7 +163,7 @@ const unlock = (t) => {
   await t.wait(60);
 
   t.click(t.$('#waSendAllBtn'));
-  await t.wait(900);
+  await t.wait(2200);
   ok('الإرسال الجماعي بعت للعميل المتبقي', t.opened.length === 2, 'opened=' + t.opened.length);
   ok('الإرسال الجماعي بيأكد العدد', /تم إرسال 1 رسالة من 1/.test(t.toast()), t.toast());
 
@@ -199,6 +199,44 @@ const unlock = (t) => {
     t.$('#waPreview').value.indexOf('إشعار جديد للعميل') > -1, t.$('#waPreview').value);
 
   ok('لا أخطاء في نهاية المرحلة الأولى', t.errs.length === 0, t.errs.join(' | '));
+})();
+
+/* ============ المرحلة أ2: الإرسال الجماعي في نافذة واحدة ============ */
+(async function phaseA2() {
+  console.log('\n[أ2] الإرسال الجماعي في نافذة واحدة');
+  const CUSTOMERS = [
+    { name: 'عميل أول', phone: '01011112222', total: 6000, down: 0, due: 6000,
+      payments: [{ date: '2026-10-01', amount: 1000, no: 1 }] },
+    { name: 'عميل تاني', phone: '01033334444', total: 6000, down: 0, due: 6000,
+      payments: [{ date: '2026-10-02', amount: 1000, no: 1 }] }
+  ];
+  const t = boot({ seed: { app_customers: JSON.stringify(CUSTOMERS) } });
+  await t.wait(80);
+  const win = { closed: false, location: { href: '' } };
+  t.window.open = function (url) { t.opened.push(String(url)); return win; };
+
+  unlock(t);
+  await t.wait(400);
+  ok('عميلين جاهزين للإرسال', t.$$('.wa-queue__row').length === 2,
+    'rows=' + t.$$('.wa-queue__row').length);
+
+  t.click(t.$('#waSendAllBtn'));
+  await t.wait(100);
+  ok('شريط التقدّم ظهر', !!t.$('#waRunner') && t.$('#waRunner').hidden === false);
+  ok('الشريط بيقول «1 من 2»', /1 من 2/.test(t.$('#waRunner').textContent),
+    t.$('#waRunner').textContent);
+  ok('نافذة واحدة بس اتفتحت للعميل الأول', t.opened.length === 1, 'opened=' + t.opened.length);
+
+  await t.wait(1900);
+  ok('العميل التاني اتبعت في نفس النافذة مش نافذة جديدة',
+    t.opened.length === 1 && /wa\.me\/201033334444/.test(String(win.location.href)),
+    'opened=' + t.opened.length + ' href=' + String(win.location.href));
+
+  await t.wait(1900);
+  ok('الاتنين اتسجّلوا «تم الإرسال»', t.$$('.wa-queue__row.is-sent').length === 2,
+    'sent=' + t.$$('.wa-queue__row.is-sent').length);
+  ok('شريط التقدّم اتقفل بعد الخلاص', t.$('#waRunner').hidden === true);
+  ok('مفيش أخطاء في الإرسال الجماعي', t.errs.length === 0, t.errs.join(' | '));
 })();
 
 /* ============ المرحلة ب: منع الشاشة الفاضية (تخزين تالف) ============ */

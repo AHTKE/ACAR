@@ -1600,6 +1600,14 @@ label.btn{cursor:pointer;user-select:none}
 .wa-inline--empty{font-size:13px;color:var(--muted);text-align:center;padding:16px}
 
 /* قائمة إرسال الواتساب: حالة كل عميل قبل فتح تفاصيله */
+.wa-runner{display:flex;flex-direction:column;gap:8px;padding:12px 14px;margin:16px 0 0;border-radius:14px;background:rgba(127,127,127,.08);border:1px solid var(--line)}
+.wa-runner[hidden]{display:none}
+.wa-runner__head{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px}
+.wa-runner__bar{height:6px;border-radius:999px;background:rgba(127,127,127,.22);overflow:hidden}
+.wa-runner__bar i{display:block;height:100%;background:#22c55e;transition:width .25s ease}
+.wa-runner__now{margin:0;font-size:13px}
+.wa-runner__note{margin:0;font-size:12px;color:var(--muted);line-height:1.7}
+.wa-runner .form__actions{margin:0}
 .wa-queue-head{display:flex;flex-direction:column;gap:4px;margin:16px 0 8px}
 .wa-queue-head b{font-size:14px}
 .wa-queue-head small{font-size:12px;color:var(--muted);line-height:1.7}

@@ -9876,10 +9876,15 @@
     }
   }
 
-  function waOpen(text, phone) {
+  function waLink(text, phone) {
     var digits = waDigits(phone);
-    if (!digits) return false;
-    var url = 'https://wa.me/' + digits + '?text=' + encodeURIComponent(text || '');
+    if (!digits) return '';
+    return 'https://wa.me/' + digits + '?text=' + encodeURIComponent(text || '');
+  }
+
+  function waOpen(text, phone) {
+    var url = waLink(text, phone);
+    if (!url) return false;
     try {
       var w = window.open(url, '_blank');
       return !!w;
@@ -9932,6 +9937,39 @@
     '</div>';
   }
 
+  /* ---- شريط تقدّم الإرسال الجماعي ---- */
+  var waSendState = null;
+
+  function renderWaRunner() {
+    var box = $('#waRunner');
+    if (!box) return;
+    var st = waSendState;
+    if (!st) { box.hidden = true; box.innerHTML = ''; return; }
+    var total = st.list.length;
+    var pct = total ? Math.round((st.done / total) * 100) : 0;
+    var nextRow = st.done < total ? st.list[st.done] : null;
+    box.hidden = false;
+    box.innerHTML =
+      '<div class="wa-runner__head"><b>إرسال جماعي — ' + st.done + ' من ' + total + '</b>' +
+        '<span class="tag tag--warn">' + (st.done >= total ? 'خلصت ✓' : 'جاري الإرسال…') + '</span></div>' +
+      '<div class="wa-runner__bar"><i style="width:' + pct + '%"></i></div>' +
+      '<p class="wa-runner__now">' + (nextRow
+        ? 'بيفتح واتساب للعميل: <b>' + esc((nextRow.c && nextRow.c.name) || 'بدون اسم') + '</b>' +
+          (nextRow.phone ? ' · ' + esc(nextRow.phone) : '')
+        : 'كل رسائل القائمة اتفتحت ✓') + '</p>' +
+      '<p class="wa-runner__note">واتساب بيفتح المحادثة والرسالة جاهزة — دوس «إرسال» جوه واتساب، والتطبيق بيسجّل العميل «تم الإرسال ✓» وينتقل للي بعده لوحده.</p>' +
+      '<div class="form__actions"><button type="button" class="btn btn--ghost btn--sm" id="waRunStop">إيقاف الإرسال</button></div>';
+  }
+
+  function waRunStop() {
+    var st = waSendState;
+    if (!st) return;
+    try { if (st.win && !st.win.closed) st.win.close(); } catch (e) {}
+    if (typeof st.finish === 'function') {
+      st.finish('تم إيقاف الإرسال — اتبعت ' + st.added.length + ' من ' + st.list.length);
+    }
+  }
+
   function waSendAll() {
     if (waBusy) return;
     var list = waRowsFiltered().filter(function (r) { return !r.sent && r.phone; });
@@ -9940,39 +9978,66 @@
       return;
     }
     var btns = $$('#waSendAllBtn, [data-wa-send-all]');
-    var added = [];
-    var idx = 0, done = 0;
     waBusy = true;
     btns.forEach(function (b) { b.disabled = true; });
 
-    function finish(okMsg) {
-      if (added.length) {
+    /* نافذة إرسال واحدة بس: بنفتحها بأول عميل، وبعدها بنغيّر عنوانها لكل
+       عميل. السبب: المتصفح بيعتبر أي window.open بعد الأول نافذة منبثقة
+       ويحجبها، فكان الإرسال بيقف عند أول عميل. */
+    var st = { list: list, done: 0, win: null, added: [], timer: 0, finish: null };
+    waSendState = st;
+    renderWaRunner();
+
+    function finish(msg, bad) {
+      if (st.timer) { clearTimeout(st.timer); st.timer = 0; }
+      if (st.added.length) {
         var log = waLog();
-        added.forEach(function (e) {
+        st.added.forEach(function (e) {
           if (!log.some(function (x) { return x && x.key === e.key; })) log.push(e);
         });
         saveWaLog(log);
       }
+      if (waSendState === st) waSendState = null;
       waBusy = false;
       btns.forEach(function (b) { b.disabled = false; });
+      renderWaRunner();
       renderWaPanel();
       safeRun(function () { renderCollection(colFilter()); }, 'التحصيل بعد إرسال واتساب');
-      if (okMsg) toast(okMsg);
+      if (msg) toast(msg, !!bad);
     }
+    st.finish = finish;
 
-    function next() {
-      if (idx >= list.length) { finish('تم إرسال ' + done + ' رسالة من ' + list.length + ' — لن يتكرر أي منهم'); return; }
-      var r = list[idx++];
-      if (!waOpen(r.text, r.phone)) {
-        finish('المتصفح حجب نافذة واتساب — اسمح بالنوافذ المنبثقة وأعد الإرسال (تم ' + done + ' من ' + list.length + ')', true);
+    function step() {
+      st.timer = 0;
+      if (waSendState !== st) return;
+      if (st.done >= st.list.length) {
+        finish('تم إرسال ' + st.added.length + ' من ' + st.list.length + ' — لن يتكرر أي منهم');
         return;
       }
-      added.push({ key: r.key, cid: r.i, name: r.c.name || '', phone: r.phone, at: new Date().toISOString(), text: r.text });
-      done++;
+      var r = st.list[st.done];
+      var url = waLink(r.text, r.phone);
+      var opened = false;
+      if (st.win && !st.win.closed && st.win.location) {
+        try { st.win.location.href = url; opened = true; } catch (e) { opened = false; }
+      }
+      if (!opened) {
+        try {
+          var w = window.open(url, 'nizam_wa_sender');
+          if (w) { st.win = w; opened = true; }
+        } catch (e2) { opened = false; }
+      }
+      if (!opened) {
+        finish('المتصفح حجب نافذة واتساب — اسمح بالنوافذ المنبثقة وأعد المحاولة (تم ' +
+          st.added.length + ' من ' + st.list.length + ')', true);
+        return;
+      }
+      st.added.push({ key: r.key, cid: r.i, name: r.c.name || '', phone: r.phone, at: new Date().toISOString(), text: r.text });
+      st.done++;
       renderWaPanel();
-      setTimeout(next, 450);
+      renderWaRunner();
+      st.timer = setTimeout(step, 1600);
     }
-    next();
+    step();
   }
 
   /* أزرار لوحة رسائل التحصيل */
@@ -10004,6 +10069,7 @@
       } catch (eCp) { toast('تعذّر النسخ — حدّد النص وانسخه يدوياً', true); }
       return;
     }
+    if (t.closest('#waRunStop')) { waRunStop(); return; }
     if (t.closest('#waSendAllBtn') || t.closest('[data-wa-send-all]')) { waSendAll(); return; }
   });
 
