@@ -3729,12 +3729,14 @@
     (plan.months || []).forEach(function (m) { if (m.key === key) target = m; });
     var need = target ? Math.max(Number(target.remaining || 0), 0) : 0;
     if (!(need > 0)) need = Math.max(Number(plan.monthly || 0), 0);
-    if (form.elements.amount) form.elements.amount.value = need > 0 ? String(need) : '';
+    /* خانة المبلغ بتفضل فاضية — المستخدم هو اللي يكتب المبلغ */
+    if (form.elements.amount) form.elements.amount.value = '';
     var pickNote = form.querySelector('[data-pick-month-note]');
     if (pickNote) {
       pickNote.hidden = false;
-      pickNote.innerHTML = 'تحصيل سريع لشهر <b>' + esc(monthLabel(key)) + '</b> — التاريخ: ' +
-        esc(formatDate(todayISO())) + '. راجع المبلغ واضغط «إضافة تحصيل».';
+      pickNote.innerHTML = 'تحصيل سريع لشهر <b>' + esc(monthLabel(key)) + '</b>' +
+        (need > 0 ? ' — المطلوب لهذا الشهر <b>' + money(need) + '</b>' : '') +
+        ' · التاريخ ' + esc(formatDate(todayISO())) + '. اكتب مبلغ التحصيل واضغط «إضافة تحصيل».';
     }
     updateMainCalc(form);
     try { form.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e1) {}
@@ -3765,13 +3767,15 @@
     (plan.months || []).forEach(function (m) { if (m.key === key) target = m; });
     var need = target ? Math.max(Number(target.remaining || 0), 0) : 0;
     if (!(need > 0)) need = Math.max(Number(plan.monthly || 0), 0);
-    if (form.elements.amount) form.elements.amount.value = need > 0 ? String(need) : '';
+    /* خانة المبلغ بتفضل فاضية — المستخدم هو اللي يكتب المبلغ */
+    if (form.elements.amount) form.elements.amount.value = '';
     if (form.elements.no && !(parseInt(form.elements.no.value, 10) > 0)) form.elements.no.value = '1';
     var note = form.querySelector('[data-pick-month-note]');
     if (note) {
       note.hidden = false;
-      note.innerHTML = 'تحصيل سريع لشهر <b>' + esc(monthLabel(key)) + '</b> — التاريخ: ' +
-        esc(formatDate(todayISO())) + '. راجع المبلغ واضغط «إضافة تحصيل».';
+      note.innerHTML = 'تحصيل سريع لشهر <b>' + esc(monthLabel(key)) + '</b>' +
+        (need > 0 ? ' — المطلوب لهذا الشهر <b>' + money(need) + '</b>' : '') +
+        ' · التاريخ ' + esc(formatDate(todayISO())) + '. اكتب مبلغ التحصيل واضغط «إضافة تحصيل».';
     }
     updateCollectCalc();
     try { form.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e1) {}

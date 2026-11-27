@@ -103,13 +103,17 @@ const unlock = (t) => {
     form ? form.elements.date.value : '—');
   ok('الشهر المختار = الشهر اللي اتداس عليه', !!form && form.elements.month.value === '2026-10',
     form ? form.elements.month.value : '—');
-  ok('المبلغ اتجهّز بقيمة الشهر', !!form && Number(form.elements.amount.value) === 10000,
+  ok('خانة المبلغ فاضية عشان المستخدم يكتب اللي هو عايزه', !!form && form.elements.amount.value === '',
     form ? form.elements.amount.value : '—');
   const note = t.$('[data-pick-month-note]');
   ok('رسالة «تحصيل سريع» ظاهرة وبتذكر الشهر', !!note && !note.hidden && note.textContent.indexOf('أكتوبر 2026') > -1,
     note ? note.textContent : '—');
+  ok('الملاحظة بتوضح المطلوب من غير ما تملأ الخانة', !!note && note.textContent.indexOf('المطلوب') > -1,
+    note ? note.textContent : '—');
 
   console.log('\n[3] الحفظ يخصم الدفعة من الشهر المختار');
+  form.elements.amount.value = '10000';
+  form.elements.amount.dispatchEvent(new t.w.Event('input', { bubbles: true }));
   form.dispatchEvent(new t.w.Event('submit', { bubbles: true, cancelable: true }));
   await t.wait(150);
 
@@ -158,7 +162,7 @@ const unlock = (t) => {
     pf ? pf.elements.month.value : '—');
   ok('تاريخ اليوم اتحدد في نموذج الملف', !!pf && pf.elements.date.value === todayISO(),
     pf ? pf.elements.date.value : '—');
-  ok('المبلغ اتجهّز بقيمة الشهر', !!pf && Number(pf.elements.amount.value) === 10000,
+  ok('خانة المبلغ فاضية في نموذج الملف كمان', !!pf && pf.elements.amount.value === '',
     pf ? pf.elements.amount.value : '—');
   ok('ملاحظة التحصيل السريع ظاهرة جوه الملف', (function () {
     const n = pf && pf.querySelector('[data-pick-month-note]');
