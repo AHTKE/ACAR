@@ -20,7 +20,7 @@
   var FIELDS = [
     'name', 'phone', 'phone2', 'nationalId', 'address',
     'total', 'down', 'monthly', 'duration', 'dueDay',
-    'startDate', 'status', 'paid', 'amount', 'date', 'note'
+    'startDate', 'status', 'paid', 'rest', 'amount', 'date', 'note'
   ];
 
   var FIELD_LABELS = {
@@ -37,6 +37,7 @@
     startDate: 'تاريخ البدء',
     status: 'الحالة',
     paid: 'المدفوع / إجمالي التحصيل',
+    rest: 'المتبقي / الباقي',
     amount: 'مبلغ الدفعة',
     date: 'تاريخ الدفعة',
     note: 'ملاحظات'
@@ -49,16 +50,18 @@
     { field: 'phone2', words: ['رقم احتياطي', 'الاحتياطي', 'تلفون احتياطي', 'هاتف احتياطي', 'phone2', 'alt phone', 'second phone'] },
     { field: 'phone', words: ['رقم التلفون', 'التلفون', 'الهاتف', 'الموبايل', 'المحمول', 'رقم الهاتف', 'رقم الموبايل', 'تليفون', 'phone', 'mobile', 'tel', 'whatsapp'] },
     { field: 'address', words: ['العنوان', 'عنوان', 'address', 'location'] },
-    { field: 'startDate', words: ['تاريخ البدء', 'تاريخ البدايه', 'تاريخ التعاقد', 'تاريخ الاضافه', 'تاريخ التسجيل', 'start date', 'startdate', 'date of contract'] },
-    { field: 'dueDay', words: ['يوم التحصيل', 'يوم الدفع', 'يوم السداد', 'يوم القسط', 'due day', 'dueday', 'payment day'] },
-    { field: 'monthly', words: ['المبلغ الشهري', 'الشهري', 'القسط', 'قيمه القسط', 'قسط', 'monthly', 'installment'] },
-    { field: 'duration', words: ['المده', 'عدد الشهور', 'عدد الاشهر', 'الشهور', 'مده السداد', 'duration', 'months'] },
-    { field: 'down', words: ['المقدم', 'مقدم', 'الدفعه المقدمه', 'دفعه مقدمه', 'down payment', 'downpayment', 'advance'] },
-    /* «amount» قبل «total» عشان «المبلغ المدفوع» ما يتفسّرش كإجمالي */
-    { field: 'amount', words: ['مبلغ الدفعه', 'قيمه الدفعه', 'المبلغ المدفوع', 'المدفوع', 'الدفعه', 'دفعه', 'amount', 'paid amount', 'payment'] },
-    { field: 'total', words: ['المبلغ الاجمالي', 'الاجمالي', 'المبلغ الكلي', 'الكلي', 'قيمه التعاقد', 'المبلغ', 'total', 'amount due', 'contract value'] },
-    { field: 'date', words: ['تاريخ الدفعه', 'تاريخ التحصيل', 'تاريخ السداد', 'التاريخ', 'date'] },
-    { field: 'paid', words: ['اجمالي التحصيل', 'المدفوع من العميل', 'اجمالي المدفوع', 'المسدد', 'paid total', 'total paid'] },
+    { field: 'startDate', words: ['تاريخ البدء', 'تاريخ البدايه', 'تاريخ التعاقد', 'تاريخ العقد', 'تاريخ الاضافه', 'تاريخ التسجيل', 'تاريخ اول قسط', 'بدايه التعاقد', 'start date', 'startdate', 'contract date', 'date of contract'] },
+    { field: 'dueDay', words: ['يوم التحصيل', 'يوم الدفع', 'يوم السداد', 'يوم القسط', 'يوم الاستحقاق', 'due day', 'dueday', 'payment day'] },
+    { field: 'monthly', words: ['المبلغ الشهري', 'القيمه الشهريه', 'الشهري', 'القسط الشهري', 'قيمه القسط الشهري', 'قيمه القسط', 'المبلغ المستحق شهريا', 'القسط', 'قسط', 'monthly', 'installment amount', 'installment'] },
+    { field: 'duration', words: ['المده', 'مده السداد', 'مده التقسيط', 'عدد الشهور', 'عدد الاشهر', 'عدد الاقساط', 'الاقساط', 'الشهور', 'duration', 'no of months', 'months'] },
+    { field: 'down', words: ['المقدم المدفوع', 'المقدم', 'مقدم', 'الدفعه المقدمه', 'دفعه مقدمه', 'اول دفعه', 'دفعه اولي', 'down payment', 'downpayment', 'initial payment', 'advance'] },
+    /* «paid» و«rest» لازم ياخدوا الأولوية قبل «amount» و«total»؛
+       وإلا «إجمالي المدفوع» يتفسّر كدفعة، و«المبلغ المتبقي» كإجمالي. */
+    { field: 'paid', words: ['اجمالي المدفوع', 'اجمالي التحصيل', 'اجمالي المسدد', 'المدفوع من العميل', 'المسدد', 'paid total', 'total paid'] },
+    { field: 'rest', words: ['المتبقي للتحصيل', 'المتبقي عليه', 'المتبقي', 'الباقي للتحصيل', 'الباقي', 'الرصيد المتبقي', 'المديونيه', 'remaining', 'balance', 'outstanding', 'rest'] },
+    { field: 'amount', words: ['مبلغ الدفعه', 'قيمه الدفعه', 'المبلغ المدفوع', 'المدفوع', 'الدفعه', 'دفعه', 'الواصل', 'المحصل', 'المستلم', 'amount', 'paid amount', 'payment', 'collected', 'received'] },
+    { field: 'total', words: ['المبلغ الاجمالي', 'القيمه الاجماليه', 'اجمالي المبلغ', 'المبلغ الكلي', 'الكلي', 'قيمه التعاقد', 'قيمه العقد', 'المبلغ', 'total amount', 'grand total', 'amount due', 'contract value', 'total'] },
+    { field: 'date', words: ['تاريخ الدفعه', 'تاريخ التحصيل', 'تاريخ السداد', 'تاريخ الدفع', 'تاريخ العمليه', 'التاريخ', 'payment date', 'date'] },
     { field: 'status', words: ['الحاله', 'الوضع', 'status'] },
     { field: 'note', words: ['ملاحظات', 'ملاحظه', 'البيان', 'الوصف', 'note', 'notes', 'description', 'remark'] },
     { field: 'name', words: ['اسم العميل', 'اسم', 'العميل', 'الاسم', 'اسم المستفيد', 'name', 'customer', 'client'] }
@@ -123,6 +126,23 @@
     }
     var n = parseFloat(s);
     return isFinite(n) ? n : 0;
+  }
+
+  /* ملفات Excel/CSV المحفوظة على ويندوز العربي بتكون غالباً Windows-1256؛
+     لو فك الترميز UTF-8 طلع حروف تالفة (؟) نجرب الترميز العربي. */
+  function decodeText(buffer) {
+    var bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+    var txt = '';
+    try { txt = new TextDecoder('utf-8').decode(bytes); } catch (e) { txt = ''; }
+    if (txt.indexOf('\uFFFD') === -1) return txt;
+    var encs = ['windows-1256', 'iso-8859-6'];
+    for (var i = 0; i < encs.length; i++) {
+      try {
+        var alt = new TextDecoder(encs[i]).decode(bytes);
+        if (alt && alt.indexOf('\uFFFD') === -1) return alt;
+      } catch (e2) {}
+    }
+    return txt;
   }
 
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
@@ -254,17 +274,157 @@
     return entries;
   }
 
+  /* ---------- فك ضغط DEFLATE خالص بـ JS (بديل لأجهزة ما فيهاش DecompressionStream) ---------- */
+  var LEN_BASE = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258];
+  var LEN_EXTRA = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
+  var DIST_BASE = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577];
+  var DIST_EXTRA = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];
+
+  function bitReader(bytes) {
+    var pos = 0, buf = 0, cnt = 0;
+    return {
+      need: function (n) {
+        while (cnt < n) {
+          if (pos >= bytes.length) throw new Error('بيانات Excel المضغوطة غير مكتملة');
+          buf |= (bytes[pos++] & 0xff) << cnt;
+          cnt += 8;
+        }
+      },
+      bits: function (n) {
+        if (!n) return 0;
+        this.need(n);
+        var v = buf & ((1 << n) - 1);
+        buf >>>= n; cnt -= n;
+        return v;
+      },
+      align: function () { pos -= (cnt >> 3); buf = 0; cnt = 0; },
+      byte: function () {
+        if (pos >= bytes.length) throw new Error('بيانات Excel المضغوطة غير مكتملة');
+        return bytes[pos++] & 0xff;
+      }
+    };
+  }
+
+  function buildHuffman(lengths) {
+    var counts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    var maxBits = 0, i;
+    for (i = 0; i < lengths.length; i++) {
+      if (!lengths[i]) continue;
+      counts[lengths[i]]++;
+      if (lengths[i] > maxBits) maxBits = lengths[i];
+    }
+    var offsets = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    var total = 0;
+    for (i = 1; i <= 15; i++) { offsets[i] = total; total += counts[i]; }
+    var symbols = new Array(total);
+    for (i = 0; i < lengths.length; i++) if (lengths[i]) symbols[offsets[lengths[i]]++] = i;
+    return { counts: counts, symbols: symbols, maxBits: maxBits };
+  }
+
+  function decodeSymbol(br, h) {
+    var code = 0, first = 0, index = 0;
+    for (var len = 1; len <= h.maxBits; len++) {
+      code |= br.bits(1);
+      var count = h.counts[len];
+      if (code - first < count) return h.symbols[index + (code - first)];
+      index += count;
+      first = (first + count) << 1;
+      code <<= 1;
+    }
+    throw new Error('كود غير صالح داخل ملف Excel');
+  }
+
+  var FIXED_LIT = null, FIXED_DIST = null;
+  function fixedTables() {
+    if (FIXED_LIT) return;
+    var lit = [], i;
+    for (i = 0; i < 144; i++) lit.push(8);
+    for (; i < 256; i++) lit.push(9);
+    for (; i < 280; i++) lit.push(7);
+    for (; i < 288; i++) lit.push(8);
+    var dist = [];
+    for (i = 0; i < 30; i++) dist.push(5);
+    FIXED_LIT = buildHuffman(lit);
+    FIXED_DIST = buildHuffman(dist);
+  }
+
+  function inflateRawJS(bytes) {
+    var br = bitReader(bytes);
+    var out = [];
+    var last = 0;
+    while (!last) {
+      last = br.bits(1);
+      var type = br.bits(2);
+      if (type === 0) {
+        br.align();
+        var len = br.byte() | (br.byte() << 8);
+        var nlen = br.byte() | (br.byte() << 8);
+        if ((len ^ 0xffff) !== nlen) throw new Error('بيانات Excel المضغوطة تالفة');
+        for (var s = 0; s < len; s++) out.push(br.byte());
+        continue;
+      }
+      if (type === 3) throw new Error('بيانات Excel المضغوطة تالفة');
+      var litH, distH;
+      if (type === 1) {
+        fixedTables();
+        litH = FIXED_LIT; distH = FIXED_DIST;
+      } else {
+        var hlit = br.bits(5) + 257;
+        var hdist = br.bits(5) + 1;
+        var hclen = br.bits(4) + 4;
+        var order = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+        var clen = [];
+        for (var i = 0; i < 19; i++) clen.push(0);
+        for (var c = 0; c < hclen; c++) clen[order[c]] = br.bits(3);
+        var clH = buildHuffman(clen);
+        var lengths = [];
+        while (lengths.length < hlit + hdist) {
+          var sym = decodeSymbol(br, clH);
+          if (sym < 16) { lengths.push(sym); continue; }
+          var rep = 0, val = 0;
+          if (sym === 16) {
+            if (!lengths.length) throw new Error('بيانات Excel المضغوطة تالفة');
+            val = lengths[lengths.length - 1]; rep = 3 + br.bits(2);
+          } else if (sym === 17) { rep = 3 + br.bits(3); }
+          else { rep = 11 + br.bits(7); }
+          for (var r = 0; r < rep; r++) lengths.push(val);
+        }
+        litH = buildHuffman(lengths.slice(0, hlit));
+        distH = buildHuffman(lengths.slice(hlit));
+      }
+      while (true) {
+        var code = decodeSymbol(br, litH);
+        if (code === 256) break;
+        if (code < 256) { out.push(code); continue; }
+        var li = code - 257;
+        if (li >= LEN_BASE.length) throw new Error('بيانات Excel المضغوطة تالفة');
+        var length = LEN_BASE[li] + br.bits(LEN_EXTRA[li]);
+        var ds = decodeSymbol(br, distH);
+        if (ds >= DIST_BASE.length) throw new Error('بيانات Excel المضغوطة تالفة');
+        var dist = DIST_BASE[ds] + br.bits(DIST_EXTRA[ds]);
+        if (dist > out.length) throw new Error('بيانات Excel المضغوطة تالفة');
+        for (var k = 0; k < length; k++) out.push(out[out.length - dist]);
+      }
+    }
+    return new TextDecoder('utf-8').decode(new Uint8Array(out));
+  }
+
   function inflateRaw(bytes, method) {
     if (!bytes) return Promise.resolve('');
     if (method === 0) return Promise.resolve(new TextDecoder('utf-8').decode(bytes));
     if (method !== 8) return Promise.reject(new Error('طريقة ضغط غير مدعومة داخل ملف Excel'));
+    var fallback = function () {
+      try { return inflateRawJS(bytes); }
+      catch (e) { throw new Error('تعذّر فك ضغط ملف Excel (' + (e && e.message ? e.message : e) + ') — افتح الملف واحفظه بصيغة CSV'); }
+    };
     if (typeof DecompressionStream === 'undefined') {
-      return Promise.reject(new Error('هذا المتصفح لا يدعم فك ضغط ملفات Excel — حدّث المتصفح أو استخدم ملف CSV'));
+      try { return Promise.resolve(fallback()); }
+      catch (e2) { return Promise.reject(e2); }
     }
     var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
     return new Response(stream).arrayBuffer().then(function (out) {
       return new TextDecoder('utf-8').decode(new Uint8Array(out));
-    });
+    }).catch(function () { return fallback(); });
   }
 
   function xmlText(s) {
@@ -438,11 +598,23 @@
       var cells = [];
       var cur = '';
       var prevEnd = null;
+      /* عتبة فصل الأعمدة بتتظبط على السطر نفسه: المسافات العادية بين
+         الكلمات صغيرة، والفرق بين عمودين أكبر بكتير. */
+      var gaps = [];
+      for (var gi = 1; gi < line.items.length; gi++) {
+        var gPrev = line.items[gi - 1];
+        var gEnd = gPrev.x + (Number(gPrev.width) || 0);
+        var g = line.items[gi].x - gEnd;
+        if (g > 0) gaps.push(g);
+      }
+      gaps.sort(function (a, b) { return a - b; });
+      var medGap = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 4;
+      var splitGap = Math.min(22, Math.max(10, medGap * 2.3));
       line.items.forEach(function (it) {
         var chars = it.str.replace(/\s/g, '');
         total += chars.length;
         if (AR_RE.test(chars)) arabic += chars.length;
-        if (prevEnd != null && (it.x - prevEnd) > 14) {
+        if (prevEnd != null && (it.x - prevEnd) > splitGap) {
           if (cur.trim()) cells.push(cur.trim());
           cur = it.str;
         } else {
@@ -463,11 +635,18 @@
     var data = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
     var doc = await lib.getDocument({ data: data, isEvalSupported: false, useSystemFonts: true }).promise;
     var rows = [];
+    var headerKey = '';
     for (var p = 1; p <= doc.numPages; p++) {
       var page = await doc.getPage(p);
       var content = await page.getTextContent();
       var pageRows = groupPdfLines(content.items || []);
-      pageRows.forEach(function (r) { rows.push(r); });
+      pageRows.forEach(function (r, ri) {
+        var key = r.map(norm).join('|');
+        /* رأس الجدول بيتكرر في أول كل صفحة — ما نضيفهوش كصف عميل */
+        if (ri === 0 && headerKey && key === headerKey && r.length) return;
+        rows.push(r);
+      });
+      if (!headerKey && rows.length > 1) headerKey = rows[0].map(norm).join('|');
     }
     try { if (doc.destroy) await doc.destroy(); } catch (e) {}
     if (!rows.length) throw new Error('الـPDF لا يحتوي على نص قابل للقراءة (غالباً صورة ممسوحة) — حوّله إلى Excel أو CSV');
@@ -505,14 +684,14 @@
       try {
         return { name: name, kind: 'xlsx', tables: await parseXlsx(buffer) };
       } catch (e) {
-        var txt = new TextDecoder('utf-8').decode(new Uint8Array(buffer));
-        if (txt.indexOf(',') > -1) {
+        var txt = decodeText(buffer);
+        if (txt.indexOf(',') > -1 || txt.indexOf('\t') > -1) {
           return { name: name, kind: 'csv', tables: [{ name: 'البيانات', rows: parseDelimited(txt) }] };
         }
         throw e;
       }
     }
-    var text = new TextDecoder('utf-8').decode(new Uint8Array(buffer));
+    var text = decodeText(buffer);
     return { name: name, kind: 'csv', tables: [{ name: 'البيانات', rows: parseDelimited(text) }] };
   }
 
@@ -580,8 +759,11 @@
     var records = [];
     var skipped = 0;
     var done = {};
+    var headerKey = headers.map(norm).join('|');
     for (var i = headerRow + 1; i < table.length; i++) {
       var row = table[i] || [];
+      /* صف عناوين متكرر جوه نفس الملف (بيحصل كتير في PDF وملفات الويندوز) */
+      if (headerKey && row.map(norm).join('|') === headerKey) { skipped++; continue; }
       var name = cell(row, mapping.name);
       if (!name) { skipped++; continue; }
       /* صفوف إجماليات/عناوين مكررة */
@@ -614,6 +796,7 @@
           startDate: toISODate(cell(row, mapping.startDate)),
           status: cell(row, mapping.status),
           paid: toNumber(cell(row, mapping.paid)),
+          rest: toNumber(cell(row, mapping.rest)),
           note: cell(row, mapping.note)
         };
         if (!rec.total && !rec.monthly && !rec.down && !rec.paid && !rec.duration) {
@@ -627,13 +810,18 @@
       records.push(rec);
     }
 
+    var mappedFields = Object.keys(mapping).filter(function (k) {
+      return mapping[k] != null && mapping[k] >= 0;
+    });
+
     return {
       headerRow: headerRow,
       headers: headers,
       mapping: mapping,
       mode: mode,
       records: records,
-      skipped: skipped
+      skipped: skipped,
+      mappedFields: mappedFields
     };
   }
 
@@ -646,6 +834,8 @@
     parseDelimited: parseDelimited,
     parseXlsx: parseXlsx,
     analyze: analyze,
+    decodeText: decodeText,
+    inflateRawJS: inflateRawJS,
     toNumber: toNumber,
     toISODate: toISODate
   };

@@ -12,6 +12,7 @@ const htmlSrc = fs.readFileSync('dist/index.html', 'utf8');
 const appSrc = fs.readFileSync('dist/app.js', 'utf8');
 const impSrc = fs.readFileSync('dist/importer.js', 'utf8');
 const expSrc = fs.readFileSync('dist/export.js', 'utf8');
+const mSrc = fs.readFileSync('dist/monthly.js', 'utf8');
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra) => {
@@ -27,6 +28,7 @@ function boot() {
 
   let html = htmlSrc
     .replace(/<script[^>]*src="export\.js"[^>]*>\s*<\/script>/, () => '<script>' + expSrc + '</script>')
+    .replace(/<script[^>]*src="monthly\.js"[^>]*>\s*<\/script>/, () => '<script>' + mSrc + '</script>')
     .replace(/<script[^>]*src="importer\.js"[^>]*>\s*<\/script>/, () => '<script>' + impSrc + '</script>')
     .replace(/<script[^>]*src="app\.js"[^>]*>\s*<\/script>/, () => '<script>' + appSrc + '</script>');
 
@@ -150,6 +152,33 @@ const PAYMENTS_CSV = [
   ok('نفس الدفعات ما اتضافتش مرتين', !!again && (again.payments || []).length === 2,
     again ? JSON.stringify(again.payments) : '—');
   ok('عدد العملاء لسه 2', list.length === 2, 'count=' + list.length);
+
+  console.log('\n[6] المدفوع القديم بيتوزع على شهوره (مش على تاريخ واحد)');
+  const DIST_CSV = [
+    'اسم العميل,رقم التلفون,المبلغ الإجمالي,المدفوع,المتبقي,المبلغ الشهري,يوم التحصيل,تاريخ البدء',
+    'عميل قديم موزع,01007770000,30000,20000,10000,5000,10,2025-01-10'
+  ].join('\n');
+  pick(t, DIST_CSV, 'old-customers.csv');
+  await t.wait(250);
+  const distPreview = t.$('#importDataPreview');
+  ok('المعاينة بتوضح عدد الدفعات اللي هتتوزع', /4 دفعة قديمة هتتوزع/.test(distPreview.textContent),
+    distPreview.textContent.slice(0, 240));
+  t.click(t.$('#importApplyBtn'));
+  await t.wait(200);
+
+  list = JSON.parse(t.w.localStorage.getItem('app_customers') || '[]');
+  const dist = list.find((c) => c.name === 'عميل قديم موزع');
+  ok('العميل القديم اتضاف', !!dist);
+  ok('المدفوع اتقسم على 4 شهور', !!dist && (dist.payments || []).length === 4,
+    dist ? JSON.stringify(dist.payments) : '—');
+  ok('كل دفعة مربوطة بشهرها', !!dist && dist.payments.map((p) => p.month).join(',') === '2025-01,2025-02,2025-03,2025-04',
+    dist ? dist.payments.map((p) => p.month).join(',') : '—');
+  ok('قيمة الدفعة = المبلغ الشهري', !!dist && dist.payments.every((p) => Math.abs(Number(p.amount) - 5000) < 0.005));
+  ok('أول دفعة بتاريخ البدء', !!dist && dist.payments[0].date === '2025-01-10',
+    dist ? dist.payments[0].date : '—');
+  ok('المتبقي بعد المدفوع = 10000', !!dist && Math.abs(Number(dist.rest) - 10000) < 0.005,
+    dist ? dist.rest : '—');
+  ok('المبلغ الشهري اتحفظ', !!dist && Number(dist.monthlyAmount) === 5000);
 
   ok('لا أخطاء في نهاية الاختبار', t.errs.length === 0, t.errs.join(' | '));
 

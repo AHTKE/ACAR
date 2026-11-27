@@ -1323,6 +1323,30 @@ label.btn{cursor:pointer;user-select:none}
 .mcell.is-partial{background:rgba(245,158,11,.18);border-color:rgba(245,158,11,.6);color:#fcd34d}
 .mcell.is-current{outline:2px solid rgba(79,140,255,.75);outline-offset:1px}
 .month-strip__none{font-size:11.5px;color:var(--muted-2)}
+/* كل شهر زرار تحصيل سريع */
+.mcell.is-pick{cursor:pointer;padding:0;font-family:inherit;line-height:1;appearance:none}
+.mcell.is-pick:hover{transform:translateY(-1px);border-color:var(--primary);color:#fff}
+.mcell.is-pick:active{transform:translateY(0)}
+.mcell.is-pick:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+
+/* شارة حالة رسالة الواتساب جوّه سطر العميل */
+.wa-badge{
+  display:inline-block;margin-inline-start:7px;padding:2px 8px;border-radius:999px;
+  font-size:10px;font-weight:700;border:1px solid var(--line);vertical-align:middle;
+  background:rgba(255,255,255,.05);color:var(--muted);white-space:nowrap;
+}
+.wa-badge.is-sent{color:#6ee7b7;border-color:rgba(52,211,153,.45);background:rgba(52,211,153,.14)}
+.wa-badge.is-ready{color:#fcd34d;border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.12)}
+.wa-badge.is-nophone{opacity:.65}
+
+.collection-tools{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.collection-tools .panel__hint{flex:1 1 320px}
+
+.collect-pick-note{
+  margin:0 0 12px;padding:10px 12px;border-radius:12px;font-size:13px;line-height:1.7;
+  border:1px solid rgba(79,140,255,.45);background:rgba(79,140,255,.12);color:#cfe0ff;
+}
+.form.is-picked{box-shadow:0 0 0 2px rgba(79,140,255,.55);border-radius:16px}
 
 /* ===== إعدادات أقفال الأقسام (أدمن فقط) ===== */
 #sectionLocksPanel[hidden]{display:none!important}
@@ -1574,6 +1598,22 @@ label.btn{cursor:pointer;user-select:none}
 }
 .wa-inline .form__actions{margin:0}
 .wa-inline--empty{font-size:13px;color:var(--muted);text-align:center;padding:16px}
+
+/* قائمة إرسال الواتساب: حالة كل عميل قبل فتح تفاصيله */
+.wa-queue-head{display:flex;flex-direction:column;gap:4px;margin:16px 0 8px}
+.wa-queue-head b{font-size:14px}
+.wa-queue-head small{font-size:12px;color:var(--muted);line-height:1.7}
+.wa-queue{display:flex;flex-direction:column;gap:7px;max-height:340px;overflow:auto;padding-inline-end:2px}
+.wa-queue__row{
+  display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:10px;
+  padding:8px 12px;border:1px solid var(--line);border-radius:12px;background:rgba(0,0,0,.2);
+}
+.wa-queue__row.is-sent{opacity:.72;border-color:rgba(52,211,153,.3)}
+.wa-queue__who{display:flex;flex-direction:column;gap:2px;min-width:0}
+.wa-queue__who b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wa-queue__who small{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wa-queue__empty{font-size:12.5px;color:var(--muted);text-align:center;padding:14px}
+@media(max-width:560px){.wa-queue__row{grid-template-columns:1fr auto;grid-auto-rows:auto}.wa-queue__row .tag{grid-column:1/-1;justify-self:start}}
 
 /* استيراد العملاء من ملف */
 .import-status{

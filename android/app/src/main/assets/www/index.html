@@ -175,7 +175,7 @@
       </span>
       <span class="brand__text">
         <strong>WorkFlow</strong>
-        <small>الإصدار 1.0 · b20261126f</small>
+        <small>الإصدار 1.0 · b20261127a</small>
       </span>
     </button>
 
@@ -971,7 +971,7 @@
 
       <div class="panel" id="waPanel" data-collapse data-collapse-key="collection-wa" data-collapse-title="رسائل التحصيل عبر واتساب" data-collapse-icon="ic-link">
         <h3 class="panel__title"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-link"/></svg> رسائل التحصيل عبر واتساب <span class="count-pill" id="waCount">0 عميل</span></h3>
-        <p class="panel__hint">رسالة واحدة لكل عميل لكل عملية تحصيل — والمُرسَل له لا يُرسَل له مرة أخرى إلا بتحصيل جديد. الرسالة الجاهزة لكل عميل وأزرار الإرسال أصبحت جوه تفاصيله في القائمة تحت (سهم العميل).</p>
+        <p class="panel__hint">رسالة واحدة لكل عميل لكل عملية تحصيل — والمُرسَل له لا يُرسَل له مرة أخرى إلا بتحصيل جديد. تحت في «قائمة الإرسال» كل عميل وحالته: <b>تم الإرسال ✓</b> أو <b>جاهز</b> أو <b>لا يوجد رقم</b>، وجنب كل واحد زر إرسال — وتقدر ترسل للكل بضغطة من هنا أو من زر «إرسال واتساب للجميع» فوق قائمة التحصيل.</p>
 
         <div class="form" style="margin-top:14px">
           <label class="field field--full"><span>قالب الرسالة (تقدر تعدّل النص زي ما تحب)</span>
@@ -1012,11 +1012,20 @@
             <button type="button" class="btn btn--primary" id="waSendAllBtn">إرسال للجميع</button>
           </div>
         </div>
+
+        <div class="wa-queue-head">
+          <b>قائمة الإرسال</b>
+          <small>حدّد الفئة فوق، ثم إرسال للجميع أو اضغط «إرسال» جنب أي عميل — والمُرسَل له بيظهر «تم الإرسال ✓» ومش هيتكرر.</small>
+        </div>
+        <div class="wa-queue" id="waQueue"></div>
       </div>
 
 
       <div class="panel">
-        <p class="panel__hint" style="margin:0 0 14px">اضغط على سطر العميل (أو السهم) لفتح كل تفاصيله في مكان واحد: الملخص، حالة الشهور، إضافة دفعة، سجل التحصيل، ورسالة واتساب الجاهزة بزر إرسال — بدون أي تكرار للعميل في أكثر من جدول.</p>
+        <div class="collection-tools">
+          <p class="panel__hint" style="margin:0">اضغط على سطر العميل (أو السهم) لفتح كل تفاصيله في مكان واحد: الملخص، حالة الشهور، إضافة دفعة، سجل التحصيل، ورسالة واتساب الجاهزة بزر إرسال — بدون أي تكرار للعميل في أكثر من جدول. <b>وأسرع طريقة للتحصيل:</b> اضغط على شهر في عمود «حالة الشهور» — يفتح العميل ويجهّز الدفعة بتاريخ اليوم والشهر اللي اخترته.</p>
+          <button type="button" class="btn btn--primary btn--sm" data-wa-send-all="1" id="waSendAllTop">إرسال واتساب للجميع</button>
+        </div>
         <div class="table-wrap">
           <table class="table" id="collectionList">
             <thead>
@@ -1026,7 +1035,7 @@
                 <th>الهاتف</th>
                 <th>العنوان</th>
                 <th>المتبقي</th>
-                <th class="col-months-head">حالة الشهور</th>
+                <th class="col-months-head" title="اضغط على أي شهر للتحصيل عنه بتاريخ اليوم">حالة الشهور</th>
                 <th>الحالة الشهرية</th>
                 <th style="width:64px"><span class="sr-only">فتح التفاصيل</span></th>
               </tr>

@@ -100,7 +100,47 @@ const near = (a, b) => Math.abs(Number(a) - Number(b)) < 0.005;
   ok('عنوان «القيمة الإجمالية» مش هيتلخبط', Imp.fieldOfHeader('القيمة الإجمالية') === 'total',
     Imp.fieldOfHeader('القيمة الإجمالية'));
 
-  console.log('\n[6] ملف بدون عناوين — رفض واضح بدل بيانات غلط');
+  console.log('\n[6] أعمدة «المتبقي» وصف العناوين المتكرر');
+  const restCsv = ['اسم العميل,المدفوع,المتبقي', 'عميل أ,10000,5000'].join('\n');
+  const restAn = Imp.analyze(Imp.parseDelimited(restCsv));
+  ok('عمود «المتبقي» اتعرّف', restAn.mapping.rest === 2, JSON.stringify(restAn.mapping));
+  ok('«المدفوع» فضل مدفوع ومش اتداخل مع المتبقي', restAn.mapping.paid === 1, JSON.stringify(restAn.mapping));
+  ok('قيمة المتبقي وصلت للصف', Imp.toNumber(restAn.records[0].rest) === 5000,
+    JSON.stringify(restAn.records[0]));
+
+  const repeated = ['الاسم,المبلغ الإجمالي', 'عميل ب,5000', 'الاسم,المبلغ الإجمالي', 'عميل ج,7000'].join('\n');
+  const repAn = Imp.analyze(Imp.parseDelimited(repeated));
+  ok('صف العناوين المتكرر اتجاهل ومش اتحسب عميل', repAn.records.length === 2, 'records=' + repAn.records.length);
+
+  console.log('\n[7] فك ضغط Excel من غير DecompressionStream');
+  const zlib = require('zlib');
+  const sample = Buffer.from('اسم العميل,المبلغ\n' + 'عميل '.repeat(400) + '1234567890', 'utf8');
+  let inflateOk = true;
+  [0, 1, 6, 9].forEach((lvl) => {
+    const comp = zlib.deflateRawSync(sample, { level: lvl });
+    if (Imp.inflateRawJS(new Uint8Array(comp)) !== sample.toString('utf8')) inflateOk = false;
+  });
+  ok('فك الضغط الداخلي بيطابق zlib في كل مستويات الضغط', inflateOk);
+
+  const binary = Buffer.alloc(70000);
+  for (let i = 0; i < binary.length; i++) binary[i] = (i * 37) % 251;
+  ok('بيانات كبيرة (كتل مخزّنة) اتفكت صح',
+    Imp.inflateRawJS(new Uint8Array(zlib.deflateRawSync(binary, { level: 0 }))) === binary.toString('utf8'));
+
+  const xlsxNoDS = Kit.buildXlsx([{
+    name: 'العملاء',
+    rows: [['اسم العميل', 'المبلغ الإجمالي'], ['عميل بدون متصفح حديث', 12345]]
+  }]);
+  const savedDS = globalThis.DecompressionStream;
+  try { delete globalThis.DecompressionStream; } catch (e) {}
+  const noDs = await Imp.parseFile({ name: 'no-ds.xlsx', arrayBuffer: async () => xlsxNoDS });
+  if (savedDS) globalThis.DecompressionStream = savedDS;
+  const noDsAn = Imp.analyze(noDs.tables[0].rows);
+  ok('ملف Excel اتقرأ فعلاً من غير DecompressionStream',
+    noDsAn.records.length === 1 && Imp.toNumber(noDsAn.records[0].total) === 12345,
+    JSON.stringify(noDsAn.records));
+
+  console.log('\n[8] ملف بدون عناوين — رفض واضح بدل بيانات غلط');
   const noHeader = Imp.analyze([['محمد', '0100', '5000'], ['سارة', '0111', '6000']]);
   ok('بدون عناوين مفيش ربط تلقائي للاسم', noHeader.mapping.name == null || noHeader.records.length === 0,
     JSON.stringify(noHeader.mapping) + ' records=' + noHeader.records.length);

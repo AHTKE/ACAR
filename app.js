@@ -3413,6 +3413,7 @@
 
       '<form class="form" id="mainCollectForm" data-idx="' + idx + '" novalidate>' +
         '<p class="collect-edit-note" data-edit-note hidden></p>' +
+        '<p class="collect-pick-note" data-pick-month-note hidden></p>' +
         '<div class="form__row form__row--3">' +
           '<label class="field"><span>التاريخ *</span><input type="date" name="date" value="' + todayISO() + '" required /></label>' +
           '<label class="field"><span>المبلغ المدفوع *</span><input type="number" name="amount" min="0" step="any" required placeholder="' + (plan.requiredNow > 0 ? money(plan.requiredNow) : '0') + '" /></label>' +
@@ -3490,6 +3491,8 @@
     if (note) { note.hidden = true; note.textContent = ''; }
     var cancel = form.querySelector('[data-cancel-edit]');
     if (cancel) cancel.hidden = true;
+    var pickNote = form.querySelector('[data-pick-month-note]');
+    if (pickNote) { pickNote.hidden = true; pickNote.textContent = ''; }
     var submit = form.querySelector('button[type="submit"]');
     if (submit) submit.innerHTML = '<svg viewBox="0 0 24 24" class="ico"><use href="#ic-plus"></use></svg> إضافة تحصيل';
     if (form.elements.date) form.elements.date.value = todayISO();
@@ -3552,7 +3555,7 @@
 
   /* شريط شهور مختصر يظهر في صف العميل: أخضر مدفوع، أحمر غير مدفوع،
      أصفر مستحق الآن — عشان تعرف الشهر المتأخر من نظرة واحدة. */
-  function monthStripHTML(plan) {
+  function monthStripHTML(plan, idx) {
     if (!plan || !plan.active) return '<span class="month-strip__none">بدون يوم تحصيل</span>';
     var months = Array.isArray(plan.months) ? plan.months : [];
     if (!months.length) return '<span class="month-strip__none">لا توجد شهور</span>';
@@ -3571,8 +3574,14 @@
       var tip = monthLabel(m.key) + ' — ' + stateText;
       if (m.state !== 'paid') tip += ' · المتبقي ' + money(m.remaining || m.amount || 0);
       var current = plan.current && plan.current.key === m.key;
-      return '<span class="mcell ' + cls + (current ? ' is-current' : '') + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '">' +
-        esc(String(m.key || '').slice(5)) + '</span>';
+      var clsAll = 'mcell ' + cls + (current ? ' is-current' : '');
+      var label = esc(String(m.key || '').slice(5));
+      if (idx == null) {
+        return '<span class="' + clsAll + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '">' + label + '</span>';
+      }
+      /* كل شهر زرار: ضغطة واحدة تفتح العميل وتجهّز تحصيل الشهر بتاريخ اليوم */
+      return '<button type="button" class="' + clsAll + ' is-pick" data-month-pay="' + esc(m.key) + '" data-midx="' + idx +
+        '" title="' + esc(tip + ' — اضغط للتحصيل عن هذا الشهر') + '" aria-label="' + esc(tip) + '">' + label + '</button>';
     }).join('');
     return '<div class="month-strip">' +
       '<div class="month-strip__meta"><span class="' + (late ? 'neg' : 'pos') + '">' +
@@ -3654,6 +3663,13 @@
       collectionOpen = null;
     }
 
+    /* حالة رسالة واتساب لكل عميل — نحسبها مرة واحدة ونعرضها في السطر
+       عشان تعرف «اتبعت ولا لأ» قبل ما تفتح حد. */
+    var waMap = {};
+    try {
+      waRows().forEach(function (r) { waMap[r.i] = r; });
+    } catch (eWa) {}
+
     var html = '';
     list.forEach(function (entry, n) {
       var c = entry.c;
@@ -3662,11 +3678,11 @@
       var open = collectionOpen === entry.i;
       html += '<tr class="collection-row' + (open ? ' is-open' : '') + '" data-idx="' + entry.i + '">' +
         '<td>' + (n + 1) + '</td>' +
-        '<td class="col-name">' + esc(c.name || 'بدون اسم') + '</td>' +
+        '<td class="col-name">' + esc(c.name || 'بدون اسم') + waBadgeHTML(waMap[entry.i]) + '</td>' +
         '<td>' + esc(c.phone || '—') + '</td>' +
         '<td>' + esc(c.address || '—') + '</td>' +
         '<td class="amount' + (d.rest > 0 ? ' neg' : '') + '">' + money(d.rest) + '</td>' +
-        '<td class="col-months">' + monthStripHTML(plan) + '</td>' +
+        '<td class="col-months">' + monthStripHTML(plan, entry.i) + '</td>' +
         '<td class="col-status">' + planPill(plan) + '</td>' +
         '<td class="col-arrow"><span class="chev"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-arrow"></use></svg></span></td>' +
         '</tr>';
@@ -3689,6 +3705,56 @@
     if (openForm) updateMainCalc(openForm);
   }
 
+  /* شارة سريعة جوّه سطر العميل: اتبعت / جاهزة / مفيش رقم */
+  function waBadgeHTML(r) {
+    if (!r) return '';
+    if (r.sent) return '<span class="wa-badge is-sent" title="رسالة التحصيل اتبعتت لهذا العميل">واتساب ✓</span>';
+    if (!r.phone) return '<span class="wa-badge is-nophone" title="مفيش رقم هاتف للإرسال">بدون رقم</span>';
+    return '<span class="wa-badge is-ready" title="رسالة واتساب جاهزة — افتح العميل للإرسال">واتساب</span>';
+  }
+
+  /* تحصيل سريع: تجهيز نموذج الدفعة لشهر محدد بتاريخ اليوم */
+  function quickCollectForMonth(idx, key) {
+    var c = getCustomers()[idx];
+    var form = $('#mainCollectForm');
+    if (!c || !form) return;
+    resetMainCollectForm(form);
+    if (form.elements.date) form.elements.date.value = todayISO();
+    if (form.elements.month) {
+      form.elements.month.innerHTML = collectMonthOptionsHTML(c, key);
+      form.elements.month.value = key;
+    }
+    var plan = monthlyPlan(c);
+    var target = null;
+    (plan.months || []).forEach(function (m) { if (m.key === key) target = m; });
+    var need = target ? Math.max(Number(target.remaining || 0), 0) : 0;
+    if (!(need > 0)) need = Math.max(Number(plan.monthly || 0), 0);
+    if (form.elements.amount) form.elements.amount.value = need > 0 ? String(need) : '';
+    var pickNote = form.querySelector('[data-pick-month-note]');
+    if (pickNote) {
+      pickNote.hidden = false;
+      pickNote.innerHTML = 'تحصيل سريع لشهر <b>' + esc(monthLabel(key)) + '</b> — التاريخ: ' +
+        esc(formatDate(todayISO())) + '. راجع المبلغ واضغط «إضافة تحصيل».';
+    }
+    updateMainCalc(form);
+    try { form.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e1) {}
+    try { if (form.elements.amount) { form.elements.amount.focus(); form.elements.amount.select(); } } catch (e2) {}
+    form.classList.add('is-picked');
+    setTimeout(function () { form.classList.remove('is-picked'); }, 1400);
+  }
+
+  document.addEventListener('click', function (e) {
+    var chip = e.target && e.target.closest ? e.target.closest('[data-month-pay]') : null;
+    if (!chip) return;
+    if (e.preventDefault) e.preventDefault();
+    var midx = Number(chip.getAttribute('data-midx'));
+    var mkey = String(chip.getAttribute('data-month-pay') || '').slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(mkey) || isNaN(midx)) return;
+    collectionOpen = midx;
+    renderCollection(colFilter());
+    quickCollectForMonth(midx, mkey);
+  });
+
   document.addEventListener('click', function (e) {
     var openBtn = e.target && e.target.closest ? e.target.closest('[data-open-profile]') : null;
     if (openBtn) {
@@ -3697,6 +3763,8 @@
     }
     var row = e.target && e.target.closest ? e.target.closest('.collection-row') : null;
     if (!row) return;
+    /* ضغطة الشهر ليها سلوكها الخاص — ما تقفلش تفاصيل العميل */
+    if (e.target.closest('[data-month-pay]')) return;
     var idx = Number(row.getAttribute('data-idx'));
     collectionOpen = (collectionOpen === idx) ? null : idx;
     renderCollection(colFilter());
@@ -9747,34 +9815,56 @@
     if (ccEl && document.activeElement !== ccEl) ccEl.value = s.country;
 
     var rows = waRowsFiltered();
-    var html = '';
-    rows.forEach(function (r) {
-      var status = r.sent
+    function statusOf(r) {
+      return r.sent
         ? '<span class="tag tag--in">تم الإرسال ✓</span>'
         : (r.phone ? '<span class="tag tag--warn">جاهز للإرسال</span>'
-                   : '<span class="tag tag--out">لا يوجد رقم</span>');
+          : '<span class="tag tag--out">لا يوجد رقم</span>');
+    }
+
+    var html = '';
+    var queue = '';
+    rows.forEach(function (r) {
       html += '<tr><td>' + (r.i + 1) + '</td>' +
         '<td>' + esc(r.c.name || 'بدون اسم') + '</td>' +
         '<td>' + esc(r.phone || '—') + '</td>' +
         '<td>' + esc(formatDate(r.info.date)) + ' · ' + money(r.info.paid) + '</td>' +
         '<td>' + planPill(r.plan) + '</td>' +
-        '<td>' + status + '</td>' +
+        '<td>' + statusOf(r) + '</td>' +
         '<td class="col-cell"><button type="button" class="btn btn--ghost btn--sm" data-wa-send="' + r.i + '"' +
           ((!r.phone || r.sent) ? ' disabled' : '') + '>' + (r.sent ? 'تم الإرسال' : 'إرسال') + '</button></td>' +
         '</tr>';
+
+      /* قائمة إرسال مختصرة: اسم + حالة + زر — عشان تعرف مين اتبعت
+         ومين لسه، من غير ما تكرر جدول العملاء بالكامل مرة تانية. */
+      queue += '<div class="wa-queue__row' + (r.sent ? ' is-sent' : '') + '">' +
+        '<div class="wa-queue__who"><b>' + esc(r.c.name || 'بدون اسم') + '</b>' +
+          '<small>' + esc(r.phone || 'لا يوجد رقم') + ' · ' + esc(formatDate(r.info.date)) +
+          ' · ' + money(r.info.paid) + '</small></div>' +
+        statusOf(r) +
+        '<button type="button" class="btn btn--ghost btn--sm" data-wa-send="' + r.i + '"' +
+          ((!r.phone || r.sent) ? ' disabled' : '') + '>' + (r.sent ? 'تم الإرسال ✓' : 'إرسال') + '</button>' +
+        '</div>';
     });
     if (!rows.length) {
       html = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:22px">' +
         'مفيش عملاء مطابقين للفئة المختارة — جرّب «الكل» أو أضف يوم تحصيل/دفعة أولاً.</td></tr>';
+      queue = '<p class="wa-queue__empty">مفيش عملاء مطابقين للفئة المختارة — جرّب «الكل» أو أضف يوم تحصيل/دفعة أولاً.</p>';
     }
     if (tb) tb.innerHTML = html;
+    var qbox = $('#waQueue');
+    if (qbox) qbox.innerHTML = queue;
 
     var cnt = $('#waCount');
+    var sent = rows.filter(function (r) { return r.sent; }).length;
+    var pending = rows.filter(function (r) { return !r.sent && r.phone; }).length;
     if (cnt) {
-      var sent = rows.filter(function (r) { return r.sent; }).length;
-      var pending = rows.filter(function (r) { return !r.sent && r.phone; }).length;
       cnt.textContent = rows.length + ' عميل · تم ' + sent + ' · متبقٍ ' + pending;
     }
+    $$('#waSendAllBtn, [data-wa-send-all]').forEach(function (b) {
+      if (b.id === 'waSendAllTop') b.textContent = 'إرسال واتساب للجميع (' + pending + ')';
+      else b.textContent = 'إرسال للجميع (' + pending + ')';
+    });
     var prev = $('#waPreview');
     if (prev) {
       var sample = null;
@@ -9849,11 +9939,11 @@
       toast('مفيش رسائل جديدة — الكل تم إرساله أو بدون رقم هاتف', true);
       return;
     }
-    var btn = $('#waSendAllBtn');
+    var btns = $$('#waSendAllBtn, [data-wa-send-all]');
     var added = [];
     var idx = 0, done = 0;
     waBusy = true;
-    if (btn) btn.disabled = true;
+    btns.forEach(function (b) { b.disabled = true; });
 
     function finish(okMsg) {
       if (added.length) {
@@ -9864,7 +9954,7 @@
         saveWaLog(log);
       }
       waBusy = false;
-      if (btn) btn.disabled = false;
+      btns.forEach(function (b) { b.disabled = false; });
       renderWaPanel();
       safeRun(function () { renderCollection(colFilter()); }, 'التحصيل بعد إرسال واتساب');
       if (okMsg) toast(okMsg);
@@ -9914,7 +10004,7 @@
       } catch (eCp) { toast('تعذّر النسخ — حدّد النص وانسخه يدوياً', true); }
       return;
     }
-    if (t.closest('#waSendAllBtn')) { waSendAll(); return; }
+    if (t.closest('#waSendAllBtn') || t.closest('[data-wa-send-all]')) { waSendAll(); return; }
   });
 
   document.addEventListener('change', function (e) {
@@ -9988,13 +10078,64 @@
     }
   }
 
+  function importRound2(n) { return Math.round(Number(n || 0) * 100) / 100; }
+
+  /* تاريخ استحقاق شهر معيّن بيوم التحصيل (لو اليوم أكبر من أيام الشهر ناخد آخر يوم) */
+  function importMonthDueISO(key, day) {
+    var p = monthKeyParts(key);
+    if (!p) return '';
+    var dim = new Date(p.y, p.m, 0).getDate();
+    var d = Math.min(Math.max(parseInt(day, 10) || 1, 1), dim);
+    return p.y + '-' + pad(p.m) + '-' + pad(d);
+  }
+
+  /* توزيع المبلغ المدفوع القديم على شهوره بدل ما يتحط كله على تاريخ واحد —
+     عشان حالة الشهور في التحصيل تطلع صح بعد الاستيراد. */
+  function importedPayments(r, monthly) {
+    var paid = importRound2(r && r.paid);
+    if (!(paid > 0)) return [];
+    var startDate = (r && r.startDate) || '';
+    /* شهر البداية من تاريخ البدء نفسه (ISO) — من غير الاعتماد على محرك الشهور */
+    var startKey = /^\d{4}-\d{2}/.test(startDate) ? startDate.slice(0, 7) : currentMonthKey();
+    var out = [];
+    if (!(monthly > 0)) {
+      out.push({ date: startDate || todayISO(), amount: paid, no: 1, month: startKey, note: 'مدفوع مستورد من الملف' });
+      return out;
+    }
+    var left = paid;
+    var key = startKey;
+    var guard = 0;
+    while (left > 0.005 && guard < 600) {
+      var amt = Math.min(monthly, left);
+      out.push({
+        date: (out.length === 0 && startDate) ? startDate : importMonthDueISO(key, (r && r.dueDay) || 1),
+        amount: importRound2(amt),
+        no: out.length + 1,
+        month: key,
+        note: 'مدفوع مستورد — ' + monthLabel(key)
+      });
+      left = importRound2(left - amt);
+      key = shiftMonth(key, 1);
+      guard++;
+    }
+    return out;
+  }
+
   function buildImportedCustomer(r) {
     var total = Number(r.total || 0);
     var down = Number(r.down || 0);
     var months = Number(r.duration || 0);
     var monthly = Number(r.monthly || 0);
+    var paid = Number(r.paid || 0);
+    var rest = Number(r.rest || 0);
+    /* بعض الملفات فيها «المتبقي» بدل «المدفوع» أو الاثنين مع بعض —
+       نكمّل الناقص من التاني بدل ما نستورد أصفار غلط. */
+    if (!(total > 0) && (down > 0 || paid > 0 || rest > 0)) total = down + paid + rest;
+    if (!(paid > 0) && total > 0 && rest > 0) paid = Math.max(total - down - rest, 0);
+    if (!(rest > 0) && total > 0 && paid > 0) rest = Math.max(total - down - paid, 0);
     if (!(total > 0) && monthly > 0 && months > 0) total = down + monthly * months;
     if (!(monthly > 0) && months > 0 && total > down) monthly = Math.ceil((total - down) / months);
+    if (!(months > 0) && monthly > 0 && total > down) months = Math.ceil((total - down) / monthly);
     var due = Math.max(total - down, 0);
     var startDate = r.startDate || '';
     var now = new Date();
@@ -10026,20 +10167,26 @@
       importedAt: new Date().toISOString()
     };
     if (monthly > 0) entry.monthlyAmount = monthly;
-    if (r.paid > 0) {
-      entry.payments.push({ date: startDate || todayISO(), amount: r.paid, no: 1, note: 'مدفوع مستورد من الملف' });
-    }
+    var importedPays = importedPayments({ paid: paid, startDate: startDate, dueDay: r.dueDay || 0 }, monthly);
+    if (importedPays.length) entry.payments = importedPays;
     refreshImportedTotals(entry);
     return entry;
   }
 
   function mergeImportedCustomer(c, r) {
+    var rTotal = Number(r.total || 0);
+    var rDown = Number(r.down || 0);
+    var rPaid = Number(r.paid || 0);
+    var rRest = Number(r.rest || 0);
+    if (!(rTotal > 0) && (rDown > 0 || rPaid > 0 || rRest > 0)) rTotal = rDown + rPaid + rRest;
+    if (!(rPaid > 0) && rTotal > 0 && rRest > 0) rPaid = Math.max(rTotal - rDown - rRest, 0);
+
     if (!c.phone && r.phone) c.phone = r.phone;
     if (!c.phone2 && r.phone2) c.phone2 = r.phone2;
     if (!c.nationalId && r.nationalId) c.nationalId = r.nationalId;
     if (!c.address && r.address) c.address = r.address;
-    if (!(Number(c.total || 0) > 0) && Number(r.total || 0) > 0) {
-      c.total = Number(r.total);
+    if (!(Number(c.total || 0) > 0) && rTotal > 0) {
+      c.total = rTotal;
       c.due = Math.max(c.total - Number(c.down || 0), 0);
     }
     if (!(Number(c.down || 0) > 0) && Number(r.down || 0) > 0) {
@@ -10054,13 +10201,23 @@
       c.notes = Array.isArray(c.notes) ? c.notes : [];
       if (c.notes.indexOf(r.note) === -1) c.notes.push(r.note);
     }
-    if (Number(r.paid || 0) > 0) {
+    if (rPaid > 0) {
       c.payments = Array.isArray(c.payments) ? c.payments : [];
-      var pDate = r.startDate || todayISO();
-      var dup = c.payments.some(function (p) {
-        return String(p.date || '') === String(pDate) && Math.abs(Number(p.amount || 0) - Number(r.paid)) < 0.005;
+      var monthlyForMerge = Number(c.monthlyAmount || r.monthly || 0);
+      importedPayments({
+        paid: rPaid,
+        startDate: c.startDate || r.startDate || '',
+        dueDay: c.dueDay || r.dueDay || 0
+      }, monthlyForMerge).forEach(function (p) {
+        var dup = c.payments.some(function (x) {
+          return String(x.date || '') === String(p.date || '') && Math.abs(Number(x.amount || 0) - Number(p.amount || 0)) < 0.005;
+        });
+        if (dup) return;
+        var copy = {};
+        Object.keys(p).forEach(function (k) { copy[k] = p[k]; });
+        copy.no = c.payments.length + 1;
+        c.payments.push(copy);
       });
-      if (!dup) c.payments.push({ date: pDate, amount: Number(r.paid), no: c.payments.length + 1, note: 'مدفوع مستورد من الملف' });
     }
     refreshImportedTotals(c);
   }
@@ -10107,13 +10264,17 @@
 
     var list = getCustomers();
     var idx = importIndex(list);
-    var created = 0, merged = 0, pays = 0, unmatched = 0;
+    var created = 0, merged = 0, pays = 0, unmatched = 0, distributed = 0;
     analysis.records.forEach(function (r) {
       if (analysis.mode === 'payments') {
         if (importFind(idx, r)) pays++; else unmatched++;
       } else if (importFind(idx, r)) merged++;
       else created++;
+      if (analysis.mode !== 'payments') {
+        distributed += importedPayments({ paid: Number(r.paid || 0), startDate: r.startDate, dueDay: r.dueDay }, Number(r.monthly || 0)).length;
+      }
     });
+    var mappedLabels = (analysis.mappedFields || Object.keys(mapping || {})).map(function (f) { return NizamImport.FIELD_LABELS[f] || f; });
 
     var sheetSel = '';
     if (st.tables.length > 1) {
@@ -10136,7 +10297,7 @@
         '<select data-import-map="' + i + '">' + importFieldOptions(st.colFields[i] || '') + '</select></label>';
     }).join('');
 
-    var showFields = ['name', 'phone', 'total', 'down', 'monthly', 'duration', 'dueDay', 'startDate', 'paid', 'date', 'amount', 'note', 'status', 'address']
+    var showFields = ['name', 'phone', 'total', 'down', 'monthly', 'duration', 'dueDay', 'startDate', 'paid', 'rest', 'date', 'amount', 'note', 'status', 'address']
       .filter(function (f) { return mapping[f] != null && mapping[f] >= 0; });
     var previewRows = analysis.records.slice(0, 10).map(function (r, i) {
       return '<tr><td>' + (i + 1) + '</td>' + showFields.map(function (f) {
@@ -10150,16 +10311,20 @@
         showFields.map(function (f) { return '<th>' + esc(NizamImport.FIELD_LABELS[f]) + '</th>'; }).join('') +
         '</tr></thead><tbody>' + previewRows + '</tbody></table></div>' +
         (analysis.records.length > 10 ? '<p class="import-note">معروض أول 10 صفوف من ' + analysis.records.length + ' صف — كلهم هيتضافوا عند التأكيد.</p>' : '')
-      : '<p class="import-note">لا توجد صفوف صالحة — راجع «عمود اسم العميل» ورقم صف العناوين.</p>';
+      : '<p class="import-note">لا توجد صفوف صالحة — راجع «عمود اسم العميل» ورقم صف العناوين.' +
+        (mappedLabels.length ? ' الأعمدة المربوطة حاليًا: ' + esc(mappedLabels.join('، ')) + '.' : ' مفيش أي عمود اتعرّف عليه.') +
+        ' لو ده ملف PDF قد يكون صورة ممسوحة (مش نص) — حوّله لـ Excel.</p>';
 
     var chips = '<div class="import-summary">' +
       (analysis.mode === 'payments'
         ? '<span class="import-chip import-chip--in"><b>' + pays + '</b> دفعة هتتضاف لعملاء موجودين</span>' +
           '<span class="import-chip import-chip--out"><b>' + unmatched + '</b> دفعة لعملاء غير موجودين (هتتجاهل)</span>'
         : '<span class="import-chip import-chip--in"><b>' + created + '</b> عميل جديد</span>' +
-          '<span class="import-chip import-chip--warn"><b>' + merged + '</b> عميل موجود هيتم دمج بياناته</span>') +
+          '<span class="import-chip import-chip--warn"><b>' + merged + '</b> عميل موجود هيتم دمج بياناته</span>' +
+          '<span class="import-chip import-chip--in"><b>' + distributed + '</b> دفعة قديمة هتتوزع على شهورها</span>') +
       '<span class="import-chip"><b>' + analysis.skipped + '</b> صف متجاهل (بدون اسم أو مكرر)</span>' +
       '<span class="import-chip"><b>' + analysis.records.length + '</b> صف صالح</span>' +
+      '<span class="import-chip"><b>' + mappedLabels.length + '</b> عمود اتعرف عليه</span>' +
       '</div>';
 
     box.innerHTML =
@@ -10169,7 +10334,8 @@
       '<p class="import-note">' +
         (analysis.mode === 'payments'
           ? 'وضع الدفعات: كل صف بيتضاف كدفعة بعميل موجود بنفس رقم الهاتف (أو الاسم لو مفيش رقم) — والعميل غير الموجود مش هيتعمل لوحده من دفعة. '
-          : 'وضع العملاء: العميل الموجود بنفس رقم الهاتف (أو الاسم لو مفيش رقم) هيتم استكمال بياناته الناقصة بدل تكراره. ') +
+          : 'وضع العملاء: العميل الموجود بنفس رقم الهاتف (أو الاسم لو مفيش رقم) هيتم استكمال بياناته الناقصة بدل تكراره. ' +
+            'والمبلغ المدفوع القديم بيتوزع على شهوره بدءًا من «تاريخ البدء» ويوم التحصيل، عشان حالة الشهور تطلع مضبوطة. ') +
         'الاستيراد بيسجل نسخة رجوع قبل الحفظ، ويقدر ترجع من «سجل العمليات».' +
       '</p>' +
       '<div class="form__actions">' +

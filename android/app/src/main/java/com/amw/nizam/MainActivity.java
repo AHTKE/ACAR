@@ -34,6 +34,10 @@ public class MainActivity extends Activity {
         s.setDatabaseEnabled(true);
         s.setAllowFileAccess(true);
         s.setAllowContentAccess(true);
+        /* التطبيق بيحمّل من file:// — السماح للملفات المحلية (ومحرك قراءة
+           PDF بالاستيراد الديناميكي) يشتغل من غير سيرفر خارجي. */
+        s.setAllowFileAccessFromFileURLs(true);
+        s.setAllowUniversalAccessFromFileURLs(true);
         s.setLoadWithOverviewMode(true);
         s.setUseWideViewPort(true);
         s.setSupportZoom(false);
