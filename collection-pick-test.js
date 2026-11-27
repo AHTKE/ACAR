@@ -136,6 +136,35 @@ const unlock = (t) => {
   ok('زر الإرسال الجماعي بيعرض عدد المتبقي', /\(2\)/.test(t.$('#waSendAllTop').textContent),
     t.$('#waSendAllTop').textContent);
 
+  console.log('\n[5] الضغط على شهر جوه ملف العميل يجهّز تحصيله');
+  if (!t.$('[data-open-profile="0"]')) {
+    t.click(t.$('.collection-row[data-idx="0"]'));
+    await t.wait(80);
+  }
+  const openBtn = t.$('[data-open-profile="0"]');
+  ok('زر فتح ملف العميل موجود', !!openBtn);
+  t.click(openBtn);
+  await t.wait(150);
+  ok('ملف العميل انفتح', t.$('#view-profile').classList.contains('is-active'));
+  const cards = t.$$('#profilePlan [data-month-pay]');
+  ok('كروت الشهور في الملف بقت أزرار', cards.length === 6, 'cards=' + cards.length);
+  ok('الكارت بيقول إنه قابل للضغط', !!cards[0] && cards[0].classList.contains('is-pick'));
+  const card = t.$('#profilePlan [data-month-pay="2026-10"]');
+  ok('كارت أكتوبر 2026 موجود', !!card);
+  t.click(card);
+  await t.wait(150);
+  const pf = t.$('#collectForm');
+  ok('نموذج تحصيل الملف اتجهّز بالشهر المختار', !!pf && pf.elements.month.value === '2026-10',
+    pf ? pf.elements.month.value : '—');
+  ok('تاريخ اليوم اتحدد في نموذج الملف', !!pf && pf.elements.date.value === todayISO(),
+    pf ? pf.elements.date.value : '—');
+  ok('المبلغ اتجهّز بقيمة الشهر', !!pf && Number(pf.elements.amount.value) === 10000,
+    pf ? pf.elements.amount.value : '—');
+  ok('ملاحظة التحصيل السريع ظاهرة جوه الملف', (function () {
+    const n = pf && pf.querySelector('[data-pick-month-note]');
+    return !!n && !n.hidden && n.textContent.indexOf('أكتوبر 2026') > -1;
+  })());
+
   ok('لا أخطاء في نهاية الاختبار', t.errs.length === 0, t.errs.join(' | '));
 
   console.log('\n==================================================');

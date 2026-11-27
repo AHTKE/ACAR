@@ -284,7 +284,7 @@
       return '';
     }
 
-    function monthCardHTML(m) {
+    function monthCardHTML(m, idx) {
       var cls = m.state === 'paid' ? 'is-paid'
         : m.state === 'overdue' ? 'is-overdue'
           : m.state === 'due' ? 'is-due' : 'is-upcoming';
@@ -310,17 +310,26 @@
           return (e.date ? formatDate(e.date) : 'رصيد سابق') + ' (' + money(e.amount) + ')';
         }).join(' · ') + '</small>';
       }
-      return '<div class="month-card ' + cls + (m.latePaid ? ' is-late-paid' : '') + '">' +
+      /* كل كارت شهر زرار لما يبقى جوه ملف عميل: ضغطة واحدة تجهّز تحصيل
+         الشهر ده بتاريخ اليوم في نموذج التحصيل اللي تحت. */
+      var pickable = idx != null && idx !== '';
+      var tag = pickable ? 'button' : 'div';
+      var pickAttrs = pickable
+        ? ' type="button" data-month-pay="' + esc(m.key) + '" data-midx="' + esc(String(idx)) +
+          '" data-month-scope="profile" title="اضغط للتحصيل عن شهر ' + esc(monthLabel(m.key)) + ' بتاريخ اليوم"'
+        : '';
+      return '<' + tag + pickAttrs + ' class="month-card ' + cls + (m.latePaid ? ' is-late-paid' : '') +
+        (pickable ? ' is-pick' : '') + '">' +
         '<div class="month-card__top"><b>' + esc(monthLabel(m.key)) + '</b><span class="month-card__dot"></span></div>' +
         '<div class="month-card__amount">' + money(m.amount) + '</div>' +
         '<div class="month-card__state">' + stateText + '</div>' +
         '<small>' + esc(dateLine) + '</small>' +
         (m.partial ? '<small class="month-card__rest">متبقي منه: ' + money(m.remaining) + '</small>' : '') +
         paysLine +
-        '</div>';
+        '</' + tag + '>';
     }
 
-    function planDetailHTML(c) {
+    function planDetailHTML(c, idx) {
       var plan = monthlyPlan(c);
       var d = derive(c);
       if (!plan.active) {
@@ -333,7 +342,7 @@
         return '<li><b>' + esc(monthLabel(m.key)) + '</b> — لم يُدفع. كان مستحقاً يوم ' +
           esc(formatDate(m.dueISO)) + ' · المطلوب ' + money(m.remaining) + '</li>';
       }).join('');
-      var cards = plan.months.slice().reverse().map(monthCardHTML).join('');
+      var cards = plan.months.slice().reverse().map(function (m) { return monthCardHTML(m, idx); }).join('');
       var latePaid = plan.months.filter(function (m) { return m.latePaid; });
       var history = latePaid.length
         ? '<div class="plan-history"><b>تغيّر حالة السداد</b><ul>' +

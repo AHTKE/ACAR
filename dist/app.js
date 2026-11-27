@@ -1738,7 +1738,7 @@
 
     /* حالة التحصيل الشهري — تفضل ظاهرة في البروفايل للمتأخر، وتتحدث بعد كل دفعة */
     var profilePlanEl = $('#profilePlan');
-    if (profilePlanEl) profilePlanEl.innerHTML = planDetailHTML(c);
+    if (profilePlanEl) profilePlanEl.innerHTML = planDetailHTML(c, currentIdx);
 
     /* البيانات الشخصية */
     $('#profileInfo').innerHTML =
@@ -3743,13 +3743,53 @@
     setTimeout(function () { form.classList.remove('is-picked'); }, 1400);
   }
 
+  /* نفس التحصيل السريع لكن من كروت الشهور اللي جوه ملف العميل */
+  function quickCollectForProfile(key) {
+    var c = getCustomers()[currentIdx];
+    var form = $('#collectForm');
+    if (!c || !form) return;
+    var panel = $('#collectPanel');
+    if (panel && !panel.classList.contains('is-open')) {
+      panel.classList.add('is-open');
+      var head = panel.querySelector('.acc__head');
+      if (head) head.setAttribute('aria-expanded', 'true');
+      var st = accState(); st['profile-collect'] = true; saveAccState(st);
+    }
+    if (form.elements.date) form.elements.date.value = todayISO();
+    if (form.elements.month) {
+      form.elements.month.innerHTML = collectMonthOptionsHTML(c, key);
+      form.elements.month.value = key;
+    }
+    var plan = monthlyPlan(c);
+    var target = null;
+    (plan.months || []).forEach(function (m) { if (m.key === key) target = m; });
+    var need = target ? Math.max(Number(target.remaining || 0), 0) : 0;
+    if (!(need > 0)) need = Math.max(Number(plan.monthly || 0), 0);
+    if (form.elements.amount) form.elements.amount.value = need > 0 ? String(need) : '';
+    if (form.elements.no && !(parseInt(form.elements.no.value, 10) > 0)) form.elements.no.value = '1';
+    var note = form.querySelector('[data-pick-month-note]');
+    if (note) {
+      note.hidden = false;
+      note.innerHTML = 'تحصيل سريع لشهر <b>' + esc(monthLabel(key)) + '</b> — التاريخ: ' +
+        esc(formatDate(todayISO())) + '. راجع المبلغ واضغط «إضافة تحصيل».';
+    }
+    updateCollectCalc();
+    try { form.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e1) {}
+    try { if (form.elements.amount) { form.elements.amount.focus(); form.elements.amount.select(); } } catch (e2) {}
+    form.classList.add('is-picked');
+    setTimeout(function () { form.classList.remove('is-picked'); }, 1400);
+  }
+
   document.addEventListener('click', function (e) {
     var chip = e.target && e.target.closest ? e.target.closest('[data-month-pay]') : null;
     if (!chip) return;
     if (e.preventDefault) e.preventDefault();
     var midx = Number(chip.getAttribute('data-midx'));
     var mkey = String(chip.getAttribute('data-month-pay') || '').slice(0, 7);
-    if (!/^\d{4}-\d{2}$/.test(mkey) || isNaN(midx)) return;
+    if (!/^\d{4}-\d{2}$/.test(mkey)) return;
+    /* كروت الشهور جوه ملف العميل: تجهّز نموذج التحصيل بتاع الملف نفسه */
+    if (chip.getAttribute('data-month-scope') === 'profile') { quickCollectForProfile(mkey); return; }
+    if (isNaN(midx)) return;
     collectionOpen = midx;
     renderCollection(colFilter());
     quickCollectForMonth(midx, mkey);

@@ -1148,6 +1148,11 @@ label.btn{cursor:pointer;user-select:none}
 .month-card.is-due .month-card__dot{background:#fbbf24;box-shadow:0 0 0 3px rgba(245,158,11,.18)}
 .month-card.is-due .month-card__state{color:#fcd34d}
 .month-card.is-upcoming{opacity:.72}
+.month-card.is-pick{cursor:pointer;font:inherit;color:inherit;text-align:right;width:100%;appearance:none;-webkit-appearance:none;transition:transform .12s ease,border-color .12s ease}
+.month-card.is-pick:hover{border-color:rgba(34,197,94,.6)}
+.month-card.is-pick:focus-visible{outline:2px solid rgba(34,197,94,.6);outline-offset:2px}
+.month-card.is-pick:active{transform:scale(.985)}
+.month-card.is-pick::after{content:'اضغط للتحصيل';font-size:10.5px;opacity:.5;margin-top:2px}
 /* دفع جزئي: الشهر مدفوع شويه — بنّي/أصفر لحد ما يكتمل ويبقى أخضر */
 .month-card.is-partial{border-color:rgba(245,158,11,.55);background:rgba(245,158,11,.09)}
 .month-card.is-partial .month-card__dot{background:#fbbf24;box-shadow:0 0 0 3px rgba(245,158,11,.18)}
