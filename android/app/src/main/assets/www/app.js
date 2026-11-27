@@ -3254,24 +3254,73 @@
     try { localStorage.setItem(KEY_ACC, JSON.stringify(o)); } catch (e) {}
   }
 
+  function accTitleChild(panel) {
+    var kids = panel.children;
+    for (var i = 0; i < kids.length; i++) {
+      if (kids[i].classList && kids[i].classList.contains('panel__title')) return kids[i];
+    }
+    return null;
+  }
+
+  /* مفتاح ثابت لكل لوحة (id لو موجود، وإلا المسار جوه الصفحة) عشان الحالة
+     المحفوظة ترجع لنفس القسم بعد أي إعادة رسم أو ترتيب. */
+  function accKeyFor(panel) {
+    var key = panel.getAttribute('data-collapse-key');
+    if (key) return key;
+    if (panel.id) key = 'p-' + panel.id;
+    else {
+      var parts = [], el = panel;
+      while (el && el.classList && !el.classList.contains('view')) {
+        var i = 0, s = el;
+        while ((s = s.previousElementSibling)) {
+          if (s.classList && s.classList.contains('panel')) i++;
+        }
+        parts.unshift(i);
+        el = el.parentElement;
+      }
+      key = 'p-' + (el && el.id ? el.id : 'root') + (parts.length ? '-' + parts.join('-') : '');
+    }
+    panel.setAttribute('data-collapse-key', key);
+    return key;
+  }
+
+  /* فتح/قفل لوحة من الكود (التحصيل السريع مثلًا) مع حفظ الحالة */
+  function accOpenPanel(panel, open) {
+    if (!panel || !panel.classList) return;
+    panel.classList.toggle('is-open', !!open);
+    var head = panel.querySelector('.acc__head');
+    if (head) head.setAttribute('aria-expanded', open ? 'true' : 'false');
+    var key = panel.getAttribute('data-collapse-key');
+    if (key) { var st = accState(); st[key] = !!open; saveAccState(st); }
+  }
+
+  /* كل لوحة (.panel) في التطبيق بتاخد سهم طي/فتح تلقائي:
+     - اللوحات اللي معهاش عنوان ولا data-collapse-title بتتسيب زي ما هي (مافيش سهم بلا اسم).
+     - اللوحات المفتوحة افتراضيًا تحتفظ بحالتها؛ والباقي يبقى مفتوح لين المستخدم يقفله.
+     - عشان تمنع سهم قسري: data-collapse="off" أو data-acc-skip. */
   function initCollapsibles(scope) {
     var root = scope || document;
-    var nodes = root.querySelectorAll('[data-collapse]');
+    var nodes = root.querySelectorAll('.panel, [data-collapse]');
     Array.prototype.forEach.call(nodes, function (panel) {
-      if (!panel || panel.getAttribute('data-acc-ready') === '1') return;
-      panel.setAttribute('data-acc-ready', '1');
-      var key = panel.getAttribute('data-collapse-key') || '';
-      var titleEl = null;
-      var kids = panel.children;
-      for (var i = 0; i < kids.length; i++) {
-        if (kids[i].classList && kids[i].classList.contains('panel__title')) { titleEl = kids[i]; break; }
+      if (!panel || !panel.getAttribute || panel.getAttribute('data-acc-ready') === '1') return;
+      var mode = panel.getAttribute('data-collapse');
+      if (mode === 'off' || panel.getAttribute('data-acc-skip') !== null) return;
+      var titleEl = accTitleChild(panel);
+      var customTitle = panel.getAttribute('data-collapse-title');
+      if (!titleEl && !customTitle) return;          /* مافيش عنوان → مافيش سهم */
+      if (mode === null) {
+        panel.setAttribute('data-collapse', 'auto');
+        panel.setAttribute('data-acc-auto', '1');
+        mode = 'auto';
       }
+      panel.setAttribute('data-acc-ready', '1');
+      var key = accKeyFor(panel);
       var titleHTML;
       if (titleEl) {
         titleHTML = titleEl.innerHTML;
         panel.removeChild(titleEl);
       } else {
-        titleHTML = esc(panel.getAttribute('data-collapse-title') || 'التفاصيل');
+        titleHTML = esc(customTitle || 'التفاصيل');
         var ic = panel.getAttribute('data-collapse-icon');
         if (ic) titleHTML = '<svg viewBox="0 0 24 24" class="ico"><use href="#' + esc(ic) + '"/></svg> ' + titleHTML;
       }
@@ -3286,8 +3335,9 @@
       panel.appendChild(head);
       panel.appendChild(body);
       var st = accState();
-      var open = Object.prototype.hasOwnProperty.call(st, key) ? !!st[key]
-        : panel.getAttribute('data-collapse-open') === '1';
+      var openAttr = panel.getAttribute('data-collapse-open');
+      var defaultOpen = mode === 'auto' ? openAttr !== '0' : openAttr === '1';
+      var open = Object.prototype.hasOwnProperty.call(st, key) ? !!st[key] : defaultOpen;
       panel.classList.toggle('is-open', open);
       head.setAttribute('aria-expanded', open ? 'true' : 'false');
     });
@@ -3298,14 +3348,27 @@
     if (!head) return;
     var panel = head.parentNode;
     if (!panel || !panel.getAttribute || panel.getAttribute('data-collapse') === null) return;
-    var open = !panel.classList.contains('is-open');
-    panel.classList.toggle('is-open', open);
-    head.setAttribute('aria-expanded', open ? 'true' : 'false');
-    var key = panel.getAttribute('data-collapse-key');
-    if (key) { var st = accState(); st[key] = open; saveAccState(st); }
+    if (panel.getAttribute('data-collapse') === 'off') return;
+    accOpenPanel(panel, !panel.classList.contains('is-open'));
   });
 
   safeRun(function () { initCollapsibles(document); }, 'الأقسام القابلة للطي');
+
+  /* أي قسم بيتولد بالكود بعد كده (صفحة التفاصيل، بروفايلات، جداول) بياخد
+     سهمه تلقائي كمان — عشان ما يبقاش فيه قسم بدون طي في أي صفحة. */
+  safeRun(function () {
+    if (typeof MutationObserver === 'undefined' || !document.body) return;
+    var pending = false;
+    var mo = new MutationObserver(function () {
+      if (pending) return;
+      pending = true;
+      setTimeout(function () {
+        pending = false;
+        initCollapsibles(document);
+      }, 0);
+    });
+    mo.observe(document.body, { childList: true, subtree: true });
+  }, 'مراقب الأقسام الجديدة');
 
   /* ============================================================
      التحصيل الرئيسي — قائمة عملاء قابلة للتوسيع (أكورديون)
@@ -3751,12 +3814,7 @@
     var form = $('#collectForm');
     if (!c || !form) return;
     var panel = $('#collectPanel');
-    if (panel && !panel.classList.contains('is-open')) {
-      panel.classList.add('is-open');
-      var head = panel.querySelector('.acc__head');
-      if (head) head.setAttribute('aria-expanded', 'true');
-      var st = accState(); st['profile-collect'] = true; saveAccState(st);
-    }
+    if (panel && !panel.classList.contains('is-open')) accOpenPanel(panel, true);
     if (form.elements.date) form.elements.date.value = todayISO();
     if (form.elements.month) {
       form.elements.month.innerHTML = collectMonthOptionsHTML(c, key);
@@ -8640,6 +8698,7 @@
       '<p class="panel__note">الصنف الأول حتى الرابع يشكّل «المبلغ الخارج»، والخامس والسادس يشكّلان «المبلغ الداخل»، والسابع خارج الحساب النقدي.</p></div>';
 
     body.innerHTML = h;
+    initCollapsibles(body);   /* أقسام صفحة التفاصيل بتتولد بالكود — بتاخد سهمها فوراً */
   }
 
   /* ---------- مفتاح الشبكة في الإعدادات ---------- */

@@ -176,7 +176,7 @@
       </span>
       <span class="brand__text">
         <strong>WorkFlow</strong>
-        <small>الإصدار 1.0 · b20261127d</small>
+        <small>الإصدار 1.0 · b20261127e</small>
       </span>
     </button>
 
@@ -357,7 +357,7 @@
         <button class="btn btn--primary" data-go="add-customer"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-plus"/></svg> إضافة عميل</button>
       </div>
 
-      <div class="panel">
+      <div class="panel" data-collapse-title="قائمة العملاء" data-collapse-icon="ic-users">
         <div class="panel__toolbar">
           <div class="field field--search">
             <svg viewBox="0 0 24 24" class="ico"><use href="#ic-search"/></svg>
@@ -552,7 +552,7 @@
         <button class="btn btn--primary" data-go="add-supplier"><svg viewBox="0 0 24 24" class="ico"><use href="#ic-plus"/></svg> إضافة مورد</button>
       </div>
 
-      <div class="panel">
+      <div class="panel" data-collapse-title="قائمة الموردين" data-collapse-icon="ic-truck">
         <div class="panel__toolbar">
           <div class="field field--search">
             <svg viewBox="0 0 24 24" class="ico"><use href="#ic-search"/></svg>
@@ -579,7 +579,7 @@
         </div>
       </div>
 
-      <div class="panel panel--narrow">
+      <div class="panel panel--narrow" data-collapse-title="بيانات المورد" data-collapse-icon="ic-truck">
         <p class="form__error" id="supplierFormError" hidden></p>
         <form id="supplierForm" class="form" novalidate>
           <div class="form__row">
@@ -751,7 +751,7 @@
 
       <div class="summary" id="ledgerSummary"></div>
 
-      <div class="panel">
+      <div class="panel" data-collapse-title="تسجيل حركة مالية" data-collapse-icon="ic-exchange">
         <p class="panel__hint">سجّل كل حركة مالية: <b>دخل</b> (دفعة من عميل، بيع، أي وارد) و<b>خرج</b> (إيجار، رواتب، مصاريف). المجموعات الثلاثة بالأعلى تُحسب تلقائياً من كل الحركات المسجّلة.</p>
 
         <form id="ledgerForm" class="form" novalidate>
@@ -1024,7 +1024,7 @@
       </div>
 
 
-      <div class="panel">
+      <div class="panel" data-collapse-title="قائمة التحصيل — اضغط على أي عميل أو شهر" data-collapse-icon="ic-coins">
         <div class="collection-tools">
           <p class="panel__hint" style="margin:0">اضغط على سطر العميل (أو السهم) لفتح كل تفاصيله في مكان واحد: الملخص، حالة الشهور، إضافة دفعة، سجل التحصيل، ورسالة واتساب الجاهزة بزر إرسال — بدون أي تكرار للعميل في أكثر من جدول. <b>وأسرع طريقة للتحصيل:</b> اضغط على شهر في عمود «حالة الشهور» — يفتح العميل ويجهّز الدفعة بتاريخ اليوم والشهر اللي اخترته.</p>
           <button type="button" class="btn btn--primary btn--sm" data-wa-send-all="1" id="waSendAllTop">إرسال واتساب للجميع</button>
@@ -1085,7 +1085,7 @@
         </form>
       </div>
 
-      <div class="panel">
+      <div class="panel" data-collapse-title="إضافة أو تعديل شريك" data-collapse-icon="ic-link">
         <p class="panel__hint">أضف أو عدّل الشركاء — الحصة ورأس المال والمسحوبات تُدخلها أنت، ونصيب كل شريك من الأرباح والصافي المستحق يُحسبان تلقائياً.</p>
         <form id="partnerForm" class="form" novalidate>
           <input type="hidden" name="idx" value="-1" />
@@ -1116,7 +1116,7 @@
         </form>
       </div>
 
-      <div class="panel">
+      <div class="panel" data-collapse-title="جدول الشركاء" data-collapse-icon="ic-link">
         <div class="table-wrap">
           <table class="table" id="partnersTable">
             <thead>
@@ -1215,7 +1215,7 @@
         </form>
       </div>
 
-      <div class="panel">
+      <div class="panel" data-collapse-title="جدول الأعضاء والاشتراكات" data-collapse-icon="ic-group">
         <div class="table-wrap">
           <table class="table" id="membersTable">
             <thead>

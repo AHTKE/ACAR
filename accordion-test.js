@@ -137,6 +137,58 @@ const unlock = (t) => {
   const p2 = t2.$('[data-collapse-key="collection-filters"]');
   ok('قسم البحث فضل مقفول زي ما المستخدم سيبه', !!p2 && !p2.classList.contains('is-open'));
 
+  console.log('\n[5] كل الأقسام في كل الصفحات ليها سهم طي (مش بعضها بس)');
+  const staticDoc = new JSDOM(htmlSrc).window.document;
+  const expected = Array.from(staticDoc.querySelectorAll('.panel')).filter((p) =>
+    p.querySelector(':scope > .panel__title') || p.getAttribute('data-collapse-title')).length;
+  const heads = t.$$('.acc__head');
+  ok('عدد الأسهم = عدد الأقسام اللي ليها عنوان', heads.length === expected, heads.length + ' / ' + expected);
+  ok('كل سهم له عنوان مكتوب', heads.every((h) => {
+    const s = h.querySelector('.acc__title');
+    return s && s.textContent.trim().length > 1;
+  }));
+  const viewsWithPanels = new Set();
+  const viewsWithHeads = new Set();
+  t.$$('.panel').forEach((p) => { const v = p.closest('.view'); if (v) viewsWithPanels.add(v.id); });
+  heads.forEach((h) => { const v = h.closest('.view'); if (v) viewsWithHeads.add(v.id); });
+  const titledViews = new Set();
+  Array.from(staticDoc.querySelectorAll('.panel')).forEach((p) => {
+    if (!p.querySelector(':scope > .panel__title') && !p.getAttribute('data-collapse-title')) return;
+    const v = p.closest('section.view');
+    if (v) titledViews.add(v.id);
+  });
+  const missingViews = [...titledViews].filter((id) => !viewsWithHeads.has(id));
+  ok('كل صفحة فيها خاصية ليها عنوان بقى ليها سهم', missingViews.length === 0, missingViews.join(', '));
+  ok('الأسهم في الإعدادات (أكبر صفحة) مش أقل من 12',
+    t.$$('#view-settings .acc__head').length >= 12, t.$$('#view-settings .acc__head').length);
+  ok('الإعدادات كمان فيها أقسام قابلة للطي', t.$$('#view-settings .acc__head').length > 0);
+
+  const ledgerHead = t.$$('#view-ledger .acc__head').find((h) => (h.textContent || '').indexOf('حركة مالية') > -1);
+  const ledgerPanel = ledgerHead ? ledgerHead.parentNode : null;
+  ok('قسم «تسجيل حركة مالية» بقى بسهم', !!ledgerPanel, ledgerHead ? ledgerHead.textContent.trim() : '—');
+  ok('الأقسام الجديدة مفتوحة افتراضياً (مافيش حاجة مستخبية فجأة)', !!ledgerPanel && ledgerPanel.classList.contains('is-open'));
+  if (ledgerHead) {
+    t.click(ledgerHead);
+    await t.wait(60);
+    ok('الضغط على سهم القسم بيقفله', !ledgerPanel.classList.contains('is-open'));
+    const savedState = JSON.parse(t.w.localStorage.getItem('app_accordion_state') || '{}');
+    ok('حالة القسم الجديد اتحفظت', Object.keys(savedState).some((k) => savedState[k] === false && k.indexOf('ledger') > -1),
+      JSON.stringify(savedState));
+  }
+  ok('شرائط الملخص (ملخص العميل) ما اتغيرتش لسهم', !t.$('#profileSummary .acc__head'));
+
+  /* صفحة «التفاصيل» أقسامها بتتولد بالكود — لازم تاخد سهمها فوراً */
+  t.click(t.$('[data-go="details"]'));
+  await t.wait(120);
+  ['2', '4', '6', '8'].forEach((k) => t.click(t.$('#keypad button[data-key="' + k + '"]')));
+  await t.wait(350);
+  ok('صفحة التفاصيل اتفتحت', t.$('#view-details').classList.contains('is-active'),
+    t.$('.view.is-active') ? t.$('.view.is-active').id : '—');
+  const dynPanels = t.$$('#detailsBody .panel');
+  ok('صفحة التفاصيل اتفتحت وفيها أقسام', dynPanels.length >= 3, dynPanels.length + ' قسم');
+  ok('الأقسام المولّدة بالكود كلها بسهم', dynPanels.length > 0 && dynPanels.every((p) => !!p.querySelector('.acc__head')));
+  ok('الأقسام المولّدة مفتوحة افتراضياً', dynPanels.length > 0 && dynPanels.every((p) => p.classList.contains('is-open')));
+
   console.log('\n==================================================');
   console.log(`  PASS: ${pass}   FAIL: ${fail}`);
   console.log('==================================================');
